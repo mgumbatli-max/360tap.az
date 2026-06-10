@@ -24,10 +24,13 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
 type CatNode = {
   id: string;
   slug: string;
-  name_az: string;
+  name_az?: string; // köhnə Express
+  nameAz?: string; // NestJS
   icon?: string;
   children?: CatNode[];
 };
+
+const catName = (c: CatNode): string => c.nameAz ?? c.name_az ?? '';
 
 export default function MegaMenu({
   open,
@@ -80,7 +83,7 @@ export default function MegaMenu({
                   }`}
                 >
                   <Icon className={`w-5 h-5 ${isActive ? 'text-tap' : 'text-ink-400'}`} />
-                  <span className="flex-1">{c.name_az}</span>
+                  <span className="flex-1">{catName(c)}</span>
                   {c.children && c.children.length > 0 && (
                     <ChevronDown className="w-4 h-4 -rotate-90 opacity-40" />
                   )}
@@ -96,7 +99,7 @@ export default function MegaMenu({
                 <div className="flex items-center justify-between mb-5">
                   <h3 className="text-xl font-bold text-ink-900">
                     <Link href={`/elanlar?category=${activeNode.slug}`} onClick={onClose} className="hover:text-tap">
-                      {activeNode.name_az} →
+                      {catName(activeNode)} →
                     </Link>
                   </h3>
                   <button onClick={onClose} className="p-1 rounded hover:bg-ink-100">
@@ -115,7 +118,7 @@ export default function MegaMenu({
                             onClick={onClose}
                             className="block py-1.5 text-sm text-ink-700 hover:text-tap"
                           >
-                            {sub.name_az}
+                            {catName(sub)}
                           </Link>
                         ))}
                       </div>

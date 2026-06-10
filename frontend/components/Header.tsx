@@ -41,7 +41,10 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    api('/categories').then((d: any) => setCategories(d.categories || []));
+    // NestJS: { data:[...] }; köhnə Express: { categories:[...] }
+    api('/categories')
+      .then((d: any) => setCategories(d.data || d.categories || []))
+      .catch(() => setCategories([]));
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
