@@ -12,6 +12,7 @@ import { RedisModule } from './redis/redis.module';
 import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { GeoModule } from './modules/geo/geo.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { ListingsModule } from './modules/listings/listings.module';
 
@@ -34,6 +35,7 @@ import { ListingsModule } from './modules/listings/listings.module';
     QueueModule,
     HealthModule,
     AuthModule,
+    GeoModule,
     CategoriesModule,
     ListingsModule,
   ],
