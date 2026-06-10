@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/src ./src
 COPY --from=builder /app/package.json ./package.json
 EXPOSE 5500
-# Migrasiyaları tətbiq et, sonra başlat
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Migrasiya + seed (idempotent, xəta app-ı qırmır) + başlat
+CMD ["sh", "-c", "npx prisma migrate deploy && (npm run prisma:seed || echo 'seed skipped') && node dist/main.js"]
