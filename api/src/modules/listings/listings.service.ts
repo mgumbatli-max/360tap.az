@@ -4,9 +4,17 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CategoriesService } from '../categories/categories.service';
 import type { CreateListingDto } from './dto/create-listing.dto';
 import { toListingResponse, type ListingResponse } from './dto/listing-response.dto';
+import type { QueryListingsDto } from './dto/query-listings.dto';
 import { uniqueSlug } from './utils/slug.util';
 
 const LISTING_TTL_DAYS = 30;
+
+export interface ListMeta {
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+}
 
 @Injectable()
 export class ListingsService {
@@ -181,5 +189,69 @@ export class ListingsService {
       include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
     });
     return items.map(toListingResponse);
+  }
+
+  /**
+   * Region-first listing axtarışı + filter + pagination.
+   * Yalnız aktiv elanlar. Region slug → rayon id-lərinə açılır.
+   */
+  async findAll(q: QueryListingsDto): Promise<{ data: ListingResponse[]; meta: ListMeta }> {
+    const page = q.page ?? 1;
+    const limit = Math.min(q.limit ?? 20, 50);
+
+    const where: Prisma.ListingWhereInput = { status: 'active' };
+
+    if (q.district) {
+      where.districtId = q.district;
+    } else if (q.region) {
+      const region = await this.prisma.region.findUnique({
+        where: { slug: q.region },
+        select: { districts: { select: { id: true } } },
+      });
+      where.districtId = { in: region?.districts.map((d) => d.id) ?? [] };
+    }
+
+    if (q.category) {
+      const cat = await this.prisma.category.findUnique({
+        where: { slug: q.category },
+        select: { id: true, children: { select: { id: true } } },
+      });
+      where.categoryId = cat
+        ? { in: [cat.id, ...cat.children.map((c) => c.id)] }
+        : { in: [] };
+    }
+
+    if (q.vertical) where.vertical = q.vertical;
+    if (q.source) where.source = q.source;
+
+    if (q.priceMin != null || q.priceMax != null) {
+      const price: Prisma.DecimalNullableFilter = {};
+      if (q.priceMin != null) price.gte = q.priceMin;
+      if (q.priceMax != null) price.lte = q.priceMax;
+      where.price = price;
+    }
+
+    const orderBy: Prisma.ListingOrderByWithRelationInput =
+      q.sort === 'price_asc'
+        ? { price: 'asc' }
+        : q.sort === 'price_desc'
+          ? { price: 'desc' }
+          : { createdAt: 'desc' };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.listing.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+      }),
+      this.prisma.listing.count({ where }),
+    ]);
+
+    return {
+      data: items.map(toListingResponse),
+      meta: { page, limit, total, hasMore: page * limit < total },
+    };
   }
 }

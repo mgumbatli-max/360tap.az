@@ -8,11 +8,13 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CreateListingDto } from './dto/create-listing.dto';
 import type { ListingResponse } from './dto/listing-response.dto';
+import { QueryListingsDto } from './dto/query-listings.dto';
 import { ListingsService } from './listings.service';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 
@@ -27,6 +29,12 @@ export class ListingsController {
     @Body() dto: CreateListingDto,
   ): Promise<ListingResponse> {
     return this.listings.create(user.sub, dto);
+  }
+
+  @Public()
+  @Get()
+  findAll(@Query() query: QueryListingsDto) {
+    return this.listings.findAll(query);
   }
 
   @Public()
