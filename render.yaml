@@ -1,6 +1,6 @@
-# 360tap.az — Render Blueprint (backend: NestJS + Postgres + Redis + Meilisearch)
-# Qeyd: Bu starter şablondur; Render Dashboard → "New Blueprint" ilə repo-dan deploy edin.
-# Frontend ayrıca Vercel-ə (bax DEPLOY.md).
+# 360tap.az — Render Blueprint (PULSUZ: NestJS API + Postgres + Redis)
+# Meilisearch sonra əlavə olunur (pulsuz private service yoxdur) — axtarış o vaxta qədər degrade.
+# Frontend ayrıca Vercel-də (bax DEPLOY.md).
 
 databases:
   - name: tap360-db
@@ -9,38 +9,25 @@ databases:
     user: tap360
 
 services:
-  # Redis (Render Key Value)
+  # Redis (Render Key Value) — pulsuz
   - type: keyvalue
     name: tap360-redis
     plan: free
-    ipAllowList: [] # yalnız daxili
+    ipAllowList: []
 
-  # Meilisearch (private service, Docker image)
-  - type: pserv
-    name: tap360-meili
-    runtime: image
-    image:
-      url: getmeili/meilisearch:v1.10
-    plan: starter
-    envVars:
-      - key: MEILI_MASTER_KEY
-        generateValue: true
-      - key: MEILI_ENV
-        value: production
-
-  # NestJS API (Docker)
+  # NestJS API (Docker) — pulsuz web service
   - type: web
     name: tap360-api
     runtime: docker
     dockerfilePath: ./api/Dockerfile
     dockerContext: ./api
-    plan: free # free web service (15 dəq passivlikdən sonra yuxuya gedir, cold start ~50s)
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
-        value: production
+        value: "production"
       - key: PORT
-        value: 5500
+        value: "5500"
       - key: DATABASE_URL
         fromDatabase:
           name: tap360-db
@@ -50,25 +37,23 @@ services:
           type: keyvalue
           name: tap360-redis
           property: connectionString
-      - key: MEILI_HOST
-        value: http://tap360-meili:7700 # private service daxili adı
-      - key: MEILI_KEY
-        fromService:
-          type: pserv
-          name: tap360-meili
-          envVarKey: MEILI_MASTER_KEY
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_ACCESS_TTL
-        value: 900
+        value: "900"
       - key: JWT_REFRESH_TTL
-        value: 604800
+        value: "604800"
       - key: THROTTLE_TTL
-        value: 60
+        value: "60"
       - key: THROTTLE_LIMIT
-        value: 300
-      # Vercel domeni deploy-dan sonra əl ilə təyin olunur:
+        value: "300"
+      # Meilisearch hələ yoxdur — degrade (app boot olur, search xəta tutulur)
+      - key: MEILI_HOST
+        value: "http://localhost:7700"
+      - key: MEILI_KEY
+        value: ""
+      # Vercel proxy server-side olduğu üçün CORS funksional kritik deyil (boş olmamalıdır):
       - key: CORS_ORIGINS
-        sync: false
+        value: "https://360tap-az.vercel.app,http://localhost:5401"
       - key: MEDIA_BASE_URL
-        sync: false
+        value: "https://tap360-api.onrender.com/uploads"
