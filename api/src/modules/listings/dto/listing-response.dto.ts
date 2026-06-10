@@ -24,6 +24,12 @@ export interface ListingResponse {
   hasDelivery: boolean;
   hasCredit: boolean;
   hasBarter: boolean;
+  hasWarranty: boolean;
+  source: Listing['source'];
+  inStock: boolean;
+  stockQty: number | null;
+  oldPrice: number | null;
+  storeId: string | null;
   contactName: string | null;
   contactPhone: string | null;
   address: string | null;
@@ -61,6 +67,12 @@ export function toListingResponse(
     hasDelivery: listing.hasDelivery,
     hasCredit: listing.hasCredit,
     hasBarter: listing.hasBarter,
+    hasWarranty: listing.hasWarranty,
+    source: listing.source,
+    inStock: listing.inStock,
+    stockQty: listing.stockQty,
+    oldPrice: listing.oldPrice ? Number(listing.oldPrice) : null,
+    storeId: listing.storeId,
     contactName: listing.contactName,
     contactPhone: listing.contactPhone,
     address: listing.address,

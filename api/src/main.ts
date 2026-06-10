@@ -11,6 +11,7 @@ import type { AppConfig } from './config/configuration';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log'],
+    rawBody: true, // ERP HMAC imza yoxlaması üçün xam body
   });
 
   const config = app.get(ConfigService<AppConfig, true>);
