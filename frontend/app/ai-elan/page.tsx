@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Sparkles, Loader2, Wand2 } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
+import { api } from '@/lib/api';
 
 type Draft = {
   title?: string;
@@ -21,10 +23,42 @@ const EXAMPLES = [
 ];
 
 export default function AiElanPage() {
+  const router = useRouter();
+  const { user } = useAuth();
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const createListing = async () => {
+    if (!draft) return;
+    if (!user) {
+      setError('Elanı yerləşdirmək üçün əvvəlcə yuxarıdan "Daxil ol" düyməsi ilə hesabınıza daxil olun.');
+      return;
+    }
+    setCreating(true);
+    setError('');
+    try {
+      const r = await api<{ data?: { id: string } }>('/ai/create-listing', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: draft.title,
+          description: draft.description,
+          category: draft.category,
+          region: draft.region ?? undefined,
+          price: typeof draft.price === 'number' ? draft.price : undefined,
+          attributes: draft.attributes,
+        }),
+      });
+      const id = r.data?.id;
+      if (id) router.push(`/elanlar/${id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Elan yaradıla bilmədi');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const generate = async (input?: string) => {
     const t = (input ?? text).trim();
@@ -139,15 +173,25 @@ export default function AiElanPage() {
             </div>
 
             <div className="flex gap-2 mt-5">
-              <Link href="/elan-yerlesdir" className="btn-tap flex-1 justify-center">
-                Bu elanı yerləşdir →
-              </Link>
-              <button onClick={() => generate()} className="btn-secondary">
+              <button
+                onClick={createListing}
+                disabled={creating}
+                className="btn-tap flex-1 justify-center disabled:opacity-50"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Yaradılır…
+                  </>
+                ) : (
+                  'Bu elanı yerləşdir →'
+                )}
+              </button>
+              <button onClick={() => generate()} className="btn-secondary" disabled={creating}>
                 Yenidən
               </button>
             </div>
             <p className="text-ink-400 text-xs mt-3">
-              💡 Elanı yerləşdirmək üçün hesabınıza daxil olmalısınız. AI layihəni sizin üçün hazırladı.
+              💡 {user ? 'AI layihəni hazırladı — "yerləşdir" düyməsi elanı yaradır.' : 'Yerləşdirmək üçün hesabınıza daxil olun.'}
             </p>
           </div>
         )}

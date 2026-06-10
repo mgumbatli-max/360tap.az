@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import type { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
 import { toListingResponse } from '../modules/listings/dto/listing-response.dto';
+import { ListingsService } from '../modules/listings/listings.service';
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -54,6 +55,7 @@ export class AiService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly listings: ListingsService,
     config: ConfigService<AppConfig, true>,
   ) {
     const g = config.get('groq', { infer: true });
@@ -240,5 +242,42 @@ Qiyməti manatla götür. Region AZ adından slug-a çevir (qəbələ→qebele).
 
     const draft = await this.groqJSON(system, text);
     return { draft };
+  }
+
+  // ---- AI elanı real yarat: draft slug-larını id-yə həll edib DB-yə yaz ----
+  async createListing(
+    userId: string,
+    d: {
+      title: string;
+      description: string;
+      category: string;
+      region?: string | null;
+      price?: number | null;
+      attributes?: Record<string, unknown>;
+    },
+  ) {
+    const cat = await this.prisma.category.findUnique({
+      where: { slug: d.category },
+      select: { id: true },
+    });
+    if (!cat) throw new BadRequestException(`Kateqoriya tapılmadı: ${d.category}`);
+
+    let districtId: string | undefined;
+    if (d.region) {
+      const region = await this.prisma.region.findUnique({
+        where: { slug: d.region },
+        select: { districts: { select: { id: true }, take: 1 } },
+      });
+      districtId = region?.districts[0]?.id;
+    }
+
+    return this.listings.create(userId, {
+      title: d.title,
+      description: d.description,
+      categoryId: cat.id,
+      districtId,
+      price: typeof d.price === 'number' ? d.price : undefined,
+      attributes: d.attributes,
+    });
   }
 }
