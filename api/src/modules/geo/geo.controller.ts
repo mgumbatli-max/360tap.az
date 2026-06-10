@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseFloatPipe, Query } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { GeoService } from './geo.service';
 
@@ -26,7 +26,10 @@ export class GeoController {
 
   @Public()
   @Get('resolve')
-  resolve(@Query('lat') lat: string, @Query('lng') lng: string) {
-    return this.geo.resolveNearest(Number(lat), Number(lng));
+  resolve(
+    @Query('lat', ParseFloatPipe) lat: number,
+    @Query('lng', ParseFloatPipe) lng: number,
+  ) {
+    return this.geo.resolveNearest(lat, lng);
   }
 }

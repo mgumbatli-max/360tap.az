@@ -97,21 +97,27 @@ export class AuthService {
     }
 
     const tokenHash = this.hashToken(refreshToken);
-    const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token etibarsızdır');
-    }
 
-    // Rotation: köhnəni revoke et
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
+    // Atomik rotation: revoke + status yoxlaması + yeni token bir tranzaksiyada.
+    return this.prisma.$transaction(async (tx) => {
+      // Yalnız hələ revoke olunmamış və vaxtı keçməmiş tokeni revoke et.
+      // count !== 1 → tapılmadı / artıq istifadə olunub (reuse detection) → rədd.
+      const revoked = await tx.refreshToken.updateMany({
+        where: { tokenHash, revokedAt: null, expiresAt: { gt: new Date() } },
+        data: { revokedAt: new Date() },
+      });
+      if (revoked.count !== 1) {
+        throw new UnauthorizedException('Refresh token etibarsızdır');
+      }
+
+      const user = await tx.user.findUnique({ where: { id: payload.sub } });
+      if (!user) throw new UnauthorizedException('İstifadəçi tapılmadı');
+      if (user.status === 'banned' || user.status === 'suspended') {
+        throw new UnauthorizedException('Hesab bloklanıb');
+      }
+
+      return this.issueTokens(user, ctx, tx);
     });
-
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user) throw new UnauthorizedException('İstifadəçi tapılmadı');
-
-    return this.issueTokens(user, ctx);
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -132,7 +138,12 @@ export class AuthService {
   // Internal helpers
   // -----------------------------------------------------------
 
-  private async issueTokens(user: User, ctx: ClientCtx): Promise<AuthTokens> {
+  private async issueTokens(
+    user: User,
+    ctx: ClientCtx,
+    tx?: Prisma.TransactionClient,
+  ): Promise<AuthTokens> {
+    const db = tx ?? this.prisma;
     const { accessTtl, refreshTtl } = this.config.get('jwt', { infer: true });
 
     const accessPayload: JwtPayload = {
@@ -152,7 +163,7 @@ export class AuthService {
     const refreshTokenRaw = this.jwt.sign(refreshPayload, { expiresIn: refreshTtl });
 
     // Refresh-i hash şəklində saxla (DB-ə düz yaz olmasın)
-    await this.prisma.refreshToken.create({
+    await db.refreshToken.create({
       data: {
         userId: user.id,
         tokenHash: this.hashToken(refreshTokenRaw),

@@ -24,6 +24,12 @@ export interface AppConfig {
   };
 }
 
+function required(key: string): string {
+  const v = process.env[key];
+  if (!v) throw new Error(`${key} environment variable is required`);
+  return v;
+}
+
 export default (): AppConfig => ({
   nodeEnv: (process.env.NODE_ENV as AppConfig['nodeEnv']) ?? 'development',
   port: parseInt(process.env.PORT ?? '5500', 10),
@@ -31,7 +37,7 @@ export default (): AppConfig => ({
     origins: (process.env.CORS_ORIGINS ?? 'http://localhost:5401').split(','),
   },
   jwt: {
-    secret: process.env.JWT_SECRET ?? '',
+    secret: required('JWT_SECRET'),
     accessTtl: parseInt(process.env.JWT_ACCESS_TTL ?? '900', 10),
     refreshTtl: parseInt(process.env.JWT_REFRESH_TTL ?? '604800', 10),
   },

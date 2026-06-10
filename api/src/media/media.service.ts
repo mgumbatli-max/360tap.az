@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { encode } from 'blurhash';
 import { randomUUID } from 'node:crypto';
@@ -41,14 +41,28 @@ export class MediaService {
     return encode(new Uint8ClampedArray(data), info.width, info.height, 4, 4);
   }
 
-  /** Faylı yerli storage-a yazır, metadata + blurhash qaytarır. */
+  /**
+   * Faylı təhlükəsiz yenidən kodlaşdırıb (webp) yerli storage-a yazır.
+   * SVG və qeyri-şəkil rədd olunur; ölçü/tip yoxlaması controller-də (Multer).
+   */
   async upload(file: IncomingFile): Promise<UploadedMedia> {
-    const meta = await sharp(file.buffer).metadata();
+    let meta: sharp.Metadata;
+    try {
+      meta = await sharp(file.buffer, { limitInputPixels: 100_000_000 }).metadata();
+    } catch {
+      throw new BadRequestException('Şəkil oxunmadı');
+    }
+    if (!meta.format || meta.format === 'svg') {
+      throw new BadRequestException('Bu şəkil formatı dəstəklənmir');
+    }
+
     const blurHash = await this.toBlurhash(file.buffer);
-    const ext = meta.format ?? 'jpg';
-    const name = `${randomUUID()}.${ext}`;
+    // Xam buffer-i yox, sharp ilə yenidən kodlaşdırılmış webp-i yaz (payload təmizliyi)
+    const output = await sharp(file.buffer).rotate().webp({ quality: 82 }).toBuffer();
+    const name = `${randomUUID()}.webp`;
     await fs.mkdir(this.dir, { recursive: true });
-    await fs.writeFile(join(this.dir, name), file.buffer);
+    await fs.writeFile(join(this.dir, name), output);
+
     return {
       url: `${this.baseUrl}/${name}`,
       width: meta.width ?? 0,

@@ -69,8 +69,16 @@ export class GeoService {
 
   /** "Mənim yaxınlığımda" — koordinata ən yaxın rayon. */
   async resolveNearest(lat: number, lng: number): Promise<ResolvedLocation> {
-    if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      throw new BadRequestException('lat və lng rəqəm olmalıdır');
+    // Düzgün ədəd + Azərbaycan hüdudları (boş/0,0/qarışıq dəyərləri rədd)
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < 38 ||
+      lat > 42.5 ||
+      lng < 44 ||
+      lng > 51
+    ) {
+      throw new BadRequestException('Koordinat Azərbaycan hüdudlarında olmalıdır');
     }
     const districts = await this.prisma.district.findMany({
       select: {

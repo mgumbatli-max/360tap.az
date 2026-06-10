@@ -6,7 +6,7 @@ import { CategoriesService } from '../categories/categories.service';
 describe('ListingsService.findAll', () => {
   let captured: { where?: Record<string, unknown> } = {};
   const prismaMock = {
-    region: { findUnique: async () => ({ districts: [{ id: 'd1' }, { id: 'd2' }] }) },
+    region: { findUnique: async () => ({ isActive: true, districts: [{ id: 'd1' }, { id: 'd2' }] }) },
     category: { findUnique: async () => null },
     listing: {
       findMany: async (args: { where: Record<string, unknown> }) => {
@@ -41,5 +41,17 @@ describe('ListingsService.findAll', () => {
   it('qiymət aralığı gte/lte', async () => {
     await service.findAll({ priceMin: 100, priceMax: 500 });
     expect(captured.where?.price).toEqual({ gte: 100, lte: 500 });
+  });
+
+  it('mövcud olmayan region → NotFoundException', async () => {
+    const mod = await Test.createTestingModule({
+      providers: [
+        ListingsService,
+        { provide: PrismaService, useValue: { region: { findUnique: async () => null } } },
+        { provide: CategoriesService, useValue: {} },
+      ],
+    }).compile();
+    const svc = mod.get(ListingsService);
+    await expect(svc.findAll({ region: 'yoxdur' })).rejects.toThrow('Region tapılmadı');
   });
 });

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CategoriesService } from '../categories/categories.service';
@@ -14,6 +14,23 @@ export interface ListMeta {
   limit: number;
   total: number;
   hasMore: boolean;
+}
+
+/** Atribut options-undan icazəli dəyərləri çıxarır (massiv və ya {choices} formatı). */
+function optionValues(options: unknown): string[] {
+  if (Array.isArray(options)) {
+    return options.filter((o): o is string => typeof o === 'string');
+  }
+  if (
+    options &&
+    typeof options === 'object' &&
+    Array.isArray((options as { choices?: unknown }).choices)
+  ) {
+    return (options as { choices: unknown[] }).choices.filter(
+      (o): o is string => typeof o === 'string',
+    );
+  }
+  return [];
 }
 
 @Injectable()
@@ -138,7 +155,7 @@ export class ListingsService {
           }
           break;
         case 'select': {
-          const choices = (attr.options as { choices?: string[] } | null)?.choices ?? [];
+          const choices = optionValues(attr.options);
           if (typeof value !== 'string' || (choices.length > 0 && !choices.includes(value))) {
             throw new BadRequestException(
               `'${attr.labelAz}' bu siyahıdan birini seçməlisiniz: ${choices.join(', ')}`,
@@ -150,7 +167,7 @@ export class ListingsService {
           if (!Array.isArray(value)) {
             throw new BadRequestException(`'${attr.labelAz}' massiv olmalıdır`);
           }
-          const choices = (attr.options as { choices?: string[] } | null)?.choices ?? [];
+          const choices = optionValues(attr.options);
           for (const v of value) {
             if (typeof v !== 'string' || (choices.length > 0 && !choices.includes(v))) {
               throw new BadRequestException(
@@ -170,13 +187,31 @@ export class ListingsService {
             throw new BadRequestException(`'${attr.labelAz}' rəqəm olmalıdır`);
           }
           break;
+        case 'date':
+          if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) {
+            throw new BadRequestException(`'${attr.labelAz}' düzgün tarix olmalıdır (ISO)`);
+          }
+          break;
+        case 'location':
+          if (
+            typeof value !== 'object' ||
+            value === null ||
+            typeof (value as { lat?: unknown }).lat !== 'number' ||
+            typeof (value as { lng?: unknown }).lng !== 'number'
+          ) {
+            throw new BadRequestException(`'${attr.labelAz}' { lat, lng } strukturunda olmalıdır`);
+          }
+          break;
+        default:
+          throw new BadRequestException(`'${attr.labelAz}' üçün naməlum atribut tipi`);
       }
     }
   }
 
+  // Public: yalnız aktiv elan. Qeyri-aktiv (draft/review/...) anonim istifadəçiyə 404.
   async findById(id: string): Promise<ListingResponse | null> {
-    const listing = await this.prisma.listing.findUnique({
-      where: { id },
+    const listing = await this.prisma.listing.findFirst({
+      where: { id, status: 'active' },
       include: { images: { orderBy: { sortOrder: 'asc' } } },
     });
     return listing ? toListingResponse(listing) : null;
@@ -206,9 +241,13 @@ export class ListingsService {
     } else if (q.region) {
       const region = await this.prisma.region.findUnique({
         where: { slug: q.region },
-        select: { districts: { select: { id: true } } },
+        select: { isActive: true, districts: { select: { id: true } } },
       });
-      where.districtId = { in: region?.districts.map((d) => d.id) ?? [] };
+      // Səhv/qeyri-aktiv region slug → 404 (boş nəticədən fərqləndirmək üçün)
+      if (!region || !region.isActive) {
+        throw new NotFoundException(`Region tapılmadı: ${q.region}`);
+      }
+      where.districtId = { in: region.districts.map((d) => d.id) };
     }
 
     if (q.category) {

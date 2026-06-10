@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 import 'reflect-metadata';
 import { AppModule } from './app.module';
 import type { AppConfig } from './config/configuration';
@@ -13,14 +13,16 @@ async function bootstrap(): Promise<void> {
     logger: ['error', 'warn', 'log'],
   });
 
-  // Media (Faza 0 — yerli fayl storage) statik serving: /uploads/*
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
-
   const config = app.get(ConfigService<AppConfig, true>);
   const { port, cors } = {
     port: config.get('port', { infer: true }),
     cors: config.get('cors', { infer: true }),
   };
+
+  // Media (Faza 0 — yerli fayl storage) statik serving: /uploads/*
+  // MEDIA_DIR ilə eyni mənbə (storage ↔ serving uyğunluğu)
+  const mediaDir = resolve(config.get('media', { infer: true }).dir);
+  app.useStaticAssets(mediaDir, { prefix: '/uploads/' });
 
   // Təhlükəsizlik
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
