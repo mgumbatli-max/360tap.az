@@ -21,7 +21,8 @@ export class AiController {
     return this.ai.aiSearch(dto.query);
   }
 
-  // Auth — sərbəst mətndən elan layihəsi
+  // Public — sərbəst mətndən elan layihəsi (yalnız layihə qaytarır, DB-yə yazmır)
+  @Public()
   @Post('generate-listing')
   generate(@Body() dto: AiGenerateDto) {
     return this.ai.generateListing(dto.text);

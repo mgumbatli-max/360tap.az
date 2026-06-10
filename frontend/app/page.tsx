@@ -116,6 +116,14 @@ export default async function HomePage() {
               Bütün Azərbaycan üzrə →
             </Link>
           </div>
+          <div className="mt-4">
+            <Link
+              href="/ai-elan"
+              className="inline-flex items-center gap-2 bg-black/20 hover:bg-black/30 backdrop-blur px-4 py-2 rounded-full text-sm font-semibold transition"
+            >
+              ✨ AI ilə elan yarat — sözlərlə yaz, AI qursun
+            </Link>
+          </div>
         </div>
       </section>
 

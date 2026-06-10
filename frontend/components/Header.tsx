@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
-import { Heart, Search, Menu, ChevronDown, User2, Plus, LogOut } from 'lucide-react';
+import { Heart, Search, Menu, ChevronDown, User2, Plus, LogOut, Camera } from 'lucide-react';
 import Logo from './Logo';
 import MegaMenu from './MegaMenu';
 import AuthModal from './AuthModal';
@@ -103,9 +103,17 @@ export default function Header() {
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Nə axtarırsız?"
+                placeholder="Nə axtarırsız? — AI ilə yazın"
                 className="flex-1 min-w-0 bg-transparent px-2 text-sm text-ink-900 dark:text-white outline-none"
               />
+              <Link
+                href="/sekille-axtar"
+                title="Şəkillə axtar"
+                className="px-2.5 flex items-center text-tap hover:text-tap/80 shrink-0"
+                aria-label="Şəkillə axtar"
+              >
+                <Camera className="w-4 h-4" />
+              </Link>
             </div>
             <button type="submit" className="px-4 md:px-6 bg-tap text-white rounded-r-xl text-sm font-bold shrink-0 hover:opacity-90">
               Tap

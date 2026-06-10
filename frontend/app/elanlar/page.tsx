@@ -6,6 +6,7 @@ const API = process.env.API_ORIGIN
   : 'http://localhost:5500/api/v1';
 
 interface SP {
+  q?: string;
   region?: string;
   category?: string;
   vertical?: string;
@@ -20,6 +21,12 @@ type NestListing = {
   priceType: string; isVip?: boolean; isPremium?: boolean; hasDelivery?: boolean;
   views?: number; favoritesCount?: number; createdAt: string;
   images?: { url: string; sortOrder: number }[];
+};
+
+type Understanding = {
+  keywords?: string | null; region?: string | null; vertical?: string | null;
+  category?: string | null; brand?: string | null; color?: string | null;
+  condition?: string | null; priceMin?: number | null; priceMax?: number | null;
 };
 
 function mapListing(l: NestListing): Listing {
@@ -44,6 +51,11 @@ const SORTS = [
   { v: 'price_desc', name: 'Baha əvvəl' },
 ];
 
+const U_LABELS: Record<string, string> = {
+  keywords: '🔎', region: '📍', vertical: '📂', category: '📂',
+  brand: '🏷️', color: '🎨', condition: '✨', priceMin: '≥', priceMax: '≤',
+};
+
 function qs(sp: SP, patch: Partial<SP>): string {
   const merged = { ...sp, ...patch, page: undefined };
   const p = new URLSearchParams();
@@ -58,77 +70,132 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
 
-  const params = new URLSearchParams();
-  if (sp.region) params.set('region', sp.region);
-  if (sp.category) params.set('category', sp.category);
-  if (sp.vertical) params.set('vertical', sp.vertical);
-  if (sp.priceMin) params.set('priceMin', sp.priceMin);
-  if (sp.priceMax) params.set('priceMax', sp.priceMax);
-  if (sp.sort) params.set('sort', sp.sort);
-  params.set('page', String(page));
-  params.set('limit', '24');
-
   let items: Listing[] = [];
   let total = 0;
   let hasMore = false;
-  try {
-    const r = await fetch(`${API}/listings?${params}`, { next: { revalidate: 15 } });
-    if (r.ok) {
-      const d = (await r.json()) as { data?: NestListing[]; meta?: { total: number; hasMore: boolean } };
-      items = (d.data ?? []).map(mapListing);
-      total = d.meta?.total ?? items.length;
-      hasMore = d.meta?.hasMore ?? false;
+  let understanding: Understanding | null = null;
+
+  if (sp.q) {
+    // ---- AI axtarış (təbii dil) ----
+    try {
+      const r = await fetch(`${API}/ai/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: sp.q }),
+        cache: 'no-store',
+      });
+      if (r.ok) {
+        const d = (await r.json()) as {
+          data?: NestListing[];
+          meta?: { total: number; understanding?: Understanding };
+        };
+        items = (d.data ?? []).map(mapListing);
+        total = d.meta?.total ?? items.length;
+        understanding = d.meta?.understanding ?? null;
+      }
+    } catch {
+      /* AI əlçatmaz */
     }
-  } catch {
-    /* backend cold start / xəta → boş */
+  } else {
+    // ---- Adi filter axtarış ----
+    const params = new URLSearchParams();
+    if (sp.region) params.set('region', sp.region);
+    if (sp.category) params.set('category', sp.category);
+    if (sp.vertical) params.set('vertical', sp.vertical);
+    if (sp.priceMin) params.set('priceMin', sp.priceMin);
+    if (sp.priceMax) params.set('priceMax', sp.priceMax);
+    if (sp.sort) params.set('sort', sp.sort);
+    params.set('page', String(page));
+    params.set('limit', '24');
+    try {
+      const r = await fetch(`${API}/listings?${params}`, { next: { revalidate: 15 } });
+      if (r.ok) {
+        const d = (await r.json()) as {
+          data?: NestListing[];
+          meta?: { total: number; hasMore: boolean };
+        };
+        items = (d.data ?? []).map(mapListing);
+        total = d.meta?.total ?? items.length;
+        hasMore = d.meta?.hasMore ?? false;
+      }
+    } catch {
+      /* backend cold start */
+    }
   }
+
+  const uChips = understanding
+    ? Object.entries(understanding).filter(([, v]) => v != null && v !== '')
+    : [];
 
   return (
     <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white mb-1">
-          {sp.category ? sp.category.replace(/-/g, ' ') : 'Bütün elanlar'}
-          {sp.region ? ` — ${REGIONS.find((r) => r.slug === sp.region)?.name ?? sp.region}` : ''}
-        </h1>
-        <p className="text-ink-500 text-sm mb-4">{total} elan tapıldı</p>
+        {sp.q ? (
+          <>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white mb-1">
+              «{sp.q}»
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="inline-flex items-center gap-1 text-sm font-bold text-tap">
+                🤖 AI axtarışı
+              </span>
+              {uChips.map(([k, v]) => (
+                <span
+                  key={k}
+                  className="px-2.5 py-1 rounded-full bg-tap-50 dark:bg-ink-800 text-xs font-medium text-ink-700 dark:text-ink-200 border border-tap/20"
+                >
+                  {U_LABELS[k] ?? ''} {String(v)}
+                </span>
+              ))}
+            </div>
+            <p className="text-ink-500 text-sm mb-5">{total} nəticə tapıldı</p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white mb-1">
+              {sp.category ? sp.category.replace(/-/g, ' ') : 'Bütün elanlar'}
+              {sp.region ? ` — ${REGIONS.find((r) => r.slug === sp.region)?.name ?? sp.region}` : ''}
+            </h1>
+            <p className="text-ink-500 text-sm mb-4">{total} elan tapıldı</p>
 
-        {/* Region filter chip-ləri */}
-        <div className="flex flex-wrap gap-2 mb-3">
-          {REGIONS.map((r) => (
-            <Link
-              key={r.slug || 'all'}
-              href={qs(sp, { region: r.slug || undefined })}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                (sp.region ?? '') === r.slug
-                  ? 'bg-tap text-white'
-                  : 'bg-white dark:bg-ink-800 text-ink-700 dark:text-ink-200 hover:bg-ink-100'
-              }`}
-            >
-              {r.name}
-            </Link>
-          ))}
-        </div>
-
-        {/* Sort */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {SORTS.map((s) => (
-            <Link
-              key={s.v}
-              href={qs(sp, { sort: s.v })}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                (sp.sort ?? 'new') === s.v
-                  ? 'bg-ink-900 dark:bg-white text-white dark:text-ink-900'
-                  : 'bg-white dark:bg-ink-800 text-ink-600 dark:text-ink-300 hover:bg-ink-100'
-              }`}
-            >
-              {s.name}
-            </Link>
-          ))}
-        </div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {REGIONS.map((r) => (
+                <Link
+                  key={r.slug || 'all'}
+                  href={qs(sp, { region: r.slug || undefined })}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                    (sp.region ?? '') === r.slug
+                      ? 'bg-tap text-white'
+                      : 'bg-white dark:bg-ink-800 text-ink-700 dark:text-ink-200 hover:bg-ink-100'
+                  }`}
+                >
+                  {r.name}
+                </Link>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2 mb-6">
+              {SORTS.map((s) => (
+                <Link
+                  key={s.v}
+                  href={qs(sp, { sort: s.v })}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                    (sp.sort ?? 'new') === s.v
+                      ? 'bg-ink-900 dark:bg-white text-white dark:text-ink-900'
+                      : 'bg-white dark:bg-ink-800 text-ink-600 dark:text-ink-300 hover:bg-ink-100'
+                  }`}
+                >
+                  {s.name}
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
 
         {items.length === 0 ? (
           <div className="card p-12 text-center">
-            <p className="text-ink-500 text-lg">Bu filtrlə elan tapılmadı</p>
+            <p className="text-ink-500 text-lg">
+              {sp.q ? 'AI bu sorğuya uyğun elan tapmadı' : 'Bu filtrlə elan tapılmadı'}
+            </p>
             <Link href="/elanlar" className="btn-secondary inline-flex mt-4">
               Bütün elanlara bax
             </Link>
@@ -141,26 +208,27 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
               ))}
             </div>
 
-            {/* Pagination */}
-            <div className="flex items-center justify-center gap-3 mt-8">
-              {page > 1 && (
-                <Link
-                  href={`/elanlar?${new URLSearchParams({ ...sp, page: String(page - 1) } as Record<string, string>)}`}
-                  className="btn-secondary"
-                >
-                  ← Əvvəlki
-                </Link>
-              )}
-              <span className="text-ink-500 text-sm">Səhifə {page}</span>
-              {hasMore && (
-                <Link
-                  href={`/elanlar?${new URLSearchParams({ ...sp, page: String(page + 1) } as Record<string, string>)}`}
-                  className="btn-secondary"
-                >
-                  Növbəti →
-                </Link>
-              )}
-            </div>
+            {!sp.q && (
+              <div className="flex items-center justify-center gap-3 mt-8">
+                {page > 1 && (
+                  <Link
+                    href={`/elanlar?${new URLSearchParams({ ...sp, page: String(page - 1) } as Record<string, string>)}`}
+                    className="btn-secondary"
+                  >
+                    ← Əvvəlki
+                  </Link>
+                )}
+                <span className="text-ink-500 text-sm">Səhifə {page}</span>
+                {hasMore && (
+                  <Link
+                    href={`/elanlar?${new URLSearchParams({ ...sp, page: String(page + 1) } as Record<string, string>)}`}
+                    className="btn-secondary"
+                  >
+                    Növbəti →
+                  </Link>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
