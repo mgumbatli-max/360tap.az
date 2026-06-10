@@ -3,9 +3,12 @@ import { PrismaClient } from '@prisma/client';
 import { REGIONS } from './seed/regions';
 import { CATEGORIES, type SeedCategory } from './seed/categories';
 import { VEHICLE_BRANDS } from './seed/brands';
+import { DEMO_SELLER, SAMPLE_LISTINGS } from './seed/listings';
 import { buildNearby } from './seed/haversine';
+import { makeSlug } from '../src/modules/listings/utils/slug.util';
 
 const prisma = new PrismaClient();
+const DEMO_PWD_HASH = '$argon2id$v=19$m=19456,t=2,p=1$c2VlZA$seed-demo-no-login';
 
 async function seedGeo(): Promise<void> {
   for (const r of REGIONS) {
@@ -90,11 +93,59 @@ async function seedBrands(): Promise<void> {
   console.log(`  brands: ${VEHICLE_BRANDS.length} brend`);
 }
 
+async function seedListings(): Promise<void> {
+  const user = await prisma.user.upsert({
+    where: { email: DEMO_SELLER.email },
+    update: {},
+    create: { email: DEMO_SELLER.email, fullName: DEMO_SELLER.fullName, passwordHash: DEMO_PWD_HASH },
+  });
+  // Idempotent: demo satıcının köhnə elanlarını sil
+  await prisma.listing.deleteMany({ where: { ownerId: user.id } });
+
+  let i = 0;
+  let created = 0;
+  for (const s of SAMPLE_LISTINGS) {
+    const cat = await prisma.category.findUnique({
+      where: { slug: s.categorySlug },
+      select: { id: true, vertical: true },
+    });
+    const dist = await prisma.district.findUnique({
+      where: { slug: s.districtSlug },
+      select: { id: true },
+    });
+    if (!cat || !dist) continue;
+    await prisma.listing.create({
+      data: {
+        ownerId: user.id,
+        categoryId: cat.id,
+        districtId: dist.id,
+        vertical: cat.vertical,
+        title: s.title,
+        slug: `${makeSlug(s.title)}-${i++}`,
+        description: s.description,
+        price: s.price,
+        currency: 'AZN',
+        status: 'active',
+        source: 'manual',
+        isVip: s.isVip ?? false,
+        isPremium: s.isPremium ?? false,
+        hasDelivery: s.hasDelivery ?? false,
+        attributes: s.attributes ?? {},
+        publishedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 86_400_000),
+      },
+    });
+    created++;
+  }
+  console.log(`  listings: ${created} nümunə aktiv elan (demo satıcı)`);
+}
+
 async function main(): Promise<void> {
   console.log('🌱 Seed başladı...');
   await seedGeo();
   await seedCategories();
   await seedBrands();
+  await seedListings();
   console.log('✅ Seed tamam.');
 }
 
