@@ -1,0 +1,180 @@
+'use client';
+import { useState, useEffect } from 'react';
+import ProfileLayout from '@/components/ProfileLayout';
+import { Bell, Globe, DollarSign, Eye, Moon, Sun, Monitor, Keyboard, Shield, User, Sliders, LayoutGrid, Rows3 } from 'lucide-react';
+import { useToast } from '@/lib/toast';
+import PushSubscribe from '@/components/PushSubscribe';
+import TelegramBotConnect from '@/components/TelegramBotConnect';
+import EmailDigest from '@/components/EmailDigest';
+import AutoReplyBot from '@/components/AutoReplyBot';
+import SellerVerification from '@/components/SellerVerification';
+
+export default function SettingsPage() {
+  const toast = useToast();
+  const [theme, setTheme] = useState<string>('light');
+  const [density, setDensity] = useState<string>('comfortable');
+  const [lang, setLang] = useState<string>('az');
+  const [currency, setCurrency] = useState<string>('AZN');
+  const [notifEmail, setNotifEmail] = useState(true);
+  const [notifPush, setNotifPush] = useState(true);
+  const [notifSms, setNotifSms] = useState(false);
+  const [phonePublic, setPhonePublic] = useState(false);
+  const [savedSearchAlerts, setSavedSearchAlerts] = useState(true);
+
+  useEffect(() => {
+    try {
+      setTheme(localStorage.getItem('avito_theme') || 'light');
+      setDensity(localStorage.getItem('tap_density') || 'comfortable');
+      setLang(localStorage.getItem('tap_lang') || 'az');
+      setCurrency(localStorage.getItem('tap_currency') || 'AZN');
+    } catch {}
+  }, []);
+
+  const saveTheme = (v: string) => { setTheme(v); localStorage.setItem('avito_theme', v); document.documentElement.classList.remove('light','dark'); document.documentElement.classList.add(v === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : v); };
+  const saveDensity = (v: string) => { setDensity(v); localStorage.setItem('tap_density', v); document.documentElement.dataset.density = v; };
+
+  return (
+    <ProfileLayout>
+      <div className="space-y-6 max-w-3xl">
+        <div className="flex items-center gap-2 mb-2">
+          <Sliders className="w-6 h-6 text-tap" />
+          <h1 className="text-2xl font-extrabold">Tənzimləmələr</h1>
+        </div>
+
+        {/* Görünüş */}
+        <Section title="Görünüş" icon={Eye}>
+          <Row label="Tema">
+            <ToggleGroup value={theme} onChange={saveTheme} options={[
+              { v: 'light', label: 'Aydın', icon: Sun },
+              { v: 'dark', label: 'Tünd', icon: Moon },
+              { v: 'system', label: 'Sistem', icon: Monitor },
+            ]} />
+          </Row>
+          <Row label="Sıxlıq" hint="Kart sıxlığı">
+            <ToggleGroup value={density} onChange={saveDensity} options={[
+              { v: 'comfortable', label: 'Rahat', icon: LayoutGrid },
+              { v: 'compact', label: 'Kompakt', icon: Rows3 },
+            ]} />
+          </Row>
+        </Section>
+
+        {/* Dil və regional */}
+        <Section title="Dil və regional" icon={Globe}>
+          <Row label="Dil">
+            <select value={lang} onChange={(e) => { setLang(e.target.value); localStorage.setItem('tap_lang', e.target.value); }} className="input !w-auto !py-2">
+              <option value="az">🇦🇿 Azərbaycanca</option>
+              <option value="ru">🇷🇺 Русский</option>
+              <option value="en">🇬🇧 English</option>
+            </select>
+          </Row>
+          <Row label="Valyuta">
+            <select value={currency} onChange={(e) => { setCurrency(e.target.value); localStorage.setItem('tap_currency', e.target.value); }} className="input !w-auto !py-2">
+              <option value="AZN">AZN ₼</option>
+              <option value="USD">USD $</option>
+              <option value="EUR">EUR €</option>
+              <option value="RUB">RUB ₽</option>
+            </select>
+          </Row>
+        </Section>
+
+        {/* Bildirişlər */}
+        <Section title="Bildirişlər" icon={Bell}>
+          <Row label="E-poçt bildirişləri">
+            <Switch checked={notifEmail} onChange={setNotifEmail} />
+          </Row>
+          <Row label="Push bildirişləri" hint="Brauzer notification">
+            <Switch checked={notifPush} onChange={setNotifPush} />
+          </Row>
+          <Row label="SMS bildirişləri">
+            <Switch checked={notifSms} onChange={setNotifSms} />
+          </Row>
+          <Row label="Saxlanılmış axtarışlardan xəbərdar et" hint="Yeni uyğun elan gəldikdə">
+            <Switch checked={savedSearchAlerts} onChange={setSavedSearchAlerts} />
+          </Row>
+        </Section>
+
+        {/* Məxfilik */}
+        <Section title="Məxfilik" icon={Shield}>
+          <Row label="Telefonum hamıya görünsün" hint="Sönülü olduqda yalnız mesaj qutusundan əlaqə">
+            <Switch checked={phonePublic} onChange={setPhonePublic} />
+          </Row>
+        </Section>
+
+        {/* İnteqrasiyalar — push, telegram, email, autoreply, verification */}
+        <Section title="İnteqrasiyalar və avtomatlaşdırma" icon={Bell}>
+          <div className="space-y-3">
+            <PushSubscribe />
+            <TelegramBotConnect />
+            <EmailDigest />
+            <AutoReplyBot />
+            <SellerVerification />
+          </div>
+        </Section>
+
+        {/* Klaviatura */}
+        <Section title="Klaviatura qısayolları" icon={Keyboard}>
+          <p className="text-sm text-ink-500 mb-3">Saytda istənilən yerdə <kbd className="px-1.5 py-0.5 bg-ink-100 dark:bg-ink-800 rounded text-xs font-mono">?</kbd> basın və bütün qısayolları görün</p>
+          <ul className="text-sm space-y-1.5">
+            <li><kbd className="px-1.5 py-0.5 bg-ink-100 dark:bg-ink-800 rounded font-mono text-xs">⌘ K</kbd> — Sürətli axtarış (Command palette)</li>
+            <li><kbd className="px-1.5 py-0.5 bg-ink-100 dark:bg-ink-800 rounded font-mono text-xs">/</kbd> — Axtarış sahəsi</li>
+            <li><kbd className="px-1.5 py-0.5 bg-ink-100 dark:bg-ink-800 rounded font-mono text-xs">G N</kbd> — Yeni elan</li>
+          </ul>
+        </Section>
+
+        <button onClick={() => toast.success('Tənzimləmələr saxlandı')} className="btn-tap">
+          Yadda saxla
+        </button>
+      </div>
+    </ProfileLayout>
+  );
+}
+
+function Section({ title, icon: Icon, children }: any) {
+  return (
+    <div className="card p-5">
+      <h3 className="font-bold flex items-center gap-2 mb-4 text-lg">
+        <Icon className="w-4 h-4 text-tap" /> {title}
+      </h3>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function Row({ label, hint, children }: any) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-ink-100 dark:border-ink-700 last:border-b-0">
+      <div className="flex-1">
+        <div className="font-medium text-sm">{label}</div>
+        {hint && <div className="text-xs text-ink-500 mt-0.5">{hint}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button onClick={() => onChange(!checked)}
+      className={`relative w-11 h-6 rounded-full transition ${checked ? 'bg-tap' : 'bg-ink-200 dark:bg-ink-700'}`}>
+      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
+    </button>
+  );
+}
+
+function ToggleGroup({ value, onChange, options }: any) {
+  return (
+    <div className="inline-flex bg-ink-100 dark:bg-ink-800 rounded-lg p-0.5">
+      {options.map((o: any) => {
+        const I = o.icon;
+        return (
+          <button key={o.v} onClick={() => onChange(o.v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+              value === o.v ? 'bg-white dark:bg-ink-700 text-tap shadow' : 'text-ink-600 dark:text-ink-300'
+            }`}>
+            <I className="w-3.5 h-3.5" /> {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

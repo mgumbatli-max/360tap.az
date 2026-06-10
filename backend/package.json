@@ -1,0 +1,30 @@
+{
+  "name": "360tap-az-backend",
+  "version": "1.0.0",
+  "description": "360tap.az — Universal elanlar marketplace platforması",
+  "private": true,
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node src/scripts/migrate.js",
+    "seed:hash": "node src/scripts/hash-admin.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.13.0",
+    "slugify": "^1.6.6",
+    "socket.io": "^4.8.3",
+    "xlsx": "^0.18.5",
+    "zod": "^3.23.8"
+  }
+}

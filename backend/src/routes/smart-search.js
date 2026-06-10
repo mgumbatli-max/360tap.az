@@ -1,0 +1,175 @@
+import { Router } from 'express';
+import { pool } from '../db.js';
+
+const router = Router();
+
+// AZ → Latin transliteration
+const AZ_LATIN = {
+  'ə': 'e', 'ı': 'i', 'ö': 'o', 'ü': 'u', 'ğ': 'g', 'ş': 's', 'ç': 'c',
+  'Ə': 'E', 'I': 'I', 'Ö': 'O', 'Ü': 'U', 'Ğ': 'G', 'Ş': 'S', 'Ç': 'C',
+};
+const translit = (s) => s.replace(/[əıöüğşçƏIÖÜĞŞÇ]/g, (c) => AZ_LATIN[c] || c);
+
+// Sinonim dictionary (AZ/RU/EN cross)
+const SYNONYMS = {
+  'phone': ['telefon', 'смартфон', 'mobile', 'мобильник', 'cep'],
+  'telefon': ['phone', 'mobile', 'смартфон', 'tel'],
+  'laptop': ['noutbuk', 'ноутбук', 'macbook'],
+  'noutbuk': ['laptop', 'macbook', 'ноутбук'],
+  'car': ['avtomobil', 'maşın', 'masin', 'машина', 'авто'],
+  'avtomobil': ['car', 'maşın', 'машина', 'auto'],
+  'maşın': ['avtomobil', 'car', 'машина'],
+  'apartment': ['mənzil', 'menzil', 'квартира', 'flat'],
+  'mənzil': ['apartment', 'flat', 'квартира'],
+  'house': ['ev', 'дом', 'home'],
+  'ev': ['house', 'home', 'дом'],
+  'iphone': ['айфон', 'apple'],
+  'samsung': ['galaxy', 'самсунг'],
+  'bmw': ['бмв', 'бимер'],
+  'mercedes': ['мерседес', 'mercedes-benz', 'merc'],
+  'toyota': ['тойота'],
+  'job': ['iş', 'is', 'работа', 'vakansiya', 'вакансия'],
+  'iş': ['job', 'work', 'работа', 'vakansiya'],
+  'rent': ['kirayə', 'kiraye', 'аренда', 'icarə'],
+  'kirayə': ['rent', 'аренда', 'icarə'],
+};
+
+function expandQuery(q) {
+  const lower = q.toLowerCase().trim();
+  const words = lower.split(/\s+/);
+  const variants = new Set([lower, translit(lower)]);
+  words.forEach((w) => {
+    if (SYNONYMS[w]) SYNONYMS[w].forEach((s) => variants.add(s));
+  });
+  return Array.from(variants);
+}
+
+// Price extraction
+function extractPrice(q) {
+  const m = q.match(/(\d+(?:[\s.,]\d+)*)\s*(?:k|min|тыс)?\s*(manat|azn|₼|usd|dollar|евро|eur)/i);
+  if (!m) return null;
+  let num = parseInt(m[1].replace(/[\s.,]/g, ''));
+  if (/k|min|тыс/i.test(m[0])) num *= 1000;
+  return num;
+}
+
+// Year extraction
+function extractYear(q) {
+  const m = q.match(/\b(19|20)\d{2}\b/);
+  return m ? parseInt(m[0]) : null;
+}
+
+router.get('/smart', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 1) return res.json({ items: [], categories: [], cities: [], pages: [] });
+
+    const variants = expandQuery(q);
+    const lowerQ = q.toLowerCase();
+    const priceMatch = extractPrice(q);
+    const yearMatch = extractYear(q);
+
+    // Build OR conditions for each variant
+    const conditions = [];
+    const params = [];
+    variants.forEach((v) => {
+      params.push(`%${v}%`);
+      conditions.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length})`);
+    });
+
+    // Trigram similarity
+    params.push(q);
+    const simIdx = params.length;
+
+    const sqlListings = `
+      SELECT l.id, l.title, l.price, l.currency, l.is_vip, l.views, l.created_at,
+             c.name_az AS category_name, c.slug AS category_slug,
+             cit.name_az AS city_name,
+             (SELECT json_build_object('url', m.url) FROM listing_media m WHERE m.listing_id=l.id ORDER BY m.sort_order LIMIT 1) AS cover,
+             (
+               CASE WHEN l.title ILIKE $1 THEN 100 ELSE 0 END
+               + (similarity(l.title, $${simIdx}) * 50)
+               + CASE WHEN l.is_vip THEN 20 ELSE 0 END
+               + (COALESCE(l.views, 0) / 50.0)
+               + CASE WHEN l.created_at > NOW() - INTERVAL '7 days' THEN 10 ELSE 0 END
+             ) AS score
+      FROM listings l
+      LEFT JOIN categories c ON c.id = l.category_id
+      LEFT JOIN cities cit ON cit.id = l.city_id
+      WHERE l.status = 'active' AND (${conditions.join(' OR ')} OR similarity(l.title, $${simIdx}) > 0.15)
+      ${priceMatch ? `AND l.price <= ${priceMatch * 1.2} AND l.price >= ${priceMatch * 0.5}` : ''}
+      ORDER BY score DESC, l.created_at DESC
+      LIMIT 12
+    `;
+
+    const [listingsRes, catRes, cityRes] = await Promise.all([
+      pool.query(sqlListings, params),
+      pool.query(
+        `SELECT slug, name_az FROM categories WHERE name_az ILIKE $1 OR slug ILIKE $1 LIMIT 5`,
+        [`%${q}%`]
+      ),
+      pool.query(
+        `SELECT slug, name_az AS name FROM cities WHERE name_az ILIKE $1 OR slug ILIKE $1 LIMIT 5`,
+        [`%${q}%`]
+      ),
+    ]);
+
+    // Static pages
+    const PAGES = [
+      { slug: '/emlak', title: 'Daşınmaz əmlak', kws: ['mənzil','ev','daşınmaz','əmlak','menzil','property'] },
+      { slug: '/neqliyyat', title: 'Nəqliyyat', kws: ['avtomobil','maşın','masin','car','nəqliyyat','neqliyyat'] },
+      { slug: '/lab', title: '360 Lab — Eksperimental funksiyalar', kws: ['lab','beta','eksperimental','funksiyalar'] },
+      { slug: '/sekille-axtar', title: 'Şəkil ilə axtarış', kws: ['şəkil','sekil','image','foto','photo'] },
+      { slug: '/elan-yerlesdir', title: 'Elan yerləşdir', kws: ['elan','yerleşdir','post','yeni','yarat'] },
+      { slug: '/komek', title: 'Kömək mərkəzi', kws: ['kömək','komek','help','sual'] },
+      { slug: '/profil/sevimliler', title: 'Sevimlilər', kws: ['sevimli','favorit','wishlist'] },
+      { slug: '/profil/mesajlar', title: 'Mesajlar', kws: ['mesaj','chat','söhbət'] },
+    ];
+    const pages = PAGES.filter((p) =>
+      p.title.toLowerCase().includes(lowerQ) || p.kws.some((k) => lowerQ.includes(k) || k.includes(lowerQ))
+    ).slice(0, 5);
+
+    // Did you mean - faqe similar word using trigrams
+    const dymRes = await pool.query(
+      `SELECT word, similarity(word, $1) AS s FROM (
+         SELECT DISTINCT lower(unnest(string_to_array(title, ' '))) AS word FROM listings
+       ) w WHERE length(word) > 3 AND similarity(word, $1) > 0.3 ORDER BY s DESC LIMIT 3`,
+      [lowerQ]
+    ).catch(() => ({ rows: [] }));
+
+    res.json({
+      query: q,
+      expanded_variants: variants,
+      filters_detected: { price: priceMatch, year: yearMatch },
+      items: listingsRes.rows,
+      categories: catRes.rows,
+      cities: cityRes.rows,
+      pages,
+      suggestions: dymRes.rows.map((r) => r.word),
+      total: listingsRes.rowCount,
+    });
+  } catch (e) {
+    console.error('smart-search error:', e.message);
+    next(e);
+  }
+});
+
+// Autocomplete suggestions (lightweight)
+router.get('/autocomplete', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) return res.json({ suggestions: [] });
+    const variants = expandQuery(q);
+    const conditions = variants.map((_, i) => `l.title ILIKE $${i + 1}`).join(' OR ');
+    const params = variants.map((v) => `%${v}%`);
+
+    const r = await pool.query(
+      `SELECT DISTINCT l.title FROM listings l WHERE l.status='published' AND (${conditions})
+       ORDER BY l.title LIMIT 10`,
+      params
+    );
+    res.json({ suggestions: r.rows.map((x) => x.title) });
+  } catch (e) { next(e); }
+});
+
+export default router;
