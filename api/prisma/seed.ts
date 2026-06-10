@@ -1,5 +1,5 @@
 // 360tap.az — seed (idempotent): regions/districts/nearby + categories + brands
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { REGIONS } from './seed/regions';
 import { CATEGORIES, type SeedCategory } from './seed/categories';
 import { VEHICLE_BRANDS } from './seed/brands';
@@ -143,7 +143,7 @@ async function seedListings(): Promise<void> {
         isVip: s.isVip ?? false,
         isPremium: s.isPremium ?? false,
         hasDelivery: s.hasDelivery ?? false,
-        attributes: s.attributes ?? {},
+        attributes: (s.attributes ?? {}) as Prisma.InputJsonValue,
         publishedAt: new Date(),
         expiresAt: new Date(Date.now() + 30 * 86_400_000),
       },

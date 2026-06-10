@@ -22,6 +22,10 @@ export interface AppConfig {
     dir: string;
     baseUrl: string;
   };
+  groq: {
+    apiKey: string;
+    model: string;
+  };
 }
 
 function required(key: string): string {
@@ -53,5 +57,9 @@ export default (): AppConfig => ({
   media: {
     dir: process.env.MEDIA_DIR ?? './uploads',
     baseUrl: process.env.MEDIA_BASE_URL ?? 'http://localhost:5500/uploads',
+  },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY ?? '',
+    model: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
   },
 });
