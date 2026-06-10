@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { ErpSyncStatus, ListingStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SearchService } from '../../search/search.service';
 import { uniqueSlug } from '../listings/utils/slug.util';
 import type { ErpPublishDto } from './dto/erp-publish.dto';
 import type { ErpIntegrationCtx } from './erp-auth.guard';
@@ -12,7 +13,10 @@ const SITE = 'https://360tap.az';
 
 @Injectable()
 export class ErpService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly search: SearchService,
+  ) {}
 
   // ============ Provisioning (mağaza sahibi, JWT) ============
 
@@ -233,6 +237,8 @@ export class ErpService {
       result.action === 'noop' ? 'idempotent no-op' : undefined,
     );
 
+    await this.search.indexListing(result.listingId); // Meili indeks (best-effort)
+
     const url = result.regionSlug
       ? `${SITE}/${result.regionSlug}/${result.slug}`
       : `${SITE}/elanlar/${result.listingId}`;
@@ -260,6 +266,7 @@ export class ErpService {
       }),
     ]);
     await this.touch(integration.id, externalId, 'update_stock');
+    await this.search.indexListing(listingId); // active→index, out_of_stock→remove
     return { listing_id: listingId, external_id: externalId, stock_qty: stockQty, in_stock: inStock, status: inStock ? 'active' : 'out_of_stock' };
   }
 
@@ -282,6 +289,7 @@ export class ErpService {
       }),
     ]);
     await this.touch(integration.id, externalId, 'update_price');
+    await this.search.indexListing(listingId);
     return { listing_id: listingId, external_id: externalId, price };
   }
 
@@ -295,6 +303,7 @@ export class ErpService {
       }),
     ]);
     await this.touch(integration.id, externalId, 'delete');
+    await this.search.removeListing(listingId);
     return { listing_id: listingId, external_id: externalId, status: 'archived' as const };
   }
 

@@ -13,6 +13,7 @@ import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './health/health.module';
 import { MediaModule } from './media/media.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { SearchModule } from './search/search.module';
 import { GeoModule } from './modules/geo/geo.module';
 import { StoresModule } from './modules/stores/stores.module';
 import { ErpModule } from './modules/erp/erp.module';
@@ -38,6 +39,7 @@ import { ListingsModule } from './modules/listings/listings.module';
     QueueModule,
     HealthModule,
     MediaModule,
+    SearchModule,
     AuthModule,
     GeoModule,
     StoresModule,
