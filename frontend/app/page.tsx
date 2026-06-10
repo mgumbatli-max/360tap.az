@@ -68,8 +68,14 @@ const CAT_ICONS: Record<string, string> = {
   'dasinmaz-emlak': '🏠',
   'is-elanlari': '💼',
   elektronika: '📱',
-  geyim: '👕',
   'ev-bag': '🛋️',
+  'shexsi-esyalar': '👕',
+  'usaq-alemi': '🧸',
+  heyvanlar: '🐾',
+  'tikinti-temir': '🔨',
+  'hobbi-asude': '🎯',
+  'biznes-avadanliq': '🏢',
+  'kend-teserrufati': '🌱',
   xidmetler: '🛠️',
 };
 

@@ -10,15 +10,16 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   neqliyyat: Car,
   'dasinmaz-emlak': Home,
   'is-elanlari': Briefcase,
-  xidmetler: Wrench,
-  geyim: Package,
-  'ev-ve-bag': Sofa,
-  ehtiyat: Tools,
   elektronika: Cpu,
-  'usaq': Heart,
+  'ev-bag': Sofa,
+  'shexsi-esyalar': Package,
+  'usaq-alemi': Heart,
   heyvanlar: PawPrint,
-  biznes: Building,
-  tikinti: Drill,
+  'tikinti-temir': Drill,
+  'hobbi-asude': Tools,
+  'biznes-avadanliq': Building,
+  'kend-teserrufati': Sofa,
+  xidmetler: Wrench,
 };
 
 type CatNode = {

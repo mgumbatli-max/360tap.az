@@ -64,11 +64,24 @@ async function upsertCategory(c: SeedCategory, parentId: string | undefined, sor
   }
 }
 
+function collectSlugs(cats: SeedCategory[], acc: string[] = []): string[] {
+  for (const cat of cats) {
+    acc.push(cat.slug);
+    if (cat.children) collectSlugs(cat.children, acc);
+  }
+  return acc;
+}
+
 async function seedCategories(): Promise<void> {
   let i = 0;
   for (const root of CATEGORIES) {
     await upsertCategory(root, undefined, i++);
   }
+  // Köhnə/orfan kateqoriyaları təmizlə (yalnız elanı və alt-kateqoriyası olmayanları)
+  const keep = collectSlugs(CATEGORIES);
+  await prisma.category.deleteMany({
+    where: { slug: { notIn: keep }, listings: { none: {} }, children: { none: {} } },
+  });
   console.log(`  categories: ${await prisma.category.count()} cəmi`);
 }
 
