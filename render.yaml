@@ -34,7 +34,7 @@ services:
     runtime: docker
     dockerfilePath: ./api/Dockerfile
     dockerContext: ./api
-    plan: starter
+    plan: free # free web service (15 dəq passivlikdən sonra yuxuya gedir, cold start ~50s)
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
