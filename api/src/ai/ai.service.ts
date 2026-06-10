@@ -10,7 +10,7 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const SEARCH_SYSTEM = `Sən 360tap.az marketplace üçün axtarış köməkçisisən. İstifadəçinin təbii dil sorğusundan struktur filter çıxar.
 YALNIZ JSON obyekt qaytar (başqa mətn yox):
 {
-  "keywords": "əsas axtarış sözləri — brend+model (məs. iPhone 14 Pro)",
+  "keywords": "YALNIZ konkret məhsul adı/modeli (məs. iPhone 14 Pro, Mercedes E220). Generic söz (telefon, maşın, ev, mənzil) keywords-ə YOX — onu category/vertical-ə qoy. Konkret ad yoxdursa null",
   "region": "region slug və ya null (baki, sumqayit, gence, qebele, quba, xacmaz, lenkeran, seki, mingecevir, shamaxi, masalli, oguz, ismayilli, goycay, qax)",
   "vertical": "transport | realestate | job | universal | null",
   "category": "kateqoriya slug və ya null (telefonlar, avtomobiller, menziller, ...)",
@@ -118,9 +118,17 @@ export class AiService {
       where.price = price;
     }
     if (u.keywords) {
-      // əsas söz title-da axtarılır (brend/model)
-      const firstWord = u.keywords.trim().split(/\s+/)[0];
-      where.title = { contains: firstWord, mode: 'insensitive' };
+      // əhəmiyyətli sözlər title VƏ YA description-da (OR)
+      const words = u.keywords
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.length >= 3);
+      if (words.length) {
+        where.OR = words.flatMap((w) => [
+          { title: { contains: w, mode: 'insensitive' as const } },
+          { description: { contains: w, mode: 'insensitive' as const } },
+        ]);
+      }
     }
 
     const items = await this.prisma.listing.findMany({
@@ -130,10 +138,10 @@ export class AiService {
       include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
     });
 
+    // understanding meta-ya qoyulur ki, interceptor onu saxlasın
     return {
       data: items.map(toListingResponse),
-      understanding: u,
-      meta: { total: items.length },
+      meta: { total: items.length, understanding: u },
     };
   }
 
