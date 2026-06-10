@@ -25,6 +25,7 @@ export interface AppConfig {
   groq: {
     apiKey: string;
     model: string;
+    visionModel: string;
   };
 }
 
@@ -61,5 +62,6 @@ export default (): AppConfig => ({
   groq: {
     apiKey: process.env.GROQ_API_KEY ?? '',
     model: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
+    visionModel: process.env.GROQ_VISION_MODEL ?? 'meta-llama/llama-4-scout-17b-16e-instruct',
   },
 });

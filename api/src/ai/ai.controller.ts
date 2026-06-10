@@ -9,6 +9,10 @@ class AiSearchDto {
 class AiGenerateDto {
   @IsString() @Length(3, 1000) text!: string;
 }
+class AiImageSearchDto {
+  // base64 data URL (data:image/...;base64,...)
+  @IsString() @Length(20, 8_000_000) image!: string;
+}
 
 @Controller('ai')
 export class AiController {
@@ -19,6 +23,13 @@ export class AiController {
   @Post('search')
   search(@Body() dto: AiSearchDto) {
     return this.ai.aiSearch(dto.query);
+  }
+
+  // Public — şəkillə axtarış (vision → məhsul tanı → tap)
+  @Public()
+  @Post('image-search')
+  imageSearch(@Body() dto: AiImageSearchDto) {
+    return this.ai.imageSearch(dto.image);
   }
 
   // Public — sərbəst mətndən elan layihəsi (yalnız layihə qaytarır, DB-yə yazmır)

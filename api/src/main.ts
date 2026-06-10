@@ -25,6 +25,9 @@ async function bootstrap(): Promise<void> {
   const mediaDir = resolve(config.get('media', { infer: true }).dir);
   app.useStaticAssets(mediaDir, { prefix: '/uploads/' });
 
+  // Şəkillə axtarış (base64) üçün böyük JSON body
+  app.useBodyParser('json', { limit: '8mb' });
+
   // Təhlükəsizlik
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.enableCors({

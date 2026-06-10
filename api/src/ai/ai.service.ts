@@ -22,6 +22,17 @@ YALNIZ JSON obyekt qaytar (başqa mətn yox):
 }
 Region adlarını AZ-də tanı (qəbələ→qebele, gəncə→gence). Qiyməti manatla anla ("2000 manata qədər" → priceMax:2000). "təmirsiz/təmirdə olmamış/yeni kimi" → condition. Bilmədiyini null qoy.`;
 
+const VISION_SYSTEM = `Sən şəkildən məhsul tanıyan köməkçisən. Şəkildəki ƏSAS məhsulu müəyyən et və 360tap.az marketplace axtarışı üçün filter çıxar.
+YALNIZ JSON qaytar:
+{
+  "keywords": "məhsulun konkret adı/modeli (məs. iPhone, Mercedes, divan) — şəkildən görünən",
+  "vertical": "transport | realestate | universal | null",
+  "category": "kateqoriya slug və ya null (telefonlar, avtomobiller, menziller, mebel, ...)",
+  "brand": "brend və ya null",
+  "color": "rəng və ya null"
+}
+Yalnız əmin olduğunu yaz, qalanı null.`;
+
 export interface SearchUnderstanding {
   keywords?: string | null;
   region?: string | null;
@@ -39,6 +50,7 @@ export class AiService {
   private readonly logger = new Logger('AiService');
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly visionModel: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -47,10 +59,27 @@ export class AiService {
     const g = config.get('groq', { infer: true });
     this.apiKey = g.apiKey;
     this.model = g.model;
+    this.visionModel = g.visionModel;
   }
 
   get enabled(): boolean {
     return !!this.apiKey;
+  }
+
+  private extractJSON(content: string): Record<string, unknown> {
+    try {
+      return JSON.parse(content) as Record<string, unknown>;
+    } catch {
+      const m = content.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          return JSON.parse(m[0]) as Record<string, unknown>;
+        } catch {
+          /* ignore */
+        }
+      }
+      return {};
+    }
   }
 
   private async groqJSON(system: string, user: string): Promise<Record<string, unknown>> {
@@ -82,18 +111,47 @@ export class AiService {
       throw new BadRequestException(`AI xətası (${res.status})`);
     }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = data.choices?.[0]?.message?.content ?? '{}';
-    try {
-      return JSON.parse(content) as Record<string, unknown>;
-    } catch {
-      return {};
-    }
+    return this.extractJSON(data.choices?.[0]?.message?.content ?? '{}');
   }
 
-  // ---- AI axtarış: təbii dil → filter → nəticələr ----
-  async aiSearch(query: string) {
-    const u = (await this.groqJSON(SEARCH_SYSTEM, query)) as SearchUnderstanding;
+  private async groqVisionJSON(instruction: string, imageUrl: string): Promise<Record<string, unknown>> {
+    if (!this.enabled) {
+      throw new BadRequestException('AI konfiqurasiya olunmayıb (GROQ_API_KEY təyin edin)');
+    }
+    let res: Response;
+    try {
+      res = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.visionModel,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: instruction },
+                { type: 'image_url', image_url: { url: imageUrl } },
+              ],
+            },
+          ],
+          temperature: 0.2,
+          max_tokens: 500,
+        }),
+      });
+    } catch (e) {
+      this.logger.warn(`Groq vision fetch alınmadı: ${String(e)}`);
+      throw new BadRequestException('AI vision xidmətinə qoşulmaq alınmadı');
+    }
+    if (!res.ok) {
+      this.logger.warn(`Groq vision ${res.status}: ${await res.text().catch(() => '')}`);
+      throw new BadRequestException(`AI vision xətası (${res.status})`);
+    }
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return this.extractJSON(data.choices?.[0]?.message?.content ?? '{}');
+  }
 
+  // ---- Anlaşılmış filterlərə görə elan axtarışı (mətn və şəkil üçün ortaq) ----
+  private async runSearch(u: SearchUnderstanding) {
     const where: Prisma.ListingWhereInput = { status: 'active' };
 
     if (u.region) {
@@ -118,7 +176,6 @@ export class AiService {
       where.price = price;
     }
     if (u.keywords) {
-      // əhəmiyyətli sözlər title VƏ YA description-da (OR)
       const words = u.keywords
         .trim()
         .split(/\s+/)
@@ -138,11 +195,22 @@ export class AiService {
       include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
     });
 
-    // understanding meta-ya qoyulur ki, interceptor onu saxlasın
     return {
       data: items.map(toListingResponse),
       meta: { total: items.length, understanding: u },
     };
+  }
+
+  // ---- AI axtarış: təbii dil ----
+  async aiSearch(query: string) {
+    const u = (await this.groqJSON(SEARCH_SYSTEM, query)) as SearchUnderstanding;
+    return this.runSearch(u);
+  }
+
+  // ---- AI şəkillə axtarış: vision → understanding → axtarış ----
+  async imageSearch(imageUrl: string) {
+    const u = (await this.groqVisionJSON(VISION_SYSTEM, imageUrl)) as SearchUnderstanding;
+    return this.runSearch(u);
   }
 
   // ---- AI elan yaratma: sərbəst mətn → struktur elan layihəsi ----
