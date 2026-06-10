@@ -1,127 +1,169 @@
-import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-import { buildMetadata, jsonLdScript, jsonLdBreadcrumb, SITE } from '@/lib/seo';
-import ListingsClient from './ListingsClient';
+import Link from 'next/link';
+import ListingCard, { type Listing } from '@/components/ListingCard';
 
-const API = 'http://localhost:5400';
-
-// Daşınmaz əmlak slug-ları — avito-stil /emlak səhifəsinə yönləndir
-const RE_CATEGORIES = [
-  'menzil-satilir', 'menzil-kiraye', 'menzil',
-  'hayat-evi', 'ofis', 'qaraj', 'torpaq', 'obyekt',
-  'dasinmaz-emlak', 'daşinmaz-əmlak',
-];
+const API = process.env.API_ORIGIN
+  ? `${process.env.API_ORIGIN}/api/v1`
+  : 'http://localhost:5500/api/v1';
 
 interface SP {
-  q?: string; category?: string; city?: string;
-  min_price?: string; max_price?: string;
-  condition?: string; sort?: string;
+  region?: string;
+  category?: string;
+  vertical?: string;
+  priceMin?: string;
+  priceMax?: string;
+  sort?: string;
   page?: string;
 }
 
-export async function generateMetadata({ searchParams }: { searchParams: Promise<SP> }): Promise<Metadata> {
-  const sp = await searchParams;
-  const q = sp.q?.trim();
-  const cat = sp.category;
-  const city = sp.city;
+type NestListing = {
+  id: string; title: string; slug: string; price: number | null; currency: string;
+  priceType: string; isVip?: boolean; isPremium?: boolean; hasDelivery?: boolean;
+  views?: number; favoritesCount?: number; createdAt: string;
+  images?: { url: string; sortOrder: number }[];
+};
 
-  let total = 0;
-  try {
-    const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (cat) params.set('category', cat);
-    if (city) params.set('city', city);
-    const r = await fetch(`${API}/api/listings?${params}&limit=1`, { cache: 'no-store' });
-    if (r.ok) total = (await r.json()).total ?? 0;
-  } catch {}
+function mapListing(l: NestListing): Listing {
+  return {
+    id: l.id, title: l.title, slug: l.slug, price: l.price ?? null,
+    currency: l.currency ?? 'AZN', price_type: l.priceType ?? 'fixed',
+    is_vip: l.isVip, is_premium: l.isPremium, has_delivery: l.hasDelivery,
+    views: l.views, favorites_count: l.favoritesCount, created_at: l.createdAt,
+    media: (l.images ?? []).map((i) => ({ url: i.url, sort_order: i.sortOrder ?? 0 })),
+  };
+}
 
-  const parts: string[] = [];
-  if (q) parts.push(`"${q}"`);
-  if (cat) parts.push(cat.replace(/-/g, ' '));
-  if (city) parts.push(city);
+const REGIONS = [
+  { slug: '', name: 'Bütün AZ' }, { slug: 'baki', name: 'Bakı' },
+  { slug: 'sumqayit', name: 'Sumqayıt' }, { slug: 'gence', name: 'Gəncə' },
+  { slug: 'qebele', name: 'Qəbələ' }, { slug: 'quba', name: 'Quba' },
+  { slug: 'lenkeran', name: 'Lənkəran' }, { slug: 'seki', name: 'Şəki' },
+];
+const SORTS = [
+  { v: 'new', name: 'Ən yeni' },
+  { v: 'price_asc', name: 'Ucuz əvvəl' },
+  { v: 'price_desc', name: 'Baha əvvəl' },
+];
 
-  const titleSuffix = parts.length ? `${parts.join(' · ')} — ${total} elan` : `Bütün elanlar`;
-  const title = q
-    ? `"${q}" üzrə ${total} nəticə${city ? ` (${city})` : ''}`
-    : `${cat ? cat.replace(/-/g, ' ') + ' elanları' : 'Bütün elanlar'}${city ? ` — ${city}` : ''}`;
-
-  const description = q
-    ? `360tap.az üzrə "${q}" axtarışına ${total} elan tapıldı. Pulsuz baxış, satıcı ilə birbaşa əlaqə.`
-    : `Azərbaycanda ${total > 0 ? total + ' aktiv ' : ''}elan. Avtomobil, mənzil, telefon, iş, xidmət və minlərlə kateqoriya.`;
-
-  // canonical: filter parametrləri olmadan
-  const canonicalPath = q || cat || city
-    ? `/elanlar?${new URLSearchParams({ ...(q && { q }), ...(cat && { category: cat }), ...(city && { city }) }).toString()}`
-    : '/elanlar';
-
-  return buildMetadata({
-    title,
-    description,
-    path: canonicalPath,
-    keywords: [
-      ...(q ? [q, `${q} satılır`, `${q} bakı`] : []),
-      ...(cat ? [cat] : []),
-      ...(city ? [city] : []),
-      'axtarış', 'elan', '360tap',
-    ],
+function qs(sp: SP, patch: Partial<SP>): string {
+  const merged = { ...sp, ...patch, page: undefined };
+  const p = new URLSearchParams();
+  Object.entries(merged).forEach(([k, v]) => {
+    if (v) p.set(k, String(v));
   });
+  const s = p.toString();
+  return s ? `/elanlar?${s}` : '/elanlar';
 }
 
 export default async function ListingsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
+  const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
 
-  // next.config.ts redirect-i əsas mexanizmdir; bu ehtiyat olaraq
-  if (sp.category && RE_CATEGORIES.includes(sp.category)) {
-    const params = new URLSearchParams();
-    Object.entries(sp).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
-    redirect(`/emlak?${params.toString()}`);
+  const params = new URLSearchParams();
+  if (sp.region) params.set('region', sp.region);
+  if (sp.category) params.set('category', sp.category);
+  if (sp.vertical) params.set('vertical', sp.vertical);
+  if (sp.priceMin) params.set('priceMin', sp.priceMin);
+  if (sp.priceMax) params.set('priceMax', sp.priceMax);
+  if (sp.sort) params.set('sort', sp.sort);
+  params.set('page', String(page));
+  params.set('limit', '24');
+
+  let items: Listing[] = [];
+  let total = 0;
+  let hasMore = false;
+  try {
+    const r = await fetch(`${API}/listings?${params}`, { next: { revalidate: 15 } });
+    if (r.ok) {
+      const d = (await r.json()) as { data?: NestListing[]; meta?: { total: number; hasMore: boolean } };
+      items = (d.data ?? []).map(mapListing);
+      total = d.meta?.total ?? items.length;
+      hasMore = d.meta?.hasMore ?? false;
+    }
+  } catch {
+    /* backend cold start / xəta → boş */
   }
 
-  const q = sp.q?.trim();
-
-  // SearchResultsPage JSON-LD
-  const jsonLd: any = {
-    '@context': 'https://schema.org',
-    '@type': 'SearchResultsPage',
-    url: `${SITE.url}/elanlar${q ? `?q=${encodeURIComponent(q)}` : ''}`,
-    name: q ? `"${q}" üzrə nəticələr` : 'Bütün elanlar',
-    inLanguage: 'az-AZ',
-    isPartOf: { '@type': 'WebSite', url: SITE.url, name: SITE.name },
-    ...(q ? {
-      mainEntity: {
-        '@type': 'ItemList',
-        numberOfItems: 0,
-        itemListOrder: 'https://schema.org/ItemListOrderDescending',
-      },
-    } : {}),
-  };
-
-  const breadcrumb = jsonLdBreadcrumb([
-    { name: 'Ana', url: '/' },
-    { name: 'Elanlar', url: '/elanlar' },
-    ...(q ? [{ name: `"${q}"` }] : []),
-  ]);
-
-  // Server-side initial data fetch — Safari və SEO üçün
-  let initialItems: any[] = [];
-  let initialTotal = 0;
-  try {
-    const params = new URLSearchParams();
-    Object.entries(sp).forEach(([k, v]) => { if (v) params.set(k, String(v)); });
-    params.set('limit', '24');
-    const r = await fetch(`${API}/api/listings?${params}`, { cache: 'no-store' });
-    if (r.ok) {
-      const d = await r.json();
-      initialItems = d.items || [];
-      initialTotal = d.total ?? initialItems.length;
-    }
-  } catch {}
-
   return (
-    <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdScript(jsonLd)} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdScript(breadcrumb)} />
-      <ListingsClient initialItems={initialItems} initialTotal={initialTotal} />
-    </>
+    <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white mb-1">
+          {sp.category ? sp.category.replace(/-/g, ' ') : 'Bütün elanlar'}
+          {sp.region ? ` — ${REGIONS.find((r) => r.slug === sp.region)?.name ?? sp.region}` : ''}
+        </h1>
+        <p className="text-ink-500 text-sm mb-4">{total} elan tapıldı</p>
+
+        {/* Region filter chip-ləri */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {REGIONS.map((r) => (
+            <Link
+              key={r.slug || 'all'}
+              href={qs(sp, { region: r.slug || undefined })}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                (sp.region ?? '') === r.slug
+                  ? 'bg-tap text-white'
+                  : 'bg-white dark:bg-ink-800 text-ink-700 dark:text-ink-200 hover:bg-ink-100'
+              }`}
+            >
+              {r.name}
+            </Link>
+          ))}
+        </div>
+
+        {/* Sort */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {SORTS.map((s) => (
+            <Link
+              key={s.v}
+              href={qs(sp, { sort: s.v })}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                (sp.sort ?? 'new') === s.v
+                  ? 'bg-ink-900 dark:bg-white text-white dark:text-ink-900'
+                  : 'bg-white dark:bg-ink-800 text-ink-600 dark:text-ink-300 hover:bg-ink-100'
+              }`}
+            >
+              {s.name}
+            </Link>
+          ))}
+        </div>
+
+        {items.length === 0 ? (
+          <div className="card p-12 text-center">
+            <p className="text-ink-500 text-lg">Bu filtrlə elan tapılmadı</p>
+            <Link href="/elanlar" className="btn-secondary inline-flex mt-4">
+              Bütün elanlara bax
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+              {items.map((l) => (
+                <ListingCard key={l.id} item={l} />
+              ))}
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-center gap-3 mt-8">
+              {page > 1 && (
+                <Link
+                  href={`/elanlar?${new URLSearchParams({ ...sp, page: String(page - 1) } as Record<string, string>)}`}
+                  className="btn-secondary"
+                >
+                  ← Əvvəlki
+                </Link>
+              )}
+              <span className="text-ink-500 text-sm">Səhifə {page}</span>
+              {hasMore && (
+                <Link
+                  href={`/elanlar?${new URLSearchParams({ ...sp, page: String(page + 1) } as Record<string, string>)}`}
+                  className="btn-secondary"
+                >
+                  Növbəti →
+                </Link>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
