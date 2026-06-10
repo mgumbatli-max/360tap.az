@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module';
 import { MediaModule } from './media/media.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { GeoModule } from './modules/geo/geo.module';
+import { StoresModule } from './modules/stores/stores.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { ListingsModule } from './modules/listings/listings.module';
 
@@ -38,6 +39,7 @@ import { ListingsModule } from './modules/listings/listings.module';
     MediaModule,
     AuthModule,
     GeoModule,
+    StoresModule,
     CategoriesModule,
     ListingsModule,
   ],
