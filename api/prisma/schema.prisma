@@ -56,6 +56,7 @@ model User {
   responseMinutes Int?       @map("response_minutes")
   districtId      String?    @map("district_id") @db.Uuid
   district        District?  @relation(fields: [districtId], references: [id])
+  lastLoginAt     DateTime?  @map("last_login_at")
   createdAt       DateTime   @default(now()) @map("created_at")
   updatedAt       DateTime   @updatedAt @map("updated_at")
 
