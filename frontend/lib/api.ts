@@ -16,7 +16,11 @@ export async function api<T = any>(path: string, opts: ApiOptions = {}): Promise
     cache: 'no-store',
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Server xətası');
+  if (!res.ok) {
+    // NestJS xətası: { statusCode, error, message } — message daha faydalıdır
+    const msg = Array.isArray(data.message) ? data.message.join(', ') : data.message;
+    throw new Error(msg || data.error || 'Server xətası');
+  }
   return data as T;
 }
 
