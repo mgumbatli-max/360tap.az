@@ -12,8 +12,11 @@ export function makeSlug(text: string): string {
     .slice(0, 120);
 }
 
+import { randomBytes } from 'node:crypto';
+
 export function uniqueSlug(text: string): string {
   const base = makeSlug(text) || 'elan';
-  const suffix = Date.now().toString(36).slice(-6);
+  // Vaxt + təsadüfi → eyni millisaniyədə də toqquşma olmasın
+  const suffix = Date.now().toString(36).slice(-4) + randomBytes(2).toString('hex');
   return `${base}-${suffix}`;
 }

@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   toListingResponse,
@@ -44,25 +44,33 @@ export class StoresService {
 
     const slug = await this.uniqueSlug(dto.name);
 
-    const [store] = await this.prisma.$transaction([
-      this.prisma.store.create({
-        data: {
-          ownerId,
-          slug,
-          name: dto.name,
-          description: dto.description ?? null,
-          phone: dto.phone ?? null,
-          whatsapp: dto.whatsapp ?? null,
-          instagram: dto.instagram ?? null,
-        },
-        select: STORE_PUBLIC_SELECT,
-      }),
-      this.prisma.user.update({
-        where: { id: ownerId },
-        data: { sellerType: 'store', role: 'business' },
-      }),
-    ]);
-    return store;
+    try {
+      const [store] = await this.prisma.$transaction([
+        this.prisma.store.create({
+          data: {
+            ownerId,
+            slug,
+            name: dto.name,
+            description: dto.description ?? null,
+            phone: dto.phone ?? null,
+            whatsapp: dto.whatsapp ?? null,
+            instagram: dto.instagram ?? null,
+          },
+          select: STORE_PUBLIC_SELECT,
+        }),
+        this.prisma.user.update({
+          where: { id: ownerId },
+          data: { sellerType: 'store', role: 'business' },
+        }),
+      ]);
+      return store;
+    } catch (e) {
+      // Paralel yaratma yarışı: DB unique constraint → təmiz 409
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Bu istifadəçinin artıq mağazası var');
+      }
+      throw e;
+    }
   }
 
   /** Public mağaza profili + aktiv elan sayı. */

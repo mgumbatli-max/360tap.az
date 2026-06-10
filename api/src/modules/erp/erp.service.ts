@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { ErpSyncStatus, ListingStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { ErpSyncStatus, ListingStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { uniqueSlug } from '../listings/utils/slug.util';
@@ -7,6 +8,7 @@ import type { ErpPublishDto } from './dto/erp-publish.dto';
 import type { ErpIntegrationCtx } from './erp-auth.guard';
 
 const ERP_TTL_DAYS = 365;
+const SITE = 'https://360tap.az';
 
 @Injectable()
 export class ErpService {
@@ -84,24 +86,27 @@ export class ErpService {
       throw new BadRequestException(`Kateqoriya tapılmadı: ${dto.category}`);
     }
 
-    const districtId = await this.resolveDistrict(dto.district, dto.region);
+    const districtId = await this.resolveDistrict(
+      dto.district ?? dto.store?.district,
+      dto.region ?? dto.store?.region,
+    );
+
     const hash = createHash('sha256').update(JSON.stringify(dto)).digest('hex');
-
-    const link = await this.prisma.erpProductLink.findUnique({
-      where: {
-        integrationId_externalId: { integrationId: integration.id, externalId: dto.external_id },
-      },
-      select: { listingId: true, lastHash: true },
-    });
-
-    // Idempotent: eyni payload + mövcud elan → no-op
-    if (link?.listingId && link.lastHash === hash) {
-      await this.log(integration.id, dto.external_id, 'publish', 'ok', 'idempotent no-op');
-      return { listingId: link.listingId, externalId: dto.external_id, status: 'unchanged' as const };
-    }
-
     const inStock = (dto.stock_qty ?? 1) > 0;
-    const status: ListingStatus = inStock ? 'active' : 'out_of_stock';
+
+    // Status: active=false → arxiv; təsdiqlənməmiş mağaza → moderasiya (review); stok 0 → out_of_stock
+    const status: ListingStatus =
+      dto.active === false
+        ? 'archived'
+        : !integration.store.isVerified
+          ? 'review'
+          : !inStock
+            ? 'out_of_stock'
+            : 'active';
+
+    const attributes: Record<string, unknown> = { ...(dto.attributes ?? {}) };
+    if (dto.brand && attributes.brand === undefined) attributes.brand = dto.brand;
+    if (dto.model && attributes.model === undefined) attributes.model = dto.model;
 
     const common = {
       categoryId: category.id,
@@ -119,75 +124,143 @@ export class ErpService {
       hasWarranty: (dto.warranty_months ?? 0) > 0,
       contactWhatsapp: !!dto.whatsapp,
       contactPhone: dto.whatsapp ?? null,
-      attributes: (dto.attributes ?? {}) as Prisma.InputJsonValue,
+      attributes: attributes as Prisma.InputJsonValue,
       status,
       publishedAt: new Date(),
       expiresAt: new Date(Date.now() + ERP_TTL_DAYS * 86_400_000),
     };
 
-    const listingId = await this.prisma.$transaction(async (tx) => {
-      let id: string;
-      if (link?.listingId) {
-        await tx.listing.update({ where: { id: link.listingId }, data: common });
-        id = link.listingId;
-      } else {
-        const created = await tx.listing.create({
-          data: {
-            ...common,
-            ownerId: integration.store.ownerId,
-            storeId: integration.store.id,
-            source: 'erp',
-            slug: uniqueSlug(dto.title),
+    // Serializable: eyni external_id üçün paralel publish-lər seriallaşır (orphan listing olmur)
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const link = await tx.erpProductLink.findUnique({
+          where: {
+            integrationId_externalId: { integrationId: integration.id, externalId: dto.external_id },
           },
-          select: { id: true },
+          select: { listingId: true, lastHash: true },
         });
-        id = created.id;
-      }
 
-      if (dto.images) {
-        await tx.listingImage.deleteMany({ where: { listingId: id } });
-        if (dto.images.length) {
-          await tx.listingImage.createMany({
-            data: dto.images.map((url, i) => ({ listingId: id, url, sortOrder: i })),
+        // Idempotent no-op (yalnız dəyişiklik yoxdursa — lastHash side-channel mutasiyalarda təmizlənir)
+        if (link?.listingId && link.lastHash === hash) {
+          const ex = await tx.listing.findUnique({
+            where: { id: link.listingId },
+            select: { slug: true, district: { select: { region: { select: { slug: true } } } } },
           });
+          return {
+            listingId: link.listingId,
+            slug: ex?.slug ?? '',
+            regionSlug: ex?.district?.region?.slug ?? null,
+            status: 'unchanged' as const,
+            action: 'noop' as const,
+          };
         }
-      }
 
-      await tx.erpProductLink.upsert({
-        where: {
-          integrationId_externalId: { integrationId: integration.id, externalId: dto.external_id },
-        },
-        update: { listingId: id, lastHash: hash, syncStatus: 'ok' },
-        create: {
-          integrationId: integration.id,
-          externalId: dto.external_id,
+        let id: string;
+        let slug: string;
+        if (link?.listingId) {
+          const updated = await tx.listing.update({
+            where: { id: link.listingId },
+            data: common,
+            select: { id: true, slug: true },
+          });
+          id = updated.id;
+          slug = updated.slug;
+        } else {
+          slug = uniqueSlug(dto.title);
+          const created = await tx.listing.create({
+            data: {
+              ...common,
+              ownerId: integration.store.ownerId,
+              storeId: integration.store.id,
+              source: 'erp',
+              slug,
+            },
+            select: { id: true, slug: true },
+          });
+          id = created.id;
+        }
+
+        if (dto.images) {
+          await tx.listingImage.deleteMany({ where: { listingId: id } });
+          if (dto.images.length) {
+            await tx.listingImage.createMany({
+              data: dto.images.map((url, i) => ({ listingId: id, url, sortOrder: i })),
+            });
+          }
+        }
+
+        await tx.erpProductLink.upsert({
+          where: {
+            integrationId_externalId: { integrationId: integration.id, externalId: dto.external_id },
+          },
+          update: { listingId: id, lastHash: hash, syncStatus: 'ok' },
+          create: {
+            integrationId: integration.id,
+            externalId: dto.external_id,
+            listingId: id,
+            lastHash: hash,
+            syncStatus: 'ok',
+          },
+        });
+
+        const region = districtId
+          ? await tx.district.findUnique({
+              where: { id: districtId },
+              select: { region: { select: { slug: true } } },
+            })
+          : null;
+
+        return {
           listingId: id,
-          lastHash: hash,
-          syncStatus: 'ok',
-        },
-      });
-      return id;
-    });
+          slug,
+          regionSlug: region?.region?.slug ?? null,
+          status: status as ListingStatus | 'unchanged',
+          action: (link?.listingId ? 'update' : 'publish') as 'update' | 'publish' | 'noop',
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
-    await this.touch(integration.id, dto.external_id, link ? 'update' : 'publish');
-    return { listingId, externalId: dto.external_id, status };
+    await this.prisma.erpIntegration.update({
+      where: { id: integration.id },
+      data: { lastSyncAt: new Date() },
+    });
+    await this.log(
+      integration.id,
+      dto.external_id,
+      result.action,
+      'ok',
+      result.action === 'noop' ? 'idempotent no-op' : undefined,
+    );
+
+    const url = result.regionSlug
+      ? `${SITE}/${result.regionSlug}/${result.slug}`
+      : `${SITE}/elanlar/${result.listingId}`;
+
+    return {
+      listing_id: result.listingId,
+      external_id: dto.external_id,
+      url,
+      status: result.status,
+    };
   }
 
   async updateStock(integration: ErpIntegrationCtx, externalId: string, stockQty: number) {
     const listingId = await this.requireListing(integration.id, externalId);
     const inStock = stockQty > 0;
-    await this.prisma.listing.update({
-      where: { id: listingId },
-      data: { stockQty, inStock, status: inStock ? 'active' : 'out_of_stock' },
-    });
+    await this.prisma.$transaction([
+      this.prisma.listing.update({
+        where: { id: listingId },
+        data: { stockQty, inStock, status: inStock ? 'active' : 'out_of_stock' },
+      }),
+      // lastHash təmizlə → növbəti eyni publish reconcile edə bilsin (no-op tələsi olmasın)
+      this.prisma.erpProductLink.update({
+        where: { integrationId_externalId: { integrationId: integration.id, externalId } },
+        data: { lastHash: null },
+      }),
+    ]);
     await this.touch(integration.id, externalId, 'update_stock');
-    return {
-      listingId,
-      externalId,
-      stockQty,
-      inStock,
-      status: inStock ? 'active' : 'out_of_stock',
-    };
+    return { listing_id: listingId, external_id: externalId, stock_qty: stockQty, in_stock: inStock, status: inStock ? 'active' : 'out_of_stock' };
   }
 
   async updatePrice(
@@ -197,19 +270,32 @@ export class ErpService {
     oldPrice?: number,
   ) {
     const listingId = await this.requireListing(integration.id, externalId);
-    await this.prisma.listing.update({
-      where: { id: listingId },
-      data: { price, oldPrice: oldPrice ?? null },
-    });
+    await this.prisma.$transaction([
+      this.prisma.listing.update({
+        where: { id: listingId },
+        // oldPrice yalnız açıq verildikdə dəyişdirilir (omit → mövcud qalır)
+        data: { price, ...(oldPrice !== undefined ? { oldPrice } : {}) },
+      }),
+      this.prisma.erpProductLink.update({
+        where: { integrationId_externalId: { integrationId: integration.id, externalId } },
+        data: { lastHash: null },
+      }),
+    ]);
     await this.touch(integration.id, externalId, 'update_price');
-    return { listingId, externalId, price };
+    return { listing_id: listingId, external_id: externalId, price };
   }
 
   async remove(integration: ErpIntegrationCtx, externalId: string) {
     const listingId = await this.requireListing(integration.id, externalId);
-    await this.prisma.listing.update({ where: { id: listingId }, data: { status: 'archived' } });
+    await this.prisma.$transaction([
+      this.prisma.listing.update({ where: { id: listingId }, data: { status: 'archived' } }),
+      this.prisma.erpProductLink.update({
+        where: { integrationId_externalId: { integrationId: integration.id, externalId } },
+        data: { lastHash: null },
+      }),
+    ]);
     await this.touch(integration.id, externalId, 'delete');
-    return { listingId, externalId, status: 'archived' as const };
+    return { listing_id: listingId, external_id: externalId, status: 'archived' as const };
   }
 
   // ============ helpers ============
