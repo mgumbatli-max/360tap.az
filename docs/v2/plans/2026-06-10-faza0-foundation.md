@@ -32,6 +32,22 @@ Faza 0 icra olundu (inline, brew-native — Docker əvəzinə Homebrew servislə
 
 **Deviation:** docker-compose əvəzinə brew-native (istifadəçi seçimi); media S3 əvəzinə yerli fayl (Faza 0); DB adı `tap360` əvəzinə mövcud `marketplace_dev`.
 
+### Adversarial review (çoxlu agent) — 2026-06-10
+
+Faza 0 backend 4 dimensiyada müstəqil agentlərlə yoxlanıldı (korrektlik/schema/security/region-first) + hər tapıntı adversarial verifikasiya. 13 təsdiqlənmiş tapıntıdan **11-i düzəldildi**, 2-si Faza 1-ə təxirə salındı.
+
+Düzəldilən əsas tapıntılar:
+- **SECURITY**: media upload tip/ölçü limiti + təhlükəsiz webp re-encode (SVG/DoS rədd)
+- **SECURITY**: public `GET /listings/:id` yalnız active — qeyri-aktiv elan sızması bağlandı
+- **AUTH**: refresh-də banned/suspended yoxlaması + atomik rotation (transaction) + reuse detection
+- **VALIDATION**: dynamic attribute date/location/default + options massiv formatı
+- **GEO**: resolve ParseFloatPipe + AZ koordinat aralığı (boş/(0,0) rədd)
+- **LISTINGS**: findAll qeyri-aktiv/səhv region → 404
+- **HARDENING**: JWT secret boş fallback yox; uploads MEDIA_DIR-dən; haversine DRY
+- eslint + flat config quruldu (pozuq lint script düzəldildi)
+
+Yekun: build ✅, **8/8 test**, eslint exit 0, integration smoke (404/400/reuse) yaşıl.
+
 ---
 
 ## Əhatə və qeydlər
