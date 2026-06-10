@@ -2,6 +2,7 @@ import { Controller, Get, Post, Query } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { Public } from '../common/decorators/public.decorator';
+import { Roles } from '../common/guards/roles.guard';
 import { SearchService } from './search.service';
 
 class SearchQuery {
@@ -22,7 +23,8 @@ export class SearchController {
     return this.search.search(q);
   }
 
-  // Authed (dev) — indeksi aktiv elanlarla yenidən qur. TODO: admin role ilə qoru.
+  // Yalnız admin — ağır əməliyyat (bütün aktiv elanları yenidən indeksləyir)
+  @Roles('admin', 'super_admin')
   @Post('reindex')
   async reindex() {
     const reindexed = await this.search.reindexActive();

@@ -7,24 +7,41 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const INDEX = 'listings';
 
-// Transliterasiya (latın → AZ) — axtarış sorğusunu normallaşdırmaq üçün
+// Transliterasiya (latın/səhv yazılış → AZ) — yalnız real fərqli formalar (self-map yox)
 const TRANSLIT: Record<string, string> = {
-  masin: 'maşın', maşin: 'maşın', avtomobil: 'avtomobil',
-  ev: 'ev', menzil: 'mənzil', kiraye: 'kirayə', noutbuk: 'noutbuk',
+  masin: 'maşın', maşin: 'maşın', mashin: 'maşın',
+  menzil: 'mənzil', kiraye: 'kirayə', telfon: 'telefon',
 };
 
-// Region tanıma (slug + ad + transliterasiya → region slug)
+// Region tanıma: AZ slug/ad + RU + EN → region slug
 const REGION_TOKENS: Record<string, string> = {
-  baki: 'baki', bakı: 'baki', baku: 'baki',
-  sumqayit: 'sumqayit', sumqayıt: 'sumqayit',
-  gence: 'gence', gəncə: 'gence', gянджа: 'gence',
-  qebele: 'qebele', qəbələ: 'qebele', gabala: 'qebele',
-  quba: 'quba', xacmaz: 'xacmaz', xaçmaz: 'xacmaz',
-  lenkeran: 'lenkeran', lənkəran: 'lenkeran',
-  seki: 'seki', şəki: 'seki', mingecevir: 'mingecevir', mingəçevir: 'mingecevir',
-  shamaxi: 'shamaxi', şamaxı: 'shamaxi', masalli: 'masalli', masallı: 'masalli',
-  oguz: 'oguz', oğuz: 'oguz', ismayilli: 'ismayilli', i̇smayıllı: 'ismayilli',
-  goycay: 'goycay', göyçay: 'goycay', qax: 'qax',
+  // baki
+  baki: 'baki', bakı: 'baki', baku: 'baki', баку: 'baki',
+  // sumqayit
+  sumqayit: 'sumqayit', sumqayıt: 'sumqayit', sumgait: 'sumqayit', сумгаит: 'sumqayit',
+  // gence
+  gence: 'gence', gəncə: 'gence', ganja: 'gence', гянджа: 'gence',
+  // qebele
+  qebele: 'qebele', qəbələ: 'qebele', gabala: 'qebele', габала: 'qebele',
+  // quba
+  quba: 'quba', guba: 'quba', губа: 'quba',
+  // xacmaz
+  xacmaz: 'xacmaz', xaçmaz: 'xacmaz', khachmaz: 'xacmaz', хачмаз: 'xacmaz',
+  // lenkeran
+  lenkeran: 'lenkeran', lənkəran: 'lenkeran', lenkoran: 'lenkeran', ленкорань: 'lenkeran',
+  // seki
+  seki: 'seki', şəki: 'seki', sheki: 'seki', шеки: 'seki',
+  // mingecevir
+  mingecevir: 'mingecevir', mingəçevir: 'mingecevir', мингечевир: 'mingecevir',
+  // shamaxi
+  shamaxi: 'shamaxi', şamaxı: 'shamaxi', shemakha: 'shamaxi', шемаха: 'shamaxi',
+  // masalli
+  masalli: 'masalli', masallı: 'masalli', масаллы: 'masalli',
+  // oguz / ismayilli / goycay / qax
+  oguz: 'oguz', oğuz: 'oguz', огуз: 'oguz',
+  ismayilli: 'ismayilli', i̇smayıllı: 'ismayilli', исмаиллы: 'ismayilli',
+  goycay: 'goycay', göyçay: 'goycay', гёйчай: 'goycay',
+  qax: 'qax', гах: 'qax',
 };
 
 export interface SearchParams {
@@ -82,7 +99,8 @@ export class SearchService implements OnModuleInit {
         await this.removeListing(id);
         return;
       }
-      await this.index.addDocuments([this.toDoc(l)]);
+      const task = await this.index.addDocuments([this.toDoc(l)]);
+      await this.client.waitForTask(task.taskUid); // read-your-writes (publish→search dərhal görünsün)
     } catch (e) {
       this.logger.warn(`indexListing(${id}) alınmadı: ${String(e)}`);
     }
@@ -90,7 +108,8 @@ export class SearchService implements OnModuleInit {
 
   async removeListing(id: string): Promise<void> {
     try {
-      await this.index.deleteDocument(id);
+      const task = await this.index.deleteDocument(id);
+      await this.client.waitForTask(task.taskUid);
     } catch (e) {
       this.logger.warn(`removeListing(${id}) alınmadı: ${String(e)}`);
     }
@@ -106,7 +125,10 @@ export class SearchService implements OnModuleInit {
       const l = await this.fetchForIndex(id);
       if (l) docs.push(this.toDoc(l));
     }
-    if (docs.length) await this.index.addDocuments(docs);
+    if (docs.length) {
+      const task = await this.index.addDocuments(docs);
+      await this.client.waitForTask(task.taskUid, { timeOutMs: 30_000 });
+    }
     return docs.length;
   }
 
@@ -130,12 +152,21 @@ export class SearchService implements OnModuleInit {
       offset: (page - 1) * limit,
     });
 
+    const total = res.estimatedTotalHits ?? res.hits.length;
+
+    // Tapılmayan axtarışları logla (doc 07 §3 — sinonim/kontent boşluğu aşkarı)
+    if (total === 0 && cleaned.trim()) {
+      await this.prisma.searchLog
+        .create({ data: { query: (params.q ?? '').slice(0, 200), resultsCount: 0 } })
+        .catch(() => undefined);
+    }
+
     return {
       data: res.hits,
       meta: {
         page,
         limit,
-        total: res.estimatedTotalHits ?? res.hits.length,
+        total,
         detectedRegion: regionSlug ?? null,
         query: cleaned,
       },
