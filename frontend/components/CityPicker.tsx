@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { MapPin, Check, X, Search } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getCity, setCity, type SelectedCity } from '@/lib/city';
 
 export default function CityPicker({ compact = false }: { compact?: boolean }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [cities, setCities] = useState<{ slug: string; name_az: string; region?: string }[]>([]);
   const [search, setSearch] = useState('');
@@ -12,7 +14,18 @@ export default function CityPicker({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     setSelected(getCity());
-    api('/cities').then((d: any) => setCities(d.cities || []));
+    // NestJS: /geo/regions → { data:[{slug, nameAz}] }; köhnə: { cities:[{slug, name_az}] }
+    api('/geo/regions')
+      .then((d: any) => {
+        const raw = d.data || d.regions || d.cities || [];
+        setCities(
+          raw.map((x: any) => ({
+            slug: x.slug,
+            name_az: x.nameAz ?? x.name_az ?? x.name ?? x.slug,
+          })),
+        );
+      })
+      .catch(() => setCities([]));
   }, []);
 
   useEffect(() => {
@@ -26,6 +39,8 @@ export default function CityPicker({ compact = false }: { compact?: boolean }) {
     setSelected(city ? { slug: city.slug, name: city.name_az } : null);
     setOpen(false);
     setSearch('');
+    // Seçilən regionun elanlarına keç
+    router.push(city ? `/elanlar?region=${city.slug}` : '/elanlar');
   };
 
   const filtered = cities.filter((c) =>
