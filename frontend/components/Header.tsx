@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
-import { Heart, Search, Menu, ChevronDown, User2, Plus, LogOut, Camera } from 'lucide-react';
+import { Heart, Search, Menu, ChevronDown, User2, Plus, LogOut, Camera, X } from 'lucide-react';
 import Logo from './Logo';
 import MegaMenu from './MegaMenu';
 import AuthModal from './AuthModal';
@@ -19,6 +19,7 @@ export default function Header() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [userMenu, setUserMenu] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
 
   useEffect(() => {
@@ -131,11 +132,20 @@ export default function Header() {
             <Link
               href={user ? '/profil/sevimliler' : '#'}
               onClick={(e) => { if (!user) { e.preventDefault(); openLogin(); } }}
-              className="p-2 hover:bg-ink-50 dark:hover:bg-ink-800 rounded-lg"
+              className="p-2 hover:bg-ink-50 dark:hover:bg-ink-800 rounded-lg hidden sm:inline-flex"
               aria-label="Sevimlilər"
             >
               <Heart className="w-5 h-5 text-ink-700 dark:text-ink-200" />
             </Link>
+            {/* Mobil hamburger */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              className="p-2 hover:bg-ink-50 dark:hover:bg-ink-800 rounded-lg sm:hidden"
+              aria-label="Menyu"
+            >
+              <Menu className="w-5 h-5 text-ink-700 dark:text-ink-200" />
+            </button>
             <Link
               href={user ? '/elan-yerlesdir' : '#'}
               onClick={(e) => { if (!user) { e.preventDefault(); openLogin(); } }}
@@ -149,6 +159,62 @@ export default function Header() {
 
         <MegaMenu open={megaOpen} onClose={() => setMegaOpen(false)} categories={categories} />
       </header>
+
+      {/* Mobil drawer menyu */}
+      {mobileOpen && (
+        <div className="sm:hidden fixed inset-0 z-[60] bg-black/40" onClick={() => setMobileOpen(false)}>
+          <div
+            className="absolute right-0 top-0 bottom-0 w-72 max-w-[80vw] bg-white dark:bg-ink-900 p-5 overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <span className="font-extrabold text-ink-900 dark:text-white">Menyu</span>
+              <button onClick={() => setMobileOpen(false)} aria-label="Bağla">
+                <X className="w-5 h-5 text-ink-700 dark:text-ink-200" />
+              </button>
+            </div>
+
+            {user ? (
+              <div className="space-y-1 mb-4 text-ink-800 dark:text-ink-200">
+                <Link href="/profil" onClick={() => setMobileOpen(false)} className="block py-2">Profil</Link>
+                <Link href="/profil/elanlarim" onClick={() => setMobileOpen(false)} className="block py-2">Elanlarım</Link>
+                <Link href="/profil/sevimliler" onClick={() => setMobileOpen(false)} className="block py-2">Sevimlilər</Link>
+                <button onClick={logout} className="block py-2 text-red-600 w-full text-left">Çıxış</button>
+              </div>
+            ) : (
+              <div className="space-y-2 mb-4">
+                <button onClick={() => { setMobileOpen(false); openLogin(); }} className="btn-tap w-full justify-center">Daxil ol</button>
+                <button onClick={() => { setMobileOpen(false); openRegister(); }} className="btn-secondary w-full justify-center">Qeydiyyat</button>
+              </div>
+            )}
+
+            <div className="border-t border-ink-200 dark:border-ink-700 pt-4 space-y-1 text-ink-800 dark:text-ink-200">
+              <Link href="/elanlar" onClick={() => setMobileOpen(false)} className="block py-2 font-medium">Bütün elanlar</Link>
+              <Link href="/ai-elan" onClick={() => setMobileOpen(false)} className="block py-2 text-tap font-semibold">✨ AI ilə elan yarat</Link>
+              <Link href="/sekille-axtar" onClick={() => setMobileOpen(false)} className="block py-2">📷 Şəkillə axtar</Link>
+              <Link href="/biznes" onClick={() => setMobileOpen(false)} className="block py-2">Biznes üçün</Link>
+              <Link href="/karyera" onClick={() => setMobileOpen(false)} className="block py-2">Karyera</Link>
+              <Link href="/komek" onClick={() => setMobileOpen(false)} className="block py-2">Yardım</Link>
+            </div>
+
+            {categories.length > 0 && (
+              <div className="border-t border-ink-200 dark:border-ink-700 pt-4 mt-4">
+                <div className="text-xs font-bold text-ink-400 mb-2">KATEQORİYALAR</div>
+                {categories.slice(0, 13).map((c: any) => (
+                  <Link
+                    key={c.id}
+                    href={`/elanlar?category=${c.slug}`}
+                    onClick={() => setMobileOpen(false)}
+                    className="block py-1.5 text-sm text-ink-700 dark:text-ink-300"
+                  >
+                    {c.nameAz ?? c.name_az}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialMode={authMode} />
     </>

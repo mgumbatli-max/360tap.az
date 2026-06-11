@@ -1,10 +1,53 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import Gallery from '@/components/Gallery';
+import ListingCard, { type Listing } from '@/components/ListingCard';
 
 const API = process.env.API_ORIGIN
   ? `${process.env.API_ORIGIN}/api/v1`
   : 'http://localhost:5500/api/v1';
+
+function mapSimilar(l: any): Listing {
+  return {
+    id: l.id, title: l.title, slug: l.slug, price: l.price ?? null,
+    currency: l.currency ?? 'AZN', price_type: l.priceType ?? 'fixed',
+    is_vip: l.isVip, is_premium: l.isPremium, has_delivery: l.hasDelivery,
+    created_at: l.createdAt, city_name: l.regionName ?? undefined, district: l.districtName ?? undefined,
+    media: (l.images ?? []).map((i: any) => ({ url: i.url, sort_order: i.sortOrder ?? 0 })),
+  };
+}
+
+async function getSimilar(id: string): Promise<Listing[]> {
+  try {
+    const r = await fetch(`${API}/listings/${id}/similar`, { next: { revalidate: 60 } });
+    if (!r.ok) return [];
+    const d = (await r.json()) as { data?: any[] };
+    return (d.data ?? []).map(mapSimilar);
+  } catch {
+    return [];
+  }
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const l = await getListing(id);
+  if (!l) return { title: 'Elan tapılmadı — 360tap.az' };
+  const price = l.price != null ? `${Number(l.price).toLocaleString('az-AZ')} ${l.currency}` : 'Razılaşma';
+  const loc = [l.districtName, l.regionName].filter(Boolean).join(', ');
+  const desc = (l.description ?? '').slice(0, 160).replace(/\s+/g, ' ');
+  const cover = l.images?.[0]?.url;
+  return {
+    title: `${l.title} — ${price}${loc ? ' · ' + loc : ''} | 360tap.az`,
+    description: desc,
+    openGraph: {
+      title: l.title,
+      description: desc,
+      type: 'website',
+      ...(cover ? { images: [{ url: cover }] } : {}),
+    },
+  };
+}
 
 type Detail = {
   id: string;
@@ -53,9 +96,22 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const price =
     l.price != null ? `${Number(l.price).toLocaleString('az-AZ')} ${l.currency}` : 'Razılaşma yolu ilə';
   const phone = l.contactPhone ?? undefined;
+  const similar = await getSimilar(l.id);
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: l.title,
+    description: (l.description ?? '').slice(0, 300),
+    ...(cover ? { image: cover } : {}),
+    ...(l.price != null
+      ? { offers: { '@type': 'Offer', price: l.price, priceCurrency: l.currency, availability: 'https://schema.org/InStock' } }
+      : {}),
+  };
 
   return (
     <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <div className="max-w-5xl mx-auto px-4 py-6">
         <Link href="/elanlar" className="text-tap text-sm font-medium">
           ← Elanlara qayıt
@@ -137,6 +193,18 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             </div>
           </aside>
         </div>
+
+        {/* Oxşar elanlar */}
+        {similar.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-xl font-extrabold text-ink-900 dark:text-white mb-4">Oxşar elanlar</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+              {similar.map((s) => (
+                <ListingCard key={s.id} item={s} />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

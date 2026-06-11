@@ -49,6 +49,14 @@ export class ListingsController {
     return listing;
   }
 
+  @Public()
+  @Get(':id/similar')
+  similar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ListingResponse[]> {
+    return this.listings.findSimilar(id);
+  }
+
   @Get('me/list')
   listMine(@CurrentUser() user: JwtPayload): Promise<ListingResponse[]> {
     return this.listings.listByOwner(user.sub);

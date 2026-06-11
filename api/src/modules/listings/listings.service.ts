@@ -231,6 +231,22 @@ export class ListingsService {
     return toListingResponse(listing);
   }
 
+  // Oxşar elanlar — eyni kateqoriya, aktiv, cari elan istisna
+  async findSimilar(id: string, limit = 8): Promise<ListingResponse[]> {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { categoryId: true },
+    });
+    if (!listing) return [];
+    const items = await this.prisma.listing.findMany({
+      where: { status: 'active', categoryId: listing.categoryId, id: { not: id } },
+      orderBy: [{ isVip: 'desc' }, { createdAt: 'desc' }],
+      take: limit,
+      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
+    });
+    return items.map(toListingResponse);
+  }
+
   async listByOwner(ownerId: string): Promise<ListingResponse[]> {
     const items = await this.prisma.listing.findMany({
       where: { ownerId },
