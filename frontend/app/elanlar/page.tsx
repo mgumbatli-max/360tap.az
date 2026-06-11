@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import CategoryFilters, { type CatAttr } from '@/components/CategoryFilters';
+import InfiniteListings from '@/components/InfiniteListings';
 import { meiliSearch, type MeiliHit } from '@/lib/meili';
 
 function mapMeiliHit(h: MeiliHit): Listing {
@@ -88,11 +89,12 @@ function qs(sp: SP, patch: Partial<SP>): string {
 
 export default async function ListingsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
-  const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
 
   let items: Listing[] = [];
   let total = 0;
   let hasMore = false;
+  let baseQuery = ''; // client sonsuz scroll üçün API sorğusu (page/limit-siz)
+  let catAttrs: CatAttr[] = [];
   let understanding: Understanding | null = null;
 
   if (sp.q) {
@@ -166,43 +168,35 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
       }
     }
     if (Object.keys(attrsObj).length) params.set('attrs', JSON.stringify(attrsObj));
-    params.set('page', String(page));
-    params.set('limit', '24');
-    try {
-      const r = await fetch(`${API}/listings?${params}`, { next: { revalidate: 15 } });
-      if (r.ok) {
-        const d = (await r.json()) as {
-          data?: NestListing[];
-          meta?: { total: number; hasMore: boolean };
-        };
-        items = (d.data ?? []).map(mapListing);
-        total = d.meta?.total ?? items.length;
-        hasMore = d.meta?.hasMore ?? false;
-      }
-    } catch {
-      /* backend cold start */
+    baseQuery = params.toString(); // sonsuz scroll üçün (page/limit-siz)
+    params.set('page', '1');
+    params.set('limit', '50');
+    // Listings VƏ kateqoriya atributlarını PARALEL çək (waterfall yox — bir round trip qənaət)
+    const listingsP = fetch(`${API}/listings?${params}`, { next: { revalidate: 30 } })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    const attrsP = sp.category
+      ? fetch(`${API}/categories/${sp.category}/attributes`, { next: { revalidate: 600 } })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+      : Promise.resolve(null);
+    const [listD, attrD] = (await Promise.all([listingsP, attrsP])) as [
+      { data?: NestListing[]; meta?: { total: number; hasMore: boolean } } | null,
+      { data?: CatAttr[] } | null,
+    ];
+    if (listD) {
+      items = (listD.data ?? []).map(mapListing);
+      total = listD.meta?.total ?? items.length;
+      hasMore = listD.meta?.hasMore ?? false;
     }
+    if (attrD) catAttrs = attrD.data ?? [];
   }
 
   const uChips = understanding
     ? Object.entries(understanding).filter(([, v]) => v != null && v !== '')
     : [];
 
-  // Kateqoriya seçilibsə — onun atribut filtrlərini gətir (Turbo/Bina-stil)
-  let catAttrs: CatAttr[] = [];
-  if (!sp.q && sp.category) {
-    try {
-      const r = await fetch(`${API}/categories/${sp.category}/attributes`, {
-        next: { revalidate: 300 },
-      });
-      if (r.ok) {
-        const d = (await r.json()) as { data?: CatAttr[] };
-        catAttrs = d.data ?? [];
-      }
-    } catch {
-      /* atribut yoxdursa boş */
-    }
-  }
+  // Qeyd: catAttrs browse branch-də listings ilə PARALEL çəkilir (waterfall yox)
 
   return (
     <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
@@ -278,36 +272,14 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
               Bütün elanlara bax
             </Link>
           </div>
+        ) : sp.q ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+            {items.map((l) => (
+              <ListingCard key={l.id} item={l} />
+            ))}
+          </div>
         ) : (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-              {items.map((l) => (
-                <ListingCard key={l.id} item={l} />
-              ))}
-            </div>
-
-            {!sp.q && (
-              <div className="flex items-center justify-center gap-3 mt-8">
-                {page > 1 && (
-                  <Link
-                    href={`/elanlar?${new URLSearchParams({ ...sp, page: String(page - 1) } as Record<string, string>)}`}
-                    className="btn-secondary"
-                  >
-                    ← Əvvəlki
-                  </Link>
-                )}
-                <span className="text-ink-500 text-sm">Səhifə {page}</span>
-                {hasMore && (
-                  <Link
-                    href={`/elanlar?${new URLSearchParams({ ...sp, page: String(page + 1) } as Record<string, string>)}`}
-                    className="btn-secondary"
-                  >
-                    Növbəti →
-                  </Link>
-                )}
-              </div>
-            )}
-          </>
+          <InfiniteListings initialItems={items} baseQuery={baseQuery} initialHasMore={hasMore} />
         )}
       </div>
     </div>

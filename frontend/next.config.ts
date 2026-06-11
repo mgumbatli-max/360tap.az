@@ -32,28 +32,9 @@ const config: NextConfig = {
       { source: '/api/:path*', destination: `${EXPRESS}/api/:path*` },
     ];
   },
-  async redirects() {
-    const reCats = [
-      'menzil-satilir', 'menzil-kiraye', 'menzil',
-      'hayat-evi', 'ofis', 'qaraj', 'torpaq', 'obyekt',
-      'dasinmaz-emlak',
-    ];
-    const transportCats = ['neqliyyat', 'avtomobil', 'masin'];
-    return [
-      ...reCats.map((slug) => ({
-        source: '/elanlar',
-        has: [{ type: 'query' as const, key: 'category', value: slug }],
-        destination: `/emlak?category=${slug}`,
-        permanent: false,
-      })),
-      ...transportCats.map((slug) => ({
-        source: '/elanlar',
-        has: [{ type: 'query' as const, key: 'category', value: slug }],
-        destination: `/neqliyyat`,
-        permanent: false,
-      })),
-    ];
-  },
+  // Qeyd: əvvəl /elanlar?category=dasinmaz-emlak → /emlak → /elanlar dairəvi redirect var idi
+  // (lazımsız hop + döngə riski). /elanlar artıq kateqoriyanı birbaşa render edir (filtr + sonsuz scroll),
+  // ona görə redirect-lər çıxarıldı. /emlak,/neqliyyat tək-yönlü /elanlar-a yönləndirir (öz page.tsx-lərində).
 };
 
 export default config;

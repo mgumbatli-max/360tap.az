@@ -105,6 +105,13 @@ const themeInitScript = `
   window.addEventListener('error', function(e) { send(e.message, e.error && e.error.stack, 'window.error'); });
   window.addEventListener('unhandledrejection', function(e) { send(e.reason, e.reason && e.reason.stack, 'promise.reject'); });
 })();
+// === BACKEND-İ OYAQ SAXLA (Render free cold-start qarşısı) ===
+// Səhifə açılan kimi backend oyadılır ki, növbəti naviqasiya soyuq olmasın; sonra hər 10 dəq.
+(function() {
+  function ping() { try { fetch('/api/health', { cache: 'no-store' }).catch(function(){}); } catch(e) {} }
+  ping();
+  setInterval(ping, 600000);
+})();
 `;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
