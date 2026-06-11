@@ -6,7 +6,6 @@ import { Heart, Trash2, CheckSquare, Square } from 'lucide-react';
 import { getMyFavorites, toggleFavorite } from '@/lib/favorites';
 import { formatPrice2 } from '@/lib/currency';
 import { useToast } from '@/lib/toast';
-import WishlistGroups from '@/components/WishlistGroups';
 
 export default function FavoritesPage() {
   const toast = useToast();
@@ -45,7 +44,6 @@ export default function FavoritesPage() {
 
   return (
     <ProfileLayout>
-      <div className="mb-4"><WishlistGroups /></div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-extrabold text-ink-900">
           Sevimlilər <span className="text-ink-400 font-normal">{items.length}</span>
@@ -92,13 +90,13 @@ export default function FavoritesPage() {
               </button>
               <Link href={`/elanlar/${l.id}`} className={`card p-2 block group ${selected.has(l.id) ? 'ring-2 ring-tap' : ''}`}>
                 <div className="aspect-square bg-ink-100 rounded-lg overflow-hidden mb-2">
-                  {l.media?.[0]?.url && (
-                    <img src={l.media[0].url} alt={l.title} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                  {(l.images?.[0]?.url ?? l.media?.[0]?.url) && (
+                    <img src={l.images?.[0]?.url ?? l.media[0].url} alt={l.title} className="w-full h-full object-cover group-hover:scale-105 transition" />
                   )}
                 </div>
                 <div className="font-bold">{formatPrice2(l.price, l.currency)}</div>
                 <div className="text-sm text-ink-600 line-clamp-2 mt-0.5 leading-tight">{l.title}</div>
-                <div className="text-[11px] text-ink-400 mt-0.5">{l.city_name ?? ''}</div>
+                <div className="text-[11px] text-ink-400 mt-0.5">{l.regionName ?? l.city_name ?? ''}</div>
               </Link>
             </div>
           ))}

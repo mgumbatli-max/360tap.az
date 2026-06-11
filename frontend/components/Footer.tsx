@@ -1,51 +1,63 @@
 import Link from 'next/link';
 
-const FOOTER_COLS = [
+const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
-    title: 'Avadanlıq',
-    links: ['Avadanlıq biznes üçün', 'Alətlər', 'Avadanlıq icarəsi', 'Quraşdırma'],
+    title: 'Kateqoriyalar',
+    links: [
+      { label: 'Nəqliyyat', href: '/elanlar?category=neqliyyat' },
+      { label: 'Daşınmaz əmlak', href: '/elanlar?category=dasinmaz-emlak' },
+      { label: 'Elektronika', href: '/elanlar?category=elektronika' },
+      { label: 'İş elanları', href: '/elanlar?category=is-elanlari' },
+      { label: 'Ev və bağ', href: '/elanlar?category=ev-bag' },
+      { label: 'Xidmətlər', href: '/elanlar?category=xidmetler' },
+    ],
   },
   {
-    title: 'Tikinti materialları',
-    links: ['Tikinti materialları', 'Santexnika', 'Qapılar', 'Tavanlar', 'Bağ üçün'],
+    title: 'Regionlar',
+    links: [
+      { label: 'Bakı', href: '/elanlar?region=baki' },
+      { label: 'Gəncə', href: '/elanlar?region=gence' },
+      { label: 'Sumqayıt', href: '/elanlar?region=sumqayit' },
+      { label: 'Qəbələ', href: '/elanlar?region=qebele' },
+      { label: 'Lənkəran', href: '/elanlar?region=lenkeran' },
+      { label: 'Bütün regionlar', href: '/elanlar' },
+    ],
   },
   {
-    title: 'Məhsullar',
-    links: ['Elektronika', 'Geyim, ayaqqabı', 'Uşaq mallar və oyuncaqlar', 'Gözəllik və sağlamlıq', 'Ev üçün'],
+    title: '360tap.az',
+    links: [
+      { label: 'Bütün elanlar', href: '/elanlar' },
+      { label: 'AI ilə elan yarat', href: '/ai-elan' },
+      { label: 'Şəkillə axtar', href: '/sekille-axtar' },
+      { label: 'Elan yerləşdir', href: '/elan-yerlesdir' },
+      { label: 'Biznes üçün', href: '/biznes' },
+    ],
   },
   {
-    title: 'Bütün ofis üçün',
-    links: ['Noutbuklar', 'Stolüstü kompüter', 'Kompüter masaları', 'Texniki dəstək'],
+    title: 'Kömək',
+    links: [
+      { label: 'Yardım mərkəzi', href: '/komek' },
+      { label: 'Karyera', href: '/karyera' },
+      { label: 'İstifadə qaydaları', href: '/qaydalar' },
+      { label: 'Məxfilik siyasəti', href: '/mexfilik' },
+    ],
   },
-  {
-    title: 'Xidmətlər',
-    links: ['Logistika', 'İş xidmətləri', 'Təmir və quraşdırma', 'Texnika xidməti', 'Məişət xidmətləri'],
-  },
-  {
-    title: 'Nəqliyyat',
-    links: ['Avtomobil', 'Yük və xüsusi texnika', 'Su nəqliyyatı', 'Ehtiyat hissələri', 'Avtoservis'],
-  },
-];
-
-const APP_STORES = [
-  { name: 'App Store', icon: '' },
-  { name: 'Google Play', icon: '▶' },
-  { name: 'Galaxy Store', icon: '◯' },
-  { name: 'AppGallery', icon: '◇' },
 ];
 
 export default function Footer() {
   return (
-    <footer className="bg-ink-50 border-t border-ink-200 mt-12">
+    <footer className="bg-ink-50 dark:bg-ink-900 border-t border-ink-200 dark:border-ink-800 mt-12">
       <div className="max-w-7xl mx-auto px-4 py-10">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-          {FOOTER_COLS.map((col) => (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {COLS.map((col) => (
             <div key={col.title}>
-              <h4 className="font-bold text-ink-900 text-sm mb-3">{col.title}</h4>
-              <ul className="space-y-2 text-sm text-ink-600">
+              <h4 className="font-bold text-ink-900 dark:text-white text-sm mb-3">{col.title}</h4>
+              <ul className="space-y-2 text-sm text-ink-600 dark:text-ink-400">
                 {col.links.map((l) => (
-                  <li key={l}>
-                    <Link href="#" className="hover:text-tap transition-colors">{l}</Link>
+                  <li key={l.label}>
+                    <Link href={l.href} className="hover:text-tap transition-colors">
+                      {l.label}
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -53,29 +65,9 @@ export default function Footer() {
           ))}
         </div>
 
-        <div className="mt-10 pt-6 border-t border-ink-200">
-          <h4 className="font-bold text-ink-900 text-sm mb-3">Tətbiqi yüklə</h4>
-          <p className="text-sm text-ink-600 mb-3">Müvafiq mağazadan və ya birbaşa saytdan APK-faylı.</p>
-          <div className="flex flex-wrap gap-2">
-            {APP_STORES.map((s) => (
-              <button key={s.name} className="btn-secondary text-sm flex items-center gap-2">
-                <span className="text-base">{s.icon}</span>
-                <span>{s.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-10 pt-6 border-t border-ink-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs text-ink-500">
-          <div>
-            <p>360tap.az — Azərbaycan elanlar saytı.</p>
-            <p className="mt-1">© 2026 — Bütün hüquqlar qorunur. <Link href="/qaydalar" className="hover:text-tap">İstifadə qaydaları</Link>. <Link href="/mexfilik" className="hover:text-tap">Məxfilik siyasəti</Link>.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="#" aria-label="Facebook" className="w-8 h-8 rounded-full bg-white border border-ink-200 hover:border-tap hover:text-tap flex items-center justify-center font-bold">f</Link>
-            <Link href="#" aria-label="Instagram" className="w-8 h-8 rounded-full bg-white border border-ink-200 hover:border-tap hover:text-tap flex items-center justify-center font-bold">ig</Link>
-            <Link href="#" aria-label="Telegram" className="w-8 h-8 rounded-full bg-white border border-ink-200 hover:border-tap hover:text-tap flex items-center justify-center font-bold">t</Link>
-          </div>
+        <div className="mt-10 pt-6 border-t border-ink-200 dark:border-ink-800 text-xs text-ink-500">
+          <p className="font-bold text-ink-700 dark:text-ink-300">360tap.az — Azərbaycanda region-first elanlar və ticarət platforması.</p>
+          <p className="mt-1">© 2026 360tap.az — Bütün hüquqlar qorunur.</p>
         </div>
       </div>
     </footer>
