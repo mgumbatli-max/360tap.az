@@ -11,15 +11,17 @@ export async function toggleFavorite(listingId: string, currentlyFav: boolean): 
 }
 
 export async function getMyFavorites(): Promise<any[]> {
-  const d = await api<{ items: any[] }>('/favorites');
-  return d.items ?? [];
+  // NestJS: { data: ListingResponse[] }
+  const d = await api<{ data?: any[]; items?: any[] }>('/favorites');
+  return d.data ?? d.items ?? [];
 }
 
 export async function checkFavorites(ids: string[]): Promise<Set<string>> {
   if (!ids.length) return new Set();
   try {
-    const d = await api<{ favorites: string[] }>(`/favorites/check?ids=${ids.join(',')}`);
-    return new Set(d.favorites ?? []);
+    // NestJS: { data: string[] }
+    const d = await api<{ data?: string[]; favorites?: string[] }>(`/favorites/check?ids=${ids.join(',')}`);
+    return new Set(d.data ?? d.favorites ?? []);
   } catch {
     return new Set();
   }

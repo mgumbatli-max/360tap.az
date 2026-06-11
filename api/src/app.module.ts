@@ -21,6 +21,7 @@ import { StoresModule } from './modules/stores/stores.module';
 import { ErpModule } from './modules/erp/erp.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { ListingsModule } from './modules/listings/listings.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { ListingsModule } from './modules/listings/listings.module';
     ErpModule,
     CategoriesModule,
     ListingsModule,
+    FavoritesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
