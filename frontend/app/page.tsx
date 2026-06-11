@@ -31,6 +31,8 @@ type NestListing = {
   views?: number;
   favoritesCount?: number;
   createdAt: string;
+  regionName?: string | null;
+  districtName?: string | null;
   images?: { url: string; sortOrder: number }[];
 };
 
@@ -48,6 +50,8 @@ function mapListing(l: NestListing): Listing {
     views: l.views,
     favorites_count: l.favoritesCount,
     created_at: l.createdAt,
+    city_name: l.regionName ?? undefined,
+    district: l.districtName ?? undefined,
     media: (l.images ?? []).map((i) => ({ url: i.url, sort_order: i.sortOrder ?? 0 })),
   };
 }

@@ -27,6 +27,8 @@ type Detail = {
   contactPhone?: string | null;
   contactWhatsapp?: boolean;
   address?: string | null;
+  regionName?: string | null;
+  districtName?: string | null;
   createdAt: string;
   images?: { url: string }[];
 };
@@ -93,7 +95,11 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               <h1 className="text-lg font-bold text-ink-900 dark:text-white mt-2 leading-snug">
                 {l.title}
               </h1>
-              {l.address && <p className="text-ink-500 text-sm mt-1">📍 {l.address}</p>}
+              {(l.address || l.regionName || l.districtName) && (
+                <p className="text-ink-500 text-sm mt-1">
+                  📍 {l.address || [l.districtName, l.regionName].filter(Boolean).join(', ')}
+                </p>
+              )}
 
               <div className="flex flex-wrap gap-1.5 mt-3 text-xs">
                 {l.hasDelivery && <span className="badge badge-deliver">Çatdırılma</span>}

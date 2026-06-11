@@ -22,6 +22,7 @@ type NestListing = {
   id: string; title: string; slug: string; price: number | null; currency: string;
   priceType: string; isVip?: boolean; isPremium?: boolean; hasDelivery?: boolean;
   views?: number; favoritesCount?: number; createdAt: string;
+  regionName?: string | null; districtName?: string | null;
   images?: { url: string; sortOrder: number }[];
 };
 
@@ -37,6 +38,7 @@ function mapListing(l: NestListing): Listing {
     currency: l.currency ?? 'AZN', price_type: l.priceType ?? 'fixed',
     is_vip: l.isVip, is_premium: l.isPremium, has_delivery: l.hasDelivery,
     views: l.views, favorites_count: l.favoritesCount, created_at: l.createdAt,
+    city_name: l.regionName ?? undefined, district: l.districtName ?? undefined,
     media: (l.images ?? []).map((i) => ({ url: i.url, sort_order: i.sortOrder ?? 0 })),
   };
 }

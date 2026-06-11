@@ -25,7 +25,9 @@ export class QueryListingsDto {
   @IsOptional() @Type(() => Number) @IsNumber() priceMin?: number;
   @IsOptional() @Type(() => Number) @IsNumber() priceMax?: number;
 
-  @IsOptional() @IsIn(['new', 'price_asc', 'price_desc']) sort?: 'new' | 'price_asc' | 'price_desc';
+  @IsOptional()
+  @IsIn(['new', 'price_asc', 'price_desc', 'popular'])
+  sort?: 'new' | 'price_asc' | 'price_desc' | 'popular';
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit?: number;

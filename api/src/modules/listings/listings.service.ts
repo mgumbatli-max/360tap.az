@@ -120,7 +120,7 @@ export class ListingsService {
 
       return tx.listing.findUniqueOrThrow({
         where: { id: listing.id },
-        include: { images: { orderBy: { sortOrder: 'asc' } } },
+        include: { images: { orderBy: { sortOrder: 'asc' } }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
       });
     });
 
@@ -221,16 +221,21 @@ export class ListingsService {
   async findById(id: string): Promise<ListingResponse | null> {
     const listing = await this.prisma.listing.findFirst({
       where: { id, status: 'active' },
-      include: { images: { orderBy: { sortOrder: 'asc' } } },
+      include: { images: { orderBy: { sortOrder: 'asc' } }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
     });
-    return listing ? toListingResponse(listing) : null;
+    if (!listing) return null;
+    // Baxış sayğacını artır (best-effort)
+    void this.prisma.listing
+      .update({ where: { id }, data: { views: { increment: 1 } } })
+      .catch(() => undefined);
+    return toListingResponse(listing);
   }
 
   async listByOwner(ownerId: string): Promise<ListingResponse[]> {
     const items = await this.prisma.listing.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
-      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
     });
     return items.map(toListingResponse);
   }
@@ -246,7 +251,7 @@ export class ListingsService {
     const updated = await this.prisma.listing.update({
       where: { id },
       data: { status },
-      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
     });
     void this.search.indexListing(updated.id); // status dəyişdi → index yenilə/sil
     return toListingResponse(updated);
@@ -278,7 +283,7 @@ export class ListingsService {
     const updated = await this.prisma.listing.update({
       where: { id },
       data,
-      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
     });
     void this.search.indexListing(updated.id); // redaktə → index yenilə
     return toListingResponse(updated);
@@ -370,7 +375,9 @@ export class ListingsService {
         ? { price: 'asc' }
         : q.sort === 'price_desc'
           ? { price: 'desc' }
-          : { createdAt: 'desc' };
+          : q.sort === 'popular'
+            ? { views: 'desc' }
+            : { createdAt: 'desc' };
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.listing.findMany({
@@ -378,7 +385,7 @@ export class ListingsService {
         orderBy,
         skip: (page - 1) * limit,
         take: limit,
-        include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+        include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
       }),
       this.prisma.listing.count({ where }),
     ]);

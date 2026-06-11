@@ -25,6 +25,9 @@ async function bootstrap(): Promise<void> {
   const mediaDir = resolve(config.get('media', { infer: true }).dir);
   app.useStaticAssets(mediaDir, { prefix: '/uploads/' });
 
+  // Render/Vercel proxy arxasında — real IP (rate-limit + loglama üçün)
+  app.set('trust proxy', 1);
+
   // Şəkillə axtarış (base64) üçün böyük JSON body
   app.useBodyParser('json', { limit: '8mb' });
 

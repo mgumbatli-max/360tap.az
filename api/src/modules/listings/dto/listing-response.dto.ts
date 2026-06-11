@@ -45,13 +45,26 @@ export interface ListingResponse {
   updatedAt: Date;
   ownerId: string;
   categoryId: string;
+  categoryName: string | null;
+  categorySlug: string | null;
   districtId: string | null;
+  districtName: string | null;
+  regionName: string | null;
+  regionSlug: string | null;
   images: ListingImageResponse[];
 }
 
-export function toListingResponse(
-  listing: Listing & { images?: ListingImage[] },
-): ListingResponse {
+type WithRelations = Listing & {
+  images?: ListingImage[];
+  category?: { nameAz: string; slug: string } | null;
+  district?: {
+    nameAz: string;
+    slug: string;
+    region?: { nameAz: string; slug: string } | null;
+  } | null;
+};
+
+export function toListingResponse(listing: WithRelations): ListingResponse {
   return {
     id: listing.id,
     title: listing.title,
@@ -88,7 +101,12 @@ export function toListingResponse(
     updatedAt: listing.updatedAt,
     ownerId: listing.ownerId,
     categoryId: listing.categoryId,
+    categoryName: listing.category?.nameAz ?? null,
+    categorySlug: listing.category?.slug ?? null,
     districtId: listing.districtId,
+    districtName: listing.district?.nameAz ?? null,
+    regionName: listing.district?.region?.nameAz ?? null,
+    regionSlug: listing.district?.region?.slug ?? null,
     images: (listing.images ?? []).map((img) => ({
       id: img.id,
       url: img.url,

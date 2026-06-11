@@ -127,14 +127,15 @@ async function seedListings(): Promise<void> {
       select: { id: true },
     });
     if (!cat || !dist) continue;
-    await prisma.listing.create({
+    const slug = `${makeSlug(s.title)}-${i++}`;
+    const listing = await prisma.listing.create({
       data: {
         ownerId: user.id,
         categoryId: cat.id,
         districtId: dist.id,
         vertical: cat.vertical,
         title: s.title,
-        slug: `${makeSlug(s.title)}-${i++}`,
+        slug,
         description: s.description,
         price: s.price > 0 ? s.price : null,
         priceType: s.price > 0 ? 'fixed' : 'negotiable',
@@ -145,13 +146,58 @@ async function seedListings(): Promise<void> {
         isPremium: s.isPremium ?? false,
         hasDelivery: s.hasDelivery ?? false,
         attributes: (s.attributes ?? {}) as Prisma.InputJsonValue,
+        contactName: DEMO_SELLER.fullName,
+        contactPhone: '+994501112233',
+        contactWhatsapp: true,
         publishedAt: new Date(),
         expiresAt: new Date(Date.now() + 30 * 86_400_000),
       },
     });
+    // Deterministik nümunə şəkillər (boş marketplace olmasın)
+    await prisma.listingImage.createMany({
+      data: [0, 1, 2].map((n) => ({
+        listingId: listing.id,
+        url: `https://picsum.photos/seed/${slug}-${n}/600/450`,
+        width: 600,
+        height: 450,
+        sortOrder: n,
+      })),
+    });
     created++;
   }
   console.log(`  listings: ${created} nümunə aktiv elan (demo satıcı)`);
+}
+
+// Kateqoriya listingsCount (alt-ağac daxil) hesabla və yenilə
+async function seedCategoryCounts(): Promise<void> {
+  const cats = await prisma.category.findMany({ select: { id: true, parentId: true } });
+  const grouped = await prisma.listing.groupBy({
+    by: ['categoryId'],
+    where: { status: 'active' },
+    _count: true,
+  });
+  const direct = new Map(grouped.map((g) => [g.categoryId, g._count]));
+  const childrenOf = new Map<string, string[]>();
+  for (const c of cats) {
+    if (c.parentId) {
+      const arr = childrenOf.get(c.parentId) ?? [];
+      arr.push(c.id);
+      childrenOf.set(c.parentId, arr);
+    }
+  }
+  const total = new Map<string, number>();
+  const compute = (id: string): number => {
+    if (total.has(id)) return total.get(id)!;
+    let sum = direct.get(id) ?? 0;
+    for (const ch of childrenOf.get(id) ?? []) sum += compute(ch);
+    total.set(id, sum);
+    return sum;
+  };
+  for (const c of cats) compute(c.id);
+  for (const [id, count] of total) {
+    await prisma.category.update({ where: { id }, data: { listingsCount: count } });
+  }
+  console.log(`  category counts: yeniləndi`);
 }
 
 async function main(): Promise<void> {
@@ -160,6 +206,7 @@ async function main(): Promise<void> {
   await seedCategories();
   await seedBrands();
   await seedListings();
+  await seedCategoryCounts();
   console.log('✅ Seed tamam.');
 }
 
