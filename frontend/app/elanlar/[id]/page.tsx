@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import Gallery from '@/components/Gallery';
 import ListingCard, { type Listing } from '@/components/ListingCard';
+import MessageSeller from '@/components/MessageSeller';
 
 const API = process.env.API_ORIGIN
   ? `${process.env.API_ORIGIN}/api/v1`
@@ -72,6 +73,7 @@ type Detail = {
   address?: string | null;
   regionName?: string | null;
   districtName?: string | null;
+  ownerId: string;
   createdAt: string;
   images?: { url: string }[];
 };
@@ -188,6 +190,8 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                   )}
                 </div>
               )}
+
+              <MessageSeller listingId={l.id} ownerId={l.ownerId} />
 
               <p className="text-ink-400 text-xs mt-3">Baxış sayı: {l.views ?? 0}</p>
             </div>

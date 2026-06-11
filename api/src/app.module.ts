@@ -22,6 +22,7 @@ import { ErpModule } from './modules/erp/erp.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { FavoritesModule } from './modules/favorites/favorites.module';
     CategoriesModule,
     ListingsModule,
     FavoritesModule,
+    ChatModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
