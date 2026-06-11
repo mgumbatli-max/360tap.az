@@ -261,12 +261,23 @@ async function seedCategoryCounts(): Promise<void> {
   console.log(`  category counts: yeniləndi`);
 }
 
+// Canlı e2e/QA testlərindən qalan test elanlarını təmizlə (marketplace təmiz qalsın).
+// Pattern-lər avtomatik test artefaktlarıdır — demo/real elan başlıqları ilə üst-üstə düşmür.
+async function cleanupTestData(): Promise<void> {
+  const patterns = ['notification axini', 'chat test', 'avto-dərc', 'e2e test'];
+  const res = await prisma.listing.deleteMany({
+    where: { OR: patterns.map((p) => ({ title: { contains: p, mode: 'insensitive' as const } })) },
+  });
+  if (res.count) console.log(`  cleanup: ${res.count} test elan silindi`);
+}
+
 async function main(): Promise<void> {
   console.log('🌱 Seed başladı...');
   await seedGeo();
   await seedCategories();
   await seedBrands();
   await seedListings();
+  await cleanupTestData();
   await seedFillEmptyCategories();
   await seedCategoryCounts();
   console.log('✅ Seed tamam.');
