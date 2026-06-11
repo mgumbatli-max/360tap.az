@@ -186,6 +186,7 @@ export class AiService {
         where.OR = words.flatMap((w) => [
           { title: { contains: w, mode: 'insensitive' as const } },
           { description: { contains: w, mode: 'insensitive' as const } },
+          { category: { nameAz: { contains: w, mode: 'insensitive' as const } } },
         ]);
       }
     }
