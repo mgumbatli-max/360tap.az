@@ -7,12 +7,14 @@ import {
   NotFoundException,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CreateListingDto } from './dto/create-listing.dto';
+import { UpdateListingDto } from './dto/update-listing.dto';
 import type { ListingResponse } from './dto/listing-response.dto';
 import { QueryListingsDto } from './dto/query-listings.dto';
 import { ListingsService } from './listings.service';
@@ -50,6 +52,15 @@ export class ListingsController {
   @Get('me/list')
   listMine(@CurrentUser() user: JwtPayload): Promise<ListingResponse[]> {
     return this.listings.listByOwner(user.sub);
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: UpdateListingDto,
+  ): Promise<ListingResponse> {
+    return this.listings.update(user.sub, id, dto);
   }
 
   @Post(':id/sold')

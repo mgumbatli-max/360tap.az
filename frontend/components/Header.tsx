@@ -120,9 +120,9 @@ export default function Header() {
             </button>
           </form>
 
-          {/* Region */}
-          <div className="hidden lg:block shrink-0">
-            <CityPicker />
+          {/* Region — tablet+ */}
+          <div className="hidden sm:block shrink-0">
+            <CityPicker compact />
           </div>
 
           {/* Sağ — yığcam */}

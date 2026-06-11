@@ -123,10 +123,20 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
     if (sp.priceMin) params.set('priceMin', sp.priceMin);
     if (sp.priceMax) params.set('priceMax', sp.priceMax);
     if (sp.sort) params.set('sort', sp.sort);
-    // a_* atribut filtrləri → attrs JSON
-    const attrsObj: Record<string, string> = {};
+    // a_* atribut filtrləri → attrs JSON (scalar + range _min/_max)
+    const attrsObj: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(sp)) {
-      if (k.startsWith('a_') && v) attrsObj[k.slice(2)] = v;
+      if (!k.startsWith('a_') || !v) continue;
+      const key = k.slice(2);
+      if (key.endsWith('_min')) {
+        const base = key.slice(0, -4);
+        attrsObj[base] = { ...(attrsObj[base] as object), min: Number(v) };
+      } else if (key.endsWith('_max')) {
+        const base = key.slice(0, -4);
+        attrsObj[base] = { ...(attrsObj[base] as object), max: Number(v) };
+      } else {
+        attrsObj[key] = v;
+      }
     }
     if (Object.keys(attrsObj).length) params.set('attrs', JSON.stringify(attrsObj));
     params.set('page', String(page));

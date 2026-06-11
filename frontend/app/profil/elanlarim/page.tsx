@@ -145,7 +145,10 @@ export default function MyListingsPage() {
                 </div>
                 <div className="flex flex-wrap sm:flex-col gap-2 sm:w-36 shrink-0">
                   <Link href={`/elanlar/${it.id}`} className="btn-secondary text-xs flex-1 sm:flex-none justify-center">
-                    <Pencil className="w-3.5 h-3.5" /> Bax
+                    <Eye className="w-3.5 h-3.5" /> Bax
+                  </Link>
+                  <Link href={`/elan-yerlesdir?edit=${it.id}`} className="btn-secondary text-xs flex-1 sm:flex-none justify-center">
+                    <Pencil className="w-3.5 h-3.5" /> Redaktə
                   </Link>
                   {it.status === 'active' && (
                     <>

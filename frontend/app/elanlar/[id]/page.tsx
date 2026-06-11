@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import Gallery from '@/components/Gallery';
 
 const API = process.env.API_ORIGIN
   ? `${process.env.API_ORIGIN}/api/v1`
@@ -61,27 +62,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         <div className="grid md:grid-cols-[1fr_340px] gap-6 mt-3">
           {/* Sol: qalereya + təsvir */}
           <div>
-            <div className="aspect-video bg-ink-100 dark:bg-ink-800 rounded-2xl overflow-hidden">
-              {cover ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={cover} alt={l.title} className="w-full h-full object-cover" />
-              ) : (
-                <div className="flex items-center justify-center h-full text-ink-400">Şəkil yoxdur</div>
-              )}
-            </div>
-            {l.images && l.images.length > 1 && (
-              <div className="flex gap-2 mt-2 overflow-x-auto">
-                {l.images.map((img, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={i}
-                    src={img.url}
-                    alt=""
-                    className="w-20 h-20 object-cover rounded-lg shrink-0"
-                  />
-                ))}
-              </div>
-            )}
+            <Gallery images={l.images ?? []} title={l.title} />
 
             <div className="card p-5 mt-4">
               <h2 className="font-bold text-ink-900 dark:text-white mb-2">Təsvir</h2>

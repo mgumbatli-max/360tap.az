@@ -248,6 +248,37 @@ export class ListingsService {
     return toListingResponse(updated);
   }
 
+  // Elanı redaktə et (sahiblik yoxlaması ilə) — mətn/qiymət/kateqoriya/atribut
+  async update(
+    ownerId: string,
+    id: string,
+    dto: import('./dto/update-listing.dto').UpdateListingDto,
+  ): Promise<ListingResponse> {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { ownerId: true },
+    });
+    if (!listing) throw new NotFoundException('Elan tapılmadı');
+    if (listing.ownerId !== ownerId) throw new ForbiddenException('Bu elan sizə aid deyil');
+
+    const data: Prisma.ListingUncheckedUpdateInput = {};
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.price !== undefined) data.price = dto.price ?? null;
+    if (dto.priceType !== undefined) data.priceType = dto.priceType;
+    if (dto.condition !== undefined) data.condition = dto.condition;
+    if (dto.categoryId !== undefined) data.categoryId = dto.categoryId;
+    if (dto.districtId !== undefined) data.districtId = dto.districtId ?? null;
+    if (dto.attributes !== undefined) data.attributes = dto.attributes as Prisma.InputJsonValue;
+
+    const updated = await this.prisma.listing.update({
+      where: { id },
+      data,
+      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+    });
+    return toListingResponse(updated);
+  }
+
   /**
    * Region-first listing axtarışı + filter + pagination.
    * Yalnız aktiv elanlar. Region slug → rayon id-lərinə açılır.
@@ -301,15 +332,21 @@ export class ListingsService {
       }
     }
 
-    // Kateqoriya-spesifik atribut filtrləri (JSON path bərabərlik)
+    // Kateqoriya-spesifik atribut filtrləri — scalar (equals) və range {min,max} (gte/lte)
     if (q.attrs) {
       try {
         const parsed = JSON.parse(q.attrs) as Record<string, unknown>;
-        const conds: Prisma.ListingWhereInput[] = Object.entries(parsed)
-          .filter(([, v]) => v !== '' && v != null)
-          .map(([key, value]) => ({
-            attributes: { path: [key], equals: value as Prisma.InputJsonValue },
-          }));
+        const conds: Prisma.ListingWhereInput[] = [];
+        for (const [key, value] of Object.entries(parsed)) {
+          if (value == null || value === '') continue;
+          if (typeof value === 'object' && !Array.isArray(value)) {
+            const v = value as { min?: number; max?: number };
+            if (v.min != null) conds.push({ attributes: { path: [key], gte: v.min } });
+            if (v.max != null) conds.push({ attributes: { path: [key], lte: v.max } });
+          } else {
+            conds.push({ attributes: { path: [key], equals: value as Prisma.InputJsonValue } });
+          }
+        }
         if (conds.length) where.AND = conds;
       } catch {
         /* yanlış JSON → atribut filtri tətbiq olunmur */

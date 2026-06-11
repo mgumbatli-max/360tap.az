@@ -21,13 +21,14 @@ export default function CategoryFilters({ attributes }: { attributes: CatAttr[] 
     router.push(`/elanlar?${p.toString()}`);
   };
 
-  // Yalnız filtrlənə bilən select(opsiyalı) və boolean atributlar
+  // Filtrlənə bilən select(opsiyalı), number(range) və boolean atributlar
   const selects = attributes.filter(
     (a) => a.isFilterable !== false && a.type === 'select' && (a.options?.length ?? 0) > 0,
   );
+  const numbers = attributes.filter((a) => a.isFilterable !== false && a.type === 'number');
   const bools = attributes.filter((a) => a.isFilterable !== false && a.type === 'boolean');
 
-  if (selects.length === 0 && bools.length === 0) return null;
+  if (selects.length === 0 && numbers.length === 0 && bools.length === 0) return null;
 
   return (
     <div className="card p-4 mb-6">
@@ -46,6 +47,29 @@ export default function CategoryFilters({ attributes }: { attributes: CatAttr[] 
               </option>
             ))}
           </select>
+        ))}
+
+        {numbers.map((a) => (
+          <div key={a.key} className="flex items-center gap-1.5">
+            <span className="text-xs text-ink-500 dark:text-ink-400">{a.labelAz}:</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="min"
+              defaultValue={params.get(`a_${a.key}_min`) ?? ''}
+              onBlur={(e) => setAttr(`${a.key}_min`, e.target.value)}
+              className="w-20 bg-ink-50 dark:bg-ink-800 border border-ink-200 dark:border-ink-700 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-tap"
+            />
+            <span className="text-ink-400">—</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="max"
+              defaultValue={params.get(`a_${a.key}_max`) ?? ''}
+              onBlur={(e) => setAttr(`${a.key}_max`, e.target.value)}
+              className="w-20 bg-ink-50 dark:bg-ink-800 border border-ink-200 dark:border-ink-700 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-tap"
+            />
+          </div>
         ))}
 
         {bools.map((a) => {

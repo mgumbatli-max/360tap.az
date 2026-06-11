@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Upload, X, Sparkles, Check } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -28,6 +28,8 @@ function flattenCats(cats: Cat[], depth = 0, out: { id: string; label: string }[
 
 export default function ElanYerlesdir() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get('edit');
   const { user, loading } = useAuth();
 
   const [cats, setCats] = useState<{ id: string; label: string }[]>([]);
@@ -72,6 +74,25 @@ export default function ElanYerlesdir() {
       .catch(() => setDistricts([]));
   }, [regionSlug]);
 
+  // Redaktə rejimi — mövcud elanı yüklə və formanı doldur
+  useEffect(() => {
+    if (!editId) return;
+    api<{ data?: Record<string, any> }>(`/listings/${editId}`)
+      .then((d) => {
+        const l = d.data ?? (d as Record<string, any>);
+        if (!l?.id) return;
+        setTitle(l.title ?? '');
+        setDescription(l.description ?? '');
+        setPrice(l.price != null ? String(l.price) : '');
+        setNegotiable(l.priceType === 'negotiable');
+        setCondition(l.condition ?? '');
+        setCategoryId(l.categoryId ?? '');
+        if (l.districtId) setDistrictId(l.districtId);
+        if (Array.isArray(l.images)) setPhotos(l.images);
+      })
+      .catch(() => {});
+  }, [editId]);
+
   const onPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
     setUploading(true);
@@ -104,22 +125,24 @@ export default function ElanYerlesdir() {
     if (!categoryId) return setError('Kateqoriya seçin');
     setSubmitting(true);
     try {
-      const r = await api<{ data?: { id: string } }>('/listings', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          categoryId,
-          districtId: districtId || undefined,
-          price: price ? Number(price) : undefined,
-          priceType: negotiable ? 'negotiable' : 'fixed',
-          condition: condition || undefined,
-          images: photos.length
-            ? photos.map((p) => ({ url: p.url, width: p.width, height: p.height, blurHash: p.blurHash }))
-            : undefined,
-        }),
+      const payload: Record<string, unknown> = {
+        title: title.trim(),
+        description: description.trim(),
+        categoryId,
+        districtId: districtId || undefined,
+        price: price ? Number(price) : undefined,
+        priceType: negotiable ? 'negotiable' : 'fixed',
+        condition: condition || undefined,
+      };
+      // Yeni elanda şəkil göndərilir; redaktədə mətn/qiymət dəyişir
+      if (!editId && photos.length) {
+        payload.images = photos.map((p) => ({ url: p.url, width: p.width, height: p.height, blurHash: p.blurHash }));
+      }
+      const r = await api<{ data?: { id: string } }>(editId ? `/listings/${editId}` : '/listings', {
+        method: editId ? 'PATCH' : 'POST',
+        body: JSON.stringify(payload),
       });
-      const id = r.data?.id;
+      const id = r.data?.id ?? editId;
       if (id) router.push(`/elanlar/${id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Elan yaradıla bilmədi');
@@ -156,12 +179,18 @@ export default function ElanYerlesdir() {
     <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white">Elan yerləşdir</h1>
-          <Link href="/ai-elan" className="text-sm text-tap font-semibold inline-flex items-center gap-1">
-            <Sparkles className="w-4 h-4" /> AI ilə yarat
-          </Link>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white">
+            {editId ? 'Elanı redaktə et' : 'Elan yerləşdir'}
+          </h1>
+          {!editId && (
+            <Link href="/ai-elan" className="text-sm text-tap font-semibold inline-flex items-center gap-1">
+              <Sparkles className="w-4 h-4" /> AI ilə yarat
+            </Link>
+          )}
         </div>
-        <p className="text-ink-500 mb-6">Bir neçə sahə doldur — elan dərhal dərc olunur.</p>
+        <p className="text-ink-500 mb-6">
+          {editId ? 'Dəyişiklikləri edin və yadda saxlayın.' : 'Bir neçə sahə doldur — elan dərhal dərc olunur.'}
+        </p>
 
         <div className="card p-5 space-y-4">
           <div>
@@ -256,11 +285,11 @@ export default function ElanYerlesdir() {
           <button onClick={submit} disabled={submitting} className="btn-tap w-full justify-center disabled:opacity-50">
             {submitting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Dərc olunur…
+                <Loader2 className="w-4 h-4 animate-spin" /> {editId ? 'Saxlanılır…' : 'Dərc olunur…'}
               </>
             ) : (
               <>
-                <Check className="w-4 h-4" /> Elanı dərc et
+                <Check className="w-4 h-4" /> {editId ? 'Yadda saxla' : 'Elanı dərc et'}
               </>
             )}
           </button>
