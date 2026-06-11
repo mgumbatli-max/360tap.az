@@ -168,6 +168,67 @@ async function seedListings(): Promise<void> {
   console.log(`  listings: ${created} nümunə aktiv elan (demo satıcı)`);
 }
 
+// Boş qalan hər leaf kateqoriyaya 1 nümunə elan (hər bölmə dolu olsun)
+async function seedFillEmptyCategories(): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { email: DEMO_SELLER.email },
+    select: { id: true },
+  });
+  if (!user) return;
+  const leaves = await prisma.category.findMany({
+    where: { isActive: true, children: { none: {} } },
+    select: { id: true, nameAz: true, vertical: true },
+    orderBy: { sortOrder: 'asc' },
+  });
+  const districts = await prisma.district.findMany({ select: { id: true }, take: 40 });
+  if (!districts.length) return;
+  let filled = 0;
+  let idx = 0;
+  for (const cat of leaves) {
+    const count = await prisma.listing.count({ where: { categoryId: cat.id } });
+    if (count > 0) {
+      idx++;
+      continue;
+    }
+    const dist = districts[idx % districts.length];
+    const slug = `${makeSlug(cat.nameAz)}-numune-${idx}`;
+    const isJob = cat.vertical === 'job';
+    const listing = await prisma.listing.create({
+      data: {
+        ownerId: user.id,
+        categoryId: cat.id,
+        districtId: dist.id,
+        vertical: cat.vertical,
+        title: `${cat.nameAz} — nümunə elan`,
+        slug,
+        description: `${cat.nameAz} kateqoriyasında nümunə elan. Ətraflı məlumat üçün satıcı ilə əlaqə saxlayın.`,
+        price: isJob ? null : 50 + (idx % 20) * 25,
+        priceType: isJob ? 'negotiable' : 'fixed',
+        currency: 'AZN',
+        status: 'active',
+        source: 'manual',
+        contactName: DEMO_SELLER.fullName,
+        contactPhone: '+994501112233',
+        contactWhatsapp: true,
+        publishedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 86_400_000),
+      },
+    });
+    await prisma.listingImage.createMany({
+      data: [0, 1].map((n) => ({
+        listingId: listing.id,
+        url: `https://picsum.photos/seed/${slug}-${n}/600/450`,
+        width: 600,
+        height: 450,
+        sortOrder: n,
+      })),
+    });
+    filled++;
+    idx++;
+  }
+  console.log(`  fill empty categories: ${filled} əlavə`);
+}
+
 // Kateqoriya listingsCount (alt-ağac daxil) hesabla və yenilə
 async function seedCategoryCounts(): Promise<void> {
   const cats = await prisma.category.findMany({ select: { id: true, parentId: true } });
@@ -206,6 +267,7 @@ async function main(): Promise<void> {
   await seedCategories();
   await seedBrands();
   await seedListings();
+  await seedFillEmptyCategories();
   await seedCategoryCounts();
   console.log('✅ Seed tamam.');
 }
