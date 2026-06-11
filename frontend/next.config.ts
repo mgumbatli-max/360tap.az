@@ -11,6 +11,8 @@ const config: NextConfig = {
       { protocol: 'http', hostname: 'localhost', port: '5500', pathname: '/uploads/**' },
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'picsum.photos' },
+      { protocol: 'https', hostname: 'tap360-api.onrender.com' }, // backend yüklənmiş şəkillər
+      { protocol: 'https', hostname: '*.onrender.com' },
     ],
   },
   async rewrites() {

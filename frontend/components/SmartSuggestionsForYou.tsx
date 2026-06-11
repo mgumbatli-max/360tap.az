@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, Heart, MapPin } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { api, formatPrice } from '@/lib/api';
 
 export default function SmartSuggestionsForYou() {
@@ -24,8 +25,8 @@ export default function SmartSuggestionsForYou() {
         {items.map((it) => (
           <Link key={it.id} href={`/elanlar/${it.id}`} className="card p-2 group hover:-translate-y-0.5 transition relative">
             <span className="absolute top-3 left-3 z-10 px-1.5 py-0.5 bg-violet-500 text-white text-[9px] font-bold rounded backdrop-blur">AI</span>
-            <div className="aspect-square bg-ink-100 rounded-lg overflow-hidden mb-2">
-              {it.media?.[0]?.url && <img src={it.media[0].url} alt={it.title} className="w-full h-full object-cover group-hover:scale-105 transition" />}
+            <div className="relative aspect-square bg-ink-100 rounded-lg overflow-hidden mb-2">
+              {it.media?.[0]?.url && <Image src={it.media[0].url} alt={it.title} fill sizes="(max-width: 768px) 50vw, 180px" className="object-cover group-hover:scale-105 transition" />}
             </div>
             <div className="font-bold text-sm">{formatPrice(it.price, it.currency)}</div>
             <div className="text-xs text-ink-600 line-clamp-1">{it.title}</div>

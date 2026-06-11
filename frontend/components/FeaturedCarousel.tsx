@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Crown } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatPrice2 } from '@/lib/currency';
@@ -46,7 +47,7 @@ export default function FeaturedCarousel() {
           >
             <div className="relative aspect-square bg-ink-100 rounded-lg overflow-hidden mb-2">
               {it.media?.[0]?.url && (
-                <img src={it.media[0].url} alt={it.title} className="w-full h-full object-cover group-hover:scale-105 transition" />
+                <Image src={it.media[0].url} alt={it.title} fill sizes="(max-width: 640px) 50vw, 240px" className="object-cover group-hover:scale-105 transition" />
               )}
               {it.is_vip && (
                 <span className="absolute top-2 left-2 badge badge-trusted">

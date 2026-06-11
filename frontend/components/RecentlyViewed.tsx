@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { History } from 'lucide-react';
 import { getRecent } from '@/lib/recent';
 
@@ -24,8 +25,8 @@ export default function RecentlyViewed() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {items.map((it) => (
           <Link key={it.id} href={`/elanlar/${it.id}`} className="card p-2 group">
-            <div className="aspect-square bg-ink-100 rounded-lg overflow-hidden mb-2">
-              {it.cover && <img src={it.cover} alt={it.title} className="w-full h-full object-cover group-hover:scale-105 transition" />}
+            <div className="relative aspect-square bg-ink-100 rounded-lg overflow-hidden mb-2">
+              {it.cover && <Image src={it.cover} alt={it.title} fill sizes="(max-width: 768px) 50vw, 180px" className="object-cover group-hover:scale-105 transition" />}
             </div>
             <div className="font-bold text-sm">{it.price ? `${Number(it.price).toLocaleString('az-AZ')} ${it.currency || '₼'}` : 'Razılaşma'}</div>
             <div className="text-xs text-ink-600 line-clamp-1 mt-0.5">{it.title}</div>
