@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import Gallery from '@/components/Gallery';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import MessageSeller from '@/components/MessageSeller';
+import SellerReviews from '@/components/SellerReviews';
+import ReportButton from '@/components/ReportButton';
 
 const API = process.env.API_ORIGIN
   ? `${process.env.API_ORIGIN}/api/v1`
@@ -130,6 +132,8 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 {l.description}
               </p>
             </div>
+
+            <SellerReviews sellerId={l.ownerId} listingId={l.id} />
           </div>
 
           {/* Sağ: qiymət + əlaqə */}
@@ -194,6 +198,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               <MessageSeller listingId={l.id} ownerId={l.ownerId} />
 
               <p className="text-ink-400 text-xs mt-3">Baxış sayı: {l.views ?? 0}</p>
+              <ReportButton listingId={l.id} />
             </div>
           </aside>
         </div>

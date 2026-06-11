@@ -31,15 +31,14 @@ export default function SaveSearchButton({ filters }: { filters: Record<string, 
     }
     setSaving(true);
     try {
-      const { q, ...rest } = filters;
+      // NestJS DTO: query = bütün filtrlər (obyekt), notify (boolean)
+      const query: Record<string, string> = {};
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v) query[k] = v;
+      });
       await api('/saved-searches', {
         method: 'POST',
-        body: JSON.stringify({
-          name: name.trim(),
-          query: q || null,
-          filters: rest,
-          notify_email: true,
-        }),
+        body: JSON.stringify({ name: name.trim(), query, notify: true }),
       });
       toast.success('Axtarış saxlanıldı! Yeni elan gələndə xəbər tutacaqsınız.');
       setSaved(true);

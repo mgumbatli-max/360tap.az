@@ -3,39 +3,50 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import ProfileLayout from '@/components/ProfileLayout';
 import { api, timeAgo } from '@/lib/api';
-import { Bookmark, Bell, Trash2, Search } from 'lucide-react';
+import { Bookmark, Trash2, Search } from 'lucide-react';
+
+type Saved = {
+  id: string;
+  name: string | null;
+  query: Record<string, string> | null;
+  notify: boolean;
+  createdAt: string;
+};
 
 export default function SavedSearchesPage() {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Saved[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
     setLoading(true);
-    api<{ items: any[] }>('/saved-searches')
-      .then((d) => setItems(d.items ?? []))
+    api<{ data?: Saved[] }>('/saved-searches')
+      .then((d) => setItems(d.data ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const remove = async (id: string) => {
     if (!confirm('Bu saxlanmış axtarışı silmək istəyirsiniz?')) return;
-    await api(`/saved-searches/${id}`, { method: 'DELETE' });
+    await api(`/saved-searches/${id}`, { method: 'DELETE' }).catch(() => {});
     setItems((p) => p.filter((x) => x.id !== id));
   };
 
-  const buildUrl = (s: any): string => {
+  const buildUrl = (s: Saved): string => {
     const params = new URLSearchParams();
-    if (s.query) params.set('q', s.query);
-    Object.entries(s.filters || {}).forEach(([k, v]) => v && params.set(k, String(v)));
+    Object.entries(s.query || {}).forEach(([k, v]) => {
+      if (v) params.set(k, String(v));
+    });
     return `/elanlar?${params.toString()}`;
   };
 
   return (
     <ProfileLayout>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-extrabold text-ink-900">Saxlanmış axtarışlar</h1>
+        <h1 className="text-2xl font-extrabold text-ink-900 dark:text-white">Saxlanmış axtarışlar</h1>
       </div>
 
       {loading ? (
@@ -43,46 +54,43 @@ export default function SavedSearchesPage() {
       ) : items.length === 0 ? (
         <div className="card p-12 text-center">
           <Bookmark className="w-12 h-12 text-ink-300 mx-auto mb-3" />
-          <p className="text-ink-600 mb-3">Saxlanmış axtarış yoxdur</p>
+          <p className="text-ink-600 dark:text-ink-300 mb-3">Saxlanmış axtarış yoxdur</p>
           <p className="text-sm text-ink-400 mb-5">
-            Axtarış səhifəsində filtri tətbiq edib "Saxlamaq" düyməsinə basın — yeni uyğun elan gələndə bildiriş alacaqsınız.
+            Elanlar səhifəsində filtr tətbiq edib “Bu axtarışı yadda saxla” düyməsinə basın.
           </p>
-          <Link href="/elanlar" className="btn-tap inline-flex">Elanlara bax</Link>
+          <Link href="/elanlar" className="btn-tap inline-flex">
+            Elanlara bax
+          </Link>
         </div>
       ) : (
-        <div className="card divide-y divide-ink-100">
+        <div className="card divide-y divide-ink-100 dark:divide-ink-800">
           {items.map((s) => (
             <div key={s.id} className="p-4 flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-tap-50 text-tap flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-lg bg-tap-50 dark:bg-ink-800 text-tap flex items-center justify-center shrink-0">
                 <Search className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
-                <Link href={buildUrl(s)} className="font-semibold hover:text-tap">
-                  {s.name}
+                <Link href={buildUrl(s)} className="font-semibold text-ink-900 dark:text-white hover:text-tap">
+                  {s.name || 'Axtarış'}
                 </Link>
                 <div className="flex flex-wrap gap-1.5 mt-1">
-                  {s.query && <span className="badge badge-ad">"{s.query}"</span>}
-                  {Object.entries(s.filters || {}).map(([k, v]) => (
-                    v ? <span key={k} className="badge badge-ad">{k}: {String(v)}</span> : null
-                  ))}
+                  {Object.entries(s.query || {}).map(([k, v]) =>
+                    v ? (
+                      <span key={k} className="badge badge-ad">
+                        {k === 'q' ? `"${v}"` : `${k}: ${String(v)}`}
+                      </span>
+                    ) : null,
+                  )}
                 </div>
-                <div className="text-xs text-ink-400 mt-1.5">Yaradılıb: {timeAgo(s.created_at)}</div>
+                <div className="text-xs text-ink-400 mt-1.5">Yaradılıb: {timeAgo(s.createdAt)}</div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  className={`p-2 rounded ${s.notify_email ? 'text-tap' : 'text-ink-400'} hover:bg-ink-50`}
-                  aria-label="Bildirişi tənzimlə"
-                >
-                  <Bell className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => remove(s.id)}
-                  className="p-2 rounded text-red-500 hover:bg-red-50"
-                  aria-label="Sil"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              <button
+                onClick={() => remove(s.id)}
+                className="p-2 rounded text-red-500 hover:bg-red-50 dark:hover:bg-ink-800 shrink-0"
+                aria-label="Sil"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           ))}
         </div>

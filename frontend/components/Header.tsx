@@ -10,6 +10,7 @@ import MegaMenu from './MegaMenu';
 import AuthModal from './AuthModal';
 import CityPicker from './CityPicker';
 import ThemeToggle from './ThemeToggle';
+import NotificationBell from './NotificationBell';
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -137,6 +138,7 @@ export default function Header() {
             >
               <Heart className="w-5 h-5 text-ink-700 dark:text-ink-200" />
             </Link>
+            <NotificationBell />
             {/* Mobil hamburger */}
             <button
               type="button"

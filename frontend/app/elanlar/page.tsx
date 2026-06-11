@@ -2,6 +2,7 @@ import Link from 'next/link';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import CategoryFilters, { type CatAttr } from '@/components/CategoryFilters';
 import InfiniteListings from '@/components/InfiniteListings';
+import SaveSearchButton from '@/components/SaveSearchButton';
 import { meiliSearch, type MeiliHit } from '@/lib/meili';
 
 function mapMeiliHit(h: MeiliHit): Listing {
@@ -258,6 +259,9 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
                   {s.name}
                 </Link>
               ))}
+            </div>
+            <div className="mb-4">
+              <SaveSearchButton filters={sp as Record<string, string>} />
             </div>
             {catAttrs.length > 0 && <CategoryFilters attributes={catAttrs} />}
           </>
