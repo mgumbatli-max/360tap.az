@@ -70,11 +70,55 @@ const JOB_ATTRS: SeedAttr[] = [
   { key: 'experience', labelAz: 'Təcrübə', type: 'select', options: ['Təcrübəsiz', '1 ilədək', '1-3 il', '3-5 il', '5+ il'] },
 ];
 
+const COND: SeedAttr = { key: 'condition', labelAz: 'Vəziyyəti', type: 'select', options: ['Yeni', 'İşlənmiş'] };
+const LAPTOP_ATTRS: SeedAttr[] = [
+  { key: 'brand', labelAz: 'Marka', type: 'select', options: ['Apple', 'Asus', 'HP', 'Lenovo', 'Dell', 'Acer', 'MSI', 'Digər'] },
+  { key: 'ram', labelAz: 'RAM', type: 'select', options: ['8GB', '16GB', '32GB', '64GB'] },
+  COND,
+];
+const TABLET_ATTRS: SeedAttr[] = [
+  { key: 'brand', labelAz: 'Marka', type: 'select', options: ['Apple', 'Samsung', 'Huawei', 'Lenovo', 'Digər'] },
+  COND,
+];
+const TV_ATTRS: SeedAttr[] = [
+  { key: 'brand', labelAz: 'Marka', type: 'select', options: ['Samsung', 'LG', 'Sony', 'Xiaomi', 'TCL', 'Digər'] },
+  { key: 'screen', labelAz: 'Ekran ölçüsü', type: 'select', options: ['32"', '43"', '50"', '55"', '65"', '75"'] },
+];
+const MOTO_ATTRS: SeedAttr[] = [
+  { key: 'brand', labelAz: 'Marka', type: 'select', options: ['Honda', 'Yamaha', 'Suzuki', 'BMW', 'KTM', 'Digər'] },
+  { key: 'year', labelAz: 'Buraxılış ili', type: 'number', unit: 'il' },
+];
+const HOUSE_ATTRS: SeedAttr[] = [
+  { key: 'deal_type', labelAz: 'Əməliyyat', type: 'select', options: ['Alış', 'Kirayə', 'Günlük'] },
+  { key: 'rooms', labelAz: 'Otaq sayı', type: 'number' },
+  { key: 'area', labelAz: 'Sahə', type: 'number', unit: 'm²' },
+];
+const LAND_ATTRS: SeedAttr[] = [
+  { key: 'deal_type', labelAz: 'Əməliyyat', type: 'select', options: ['Alış', 'Kirayə'] },
+  { key: 'area', labelAz: 'Sahə', type: 'number', unit: 'sot' },
+];
+const APPLIANCE_ATTRS: SeedAttr[] = [
+  { key: 'brand', labelAz: 'Marka', type: 'select', options: ['Bosch', 'Samsung', 'LG', 'Beko', 'Indesit', 'Whirlpool', 'Digər'] },
+  COND,
+];
+const CLOTHING_ATTRS: SeedAttr[] = [
+  { key: 'size', labelAz: 'Ölçü', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'] },
+  COND,
+];
+const SHOE_ATTRS: SeedAttr[] = [
+  { key: 'size', labelAz: 'Ölçü', type: 'select', options: ['36', '37', '38', '39', '40', '41', '42', '43', '44', '45'] },
+  COND,
+];
+const BIKE_ATTRS: SeedAttr[] = [
+  { key: 'brand', labelAz: 'Marka', type: 'select', options: ['Trek', 'Giant', 'Merida', 'Cube', 'Scott', 'Digər'] },
+  COND,
+];
+
 export const CATEGORIES: SeedCategory[] = [
   // 1) NƏQLİYYAT
   c('neqliyyat', 'Nəqliyyat', 'transport', [
     c('avtomobiller', 'Avtomobillər', 'transport', undefined, CAR_ATTRS),
-    c('motosikletler', 'Motosiklet və mopedlər', 'transport'),
+    c('motosikletler', 'Motosiklet və mopedlər', 'transport', undefined, MOTO_ATTRS),
     c('yuk-avtobus', 'Yük maşınları və avtobuslar', 'transport'),
     c('xususi-texnika', 'Xüsusi texnika', 'transport'),
     c('su-neqliyyati', 'Su nəqliyyatı', 'transport'),
@@ -85,8 +129,8 @@ export const CATEGORIES: SeedCategory[] = [
   // 2) DAŞINMAZ ƏMLAK
   c('dasinmaz-emlak', 'Daşınmaz əmlak', 'realestate', [
     c('menziller', 'Mənzillər', 'realestate', undefined, FLAT_ATTRS),
-    c('heyet-evleri', 'Həyət evləri və villalar', 'realestate'),
-    c('torpaq', 'Torpaq sahələri', 'realestate'),
+    c('heyet-evleri', 'Həyət evləri və villalar', 'realestate', undefined, HOUSE_ATTRS),
+    c('torpaq', 'Torpaq sahələri', 'realestate', undefined, LAND_ATTRS),
     c('obyekt-ofis', 'Obyektlər və ofislər', 'realestate'),
     c('qaraj-parking', 'Qarajlar və parkinqlər', 'realestate'),
     c('xaricde-emlak', 'Xaricdə əmlak', 'realestate'),
@@ -111,21 +155,21 @@ export const CATEGORIES: SeedCategory[] = [
   c('elektronika', 'Elektronika', 'universal', [
     c('telefonlar', 'Telefonlar və aksesuarlar', 'universal', [
       c('mobil-telefonlar', 'Mobil telefonlar', 'universal', undefined, PHONE_ATTRS),
-      c('planshetler', 'Planşetlər', 'universal'),
+      c('planshetler', 'Planşetlər', 'universal', undefined, TABLET_ATTRS),
       c('smart-saatlar', 'Smart saatlar və qoldaqlar', 'universal'),
       c('telefon-aksesuar', 'Aksesuarlar', 'universal'),
       c('telefon-ehtiyat', 'Ehtiyat hissələri', 'universal'),
     ]),
     c('komputerler', 'Kompüterlər', 'universal', [
-      c('noutbuklar', 'Noutbuklar', 'universal'),
-      c('masaustu', 'Masaüstü kompüterlər', 'universal'),
+      c('noutbuklar', 'Noutbuklar', 'universal', undefined, LAPTOP_ATTRS),
+      c('masaustu', 'Masaüstü kompüterlər', 'universal', undefined, LAPTOP_ATTRS),
       c('monitorlar', 'Monitorlar', 'universal'),
       c('komplektlesdirici', 'Komplektləşdirici', 'universal'),
       c('periferiya', 'Periferiya və aksesuar', 'universal'),
       c('shebeke', 'Şəbəkə avadanlığı', 'universal'),
     ]),
     c('tv-audio', 'TV, audio, video', 'universal', [
-      c('televizorlar', 'Televizorlar', 'universal'),
+      c('televizorlar', 'Televizorlar', 'universal', undefined, TV_ATTRS),
       c('audio', 'Audio sistemlər', 'universal'),
       c('foto-video', 'Foto və video kameralar', 'universal'),
     ]),
@@ -135,9 +179,9 @@ export const CATEGORIES: SeedCategory[] = [
 
   // 5) EV VƏ BAĞ
   c('ev-bag', 'Ev və bağ', 'universal', [
-    c('mebel', 'Mebel', 'universal'),
-    c('iri-texnika', 'İri məişət texnikası', 'universal'),
-    c('xirda-texnika', 'Xırda məişət texnikası', 'universal'),
+    c('mebel', 'Mebel', 'universal', undefined, [COND]),
+    c('iri-texnika', 'İri məişət texnikası', 'universal', undefined, APPLIANCE_ATTRS),
+    c('xirda-texnika', 'Xırda məişət texnikası', 'universal', undefined, APPLIANCE_ATTRS),
     c('qab-qacaq', 'Qab-qacaq və mətbəx', 'universal'),
     c('tekstil-xalca', 'Tekstil və xalçalar', 'universal'),
     c('isiq-dekor', 'İşıqlandırma və dekor', 'universal'),
@@ -146,9 +190,9 @@ export const CATEGORIES: SeedCategory[] = [
 
   // 6) ŞƏXSİ ƏŞYALAR
   c('shexsi-esyalar', 'Şəxsi əşyalar', 'universal', [
-    c('qadin-geyim', 'Qadın geyimi', 'universal'),
-    c('kishi-geyim', 'Kişi geyimi', 'universal'),
-    c('ayaqqabi', 'Ayaqqabı', 'universal'),
+    c('qadin-geyim', 'Qadın geyimi', 'universal', undefined, CLOTHING_ATTRS),
+    c('kishi-geyim', 'Kişi geyimi', 'universal', undefined, CLOTHING_ATTRS),
+    c('ayaqqabi', 'Ayaqqabı', 'universal', undefined, SHOE_ATTRS),
     c('aksesuar', 'Aksesuar və çantalar', 'universal'),
     c('saatlar', 'Saatlar', 'universal'),
     c('zergerlik', 'Zərgərlik və bijuteriya', 'universal'),
@@ -186,7 +230,7 @@ export const CATEGORIES: SeedCategory[] = [
   // 10) HOBBİ VƏ ASUDƏ
   c('hobbi-asude', 'Hobbi və asudə', 'universal', [
     c('idman-turizm', 'İdman və turizm', 'universal'),
-    c('velosipedler', 'Velosipedlər', 'universal'),
+    c('velosipedler', 'Velosipedlər', 'universal', undefined, BIKE_ATTRS),
     c('musiqi-aletleri', 'Musiqi alətləri', 'universal'),
     c('kitablar', 'Kitablar və jurnallar', 'universal'),
     c('antikvariat', 'Antikvariat və kolleksiya', 'universal'),

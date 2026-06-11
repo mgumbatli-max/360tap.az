@@ -78,9 +78,9 @@ export const SAMPLE_LISTINGS: SampleListing[] = [
   L('xirda-texnika', 'baki-yasamal', 'Nespresso kofe maşını', 280, 'Az istifadə, kapsulla. Yasamal.', { brand: 'Nespresso' }, { hasDelivery: true }),
 
   // ── Şəxsi əşyalar ──
-  L('kishi-geyim', 'baki-nesimi', 'Kişi dəri gödəkçə', 180, 'Əsl dəri, L ölçü, az geyinilib.', undefined, { hasDelivery: true }),
-  L('qadin-geyim', 'baki-nizami', 'Qadın qış paltosu', 140, 'M ölçü, isti, zərif. Nizami.', undefined, { hasDelivery: true }),
-  L('ayaqqabi', 'gence-merkez', 'Nike Air Max 42', 160, 'Orijinal, yeni kimi. Gəncə.', { brand: 'Nike' }, { hasDelivery: true }),
+  L('kishi-geyim', 'baki-nesimi', 'Kişi dəri gödəkçə', 180, 'Əsl dəri, L ölçü, az geyinilib.', { size: 'L', condition: 'İşlənmiş' }, { hasDelivery: true }),
+  L('qadin-geyim', 'baki-nizami', 'Qadın qış paltosu', 140, 'M ölçü, isti, zərif. Nizami.', { size: 'M', condition: 'İşlənmiş' }, { hasDelivery: true }),
+  L('ayaqqabi', 'gence-merkez', 'Nike Air Max 42', 160, 'Orijinal, yeni kimi. Gəncə.', { brand: 'Nike', size: '42', condition: 'İşlənmiş' }, { hasDelivery: true }),
   L('saatlar', 'baki-sebail', 'Casio Edifice saat', 220, 'Orijinal qutu ilə. Səbail.', { brand: 'Casio' }),
 
   // ── Uşaq aləmi ──
