@@ -23,6 +23,10 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { ListingsModule } from './modules/listings/listings.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { SavedSearchesModule } from './modules/saved-searches/saved-searches.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -53,6 +57,10 @@ import { ChatModule } from './modules/chat/chat.module';
     ListingsModule,
     FavoritesModule,
     ChatModule,
+    NotificationsModule,
+    ReviewsModule,
+    SavedSearchesModule,
+    ReportsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

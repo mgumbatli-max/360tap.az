@@ -5,10 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   // Söhbət başlat və ya tap (alıcı = cari user, satıcı = elan sahibi)
   async start(buyerId: string, listingId: string, message?: string): Promise<{ id: string }> {
@@ -124,6 +128,15 @@ export class ChatService {
       where: { id: convId },
       data: { lastMessageAt: new Date() },
     });
+    // Qarşı tərəfə bildiriş
+    const recipientId = conv.buyerId === userId ? conv.sellerId : conv.buyerId;
+    await this.notifications.create(
+      recipientId,
+      'message',
+      'Yeni mesaj',
+      text.slice(0, 120),
+      { conversationId: convId },
+    );
     return {
       id: msg.id,
       content: msg.content,
