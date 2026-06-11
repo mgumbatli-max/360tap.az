@@ -332,11 +332,33 @@ export class ListingsService {
     if (q.category) {
       const cat = await this.prisma.category.findUnique({
         where: { slug: q.category },
-        select: { id: true, children: { select: { id: true } } },
+        select: { id: true },
       });
-      where.categoryId = cat
-        ? { in: [cat.id, ...cat.children.map((c) => c.id)] }
-        : { in: [] };
+      if (cat) {
+        // Bütün alt-ağacı (istənilən dərinlik) daxil et — kök kateqoriya öz nəvə leaf-lərini də göstərsin
+        // (məs. elektronika → telefonlar → mobil-telefonlar). Əvvəl yalnız birbaşa uşaqlar daxil idi.
+        const all = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
+        const childrenOf = new Map<string, string[]>();
+        for (const c of all) {
+          if (c.parentId) {
+            const arr = childrenOf.get(c.parentId) ?? [];
+            arr.push(c.id);
+            childrenOf.set(c.parentId, arr);
+          }
+        }
+        const ids = [cat.id];
+        const queue = [cat.id];
+        while (queue.length) {
+          const cur = queue.shift()!;
+          for (const ch of childrenOf.get(cur) ?? []) {
+            ids.push(ch);
+            queue.push(ch);
+          }
+        }
+        where.categoryId = { in: ids };
+      } else {
+        where.categoryId = { in: [] };
+      }
     }
 
     if (q.vertical) where.vertical = q.vertical;
