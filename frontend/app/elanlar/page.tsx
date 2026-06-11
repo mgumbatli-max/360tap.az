@@ -1,6 +1,22 @@
 import Link from 'next/link';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import CategoryFilters, { type CatAttr } from '@/components/CategoryFilters';
+import { meiliSearch, type MeiliHit } from '@/lib/meili';
+
+function mapMeiliHit(h: MeiliHit): Listing {
+  return {
+    id: h.id,
+    title: h.title,
+    slug: '',
+    price: h.price ?? null,
+    currency: h.currency ?? 'AZN',
+    price_type: h.priceType ?? 'fixed',
+    is_vip: h.isVip,
+    created_at: h.createdAt ?? new Date(0).toISOString(),
+    city_name: h.regionName ?? undefined,
+    media: h.cover ? [{ url: h.cover, sort_order: 0 }] : [],
+  };
+}
 
 const API = process.env.API_ORIGIN
   ? `${process.env.API_ORIGIN}/api/v1`
@@ -80,7 +96,14 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
   let understanding: Understanding | null = null;
 
   if (sp.q) {
-    // ---- Hibrid axtarış: AI smart (timeout 9s) → boş/uğursuz olsa ani keyword ----
+    // ---- Hibrid axtarış: Meili (typo+sinonim) → AI semantik → keyword ----
+    const hits = await meiliSearch(sp.q, 24);
+    if (hits.length) {
+      items = hits.map(mapMeiliHit);
+      total = hits.length;
+    }
+    // AI fallback (Meili heç nə tapmadısa — mürəkkəb təbii dil)
+    if (items.length === 0)
     try {
       const r = await fetch(`${API}/ai/search`, {
         method: 'POST',
