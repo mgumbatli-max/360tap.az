@@ -160,7 +160,9 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
         const base = key.slice(0, -4);
         attrsObj[base] = { ...(attrsObj[base] as object), max: Number(v) };
       } else {
-        attrsObj[key] = v;
+        // boolean filtrlər `a_<key>=true` STRING göndərir; seed JSON boolean saxlayır →
+        // əsl boolean-a çevir ki, Prisma `equals` uyğunlaşsın (select dəyərləri olduğu kimi qalır)
+        attrsObj[key] = v === 'true' ? true : v === 'false' ? false : v;
       }
     }
     if (Object.keys(attrsObj).length) params.set('attrs', JSON.stringify(attrsObj));

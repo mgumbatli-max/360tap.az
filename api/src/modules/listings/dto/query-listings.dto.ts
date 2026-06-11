@@ -8,7 +8,6 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Max,
   Min,
 } from 'class-validator';
 
@@ -30,5 +29,6 @@ export class QueryListingsDto {
   sort?: 'new' | 'price_asc' | 'price_desc' | 'popular';
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit?: number;
+  // limit > 50 rədd edilmir — service Math.min(limit, 50) ilə clamp edir (böyük səhifələmə qırılmasın)
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) limit?: number;
 }
