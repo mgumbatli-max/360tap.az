@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import ListingCard, { type Listing } from '@/components/ListingCard';
+import CategoryFilters, { type CatAttr } from '@/components/CategoryFilters';
 
 const API = process.env.API_ORIGIN
   ? `${process.env.API_ORIGIN}/api/v1`
@@ -14,6 +15,7 @@ interface SP {
   priceMax?: string;
   sort?: string;
   page?: string;
+  [key: string]: string | undefined; // a_* atribut filtrləri
 }
 
 type NestListing = {
@@ -105,6 +107,12 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
     if (sp.priceMin) params.set('priceMin', sp.priceMin);
     if (sp.priceMax) params.set('priceMax', sp.priceMax);
     if (sp.sort) params.set('sort', sp.sort);
+    // a_* atribut filtrləri → attrs JSON
+    const attrsObj: Record<string, string> = {};
+    for (const [k, v] of Object.entries(sp)) {
+      if (k.startsWith('a_') && v) attrsObj[k.slice(2)] = v;
+    }
+    if (Object.keys(attrsObj).length) params.set('attrs', JSON.stringify(attrsObj));
     params.set('page', String(page));
     params.set('limit', '24');
     try {
@@ -126,6 +134,22 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
   const uChips = understanding
     ? Object.entries(understanding).filter(([, v]) => v != null && v !== '')
     : [];
+
+  // Kateqoriya seçilibsə — onun atribut filtrlərini gətir (Turbo/Bina-stil)
+  let catAttrs: CatAttr[] = [];
+  if (!sp.q && sp.category) {
+    try {
+      const r = await fetch(`${API}/categories/${sp.category}/attributes`, {
+        next: { revalidate: 300 },
+      });
+      if (r.ok) {
+        const d = (await r.json()) as { data?: CatAttr[] };
+        catAttrs = d.data ?? [];
+      }
+    } catch {
+      /* atribut yoxdursa boş */
+    }
+  }
 
   return (
     <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
@@ -188,6 +212,7 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
                 </Link>
               ))}
             </div>
+            {catAttrs.length > 0 && <CategoryFilters attributes={catAttrs} />}
           </>
         )}
 

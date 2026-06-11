@@ -235,9 +235,9 @@ YALNIZ JSON qaytar:
   "price": number | null,
   "currency": "AZN",
   "region": "region slug və ya null",
-  "attributes": { "brend": "...", "model": "...", "rəng": "...", "yaddaş": "...", "vəziyyət": "Yeni/İşlənmiş", ... yalnız uyğun olanlar }
+  "attributes": { "brand": "...", "model": "...", "color": "...", "memory": "...", "condition": "Yeni/İşlənmiş", "year": number, "mileage": number, "fuel": "...", "rooms": number, "area": number — açar adları İNGİLİSCƏ, yalnız uyğun olanları }
 }
-Mövcud kateqoriya slug-ları: ${catList}.
+Atribut açarları MÜTLƏQ ingiliscə olsun (brand, model, color, memory, condition, year, mileage, fuel, transmission, rooms, area, floor). Mövcud kateqoriya slug-ları: ${catList}.
 Qiyməti manatla götür. Region AZ adından slug-a çevir (qəbələ→qebele).`;
 
     const draft = await this.groqJSON(system, text);

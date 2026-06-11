@@ -263,6 +263,21 @@ export class ListingsService {
     if (q.vertical) where.vertical = q.vertical;
     if (q.source) where.source = q.source;
 
+    // Kateqoriya-spesifik atribut filtrləri (JSON path bərabərlik)
+    if (q.attrs) {
+      try {
+        const parsed = JSON.parse(q.attrs) as Record<string, unknown>;
+        const conds: Prisma.ListingWhereInput[] = Object.entries(parsed)
+          .filter(([, v]) => v !== '' && v != null)
+          .map(([key, value]) => ({
+            attributes: { path: [key], equals: value as Prisma.InputJsonValue },
+          }));
+        if (conds.length) where.AND = conds;
+      } catch {
+        /* yanlış JSON → atribut filtri tətbiq olunmur */
+      }
+    }
+
     if (q.priceMin != null || q.priceMax != null) {
       const price: Prisma.DecimalNullableFilter = {};
       if (q.priceMin != null) price.gte = q.priceMin;

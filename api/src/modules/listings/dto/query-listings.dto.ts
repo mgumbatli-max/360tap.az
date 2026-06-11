@@ -17,6 +17,8 @@ export class QueryListingsDto {
   @IsOptional() @IsUUID('4') district?: string; // district id
   @IsOptional() @IsString() category?: string; // category slug
   @IsOptional() @IsString() vertical?: string;
+  // Kateqoriya-spesifik atribut filtrləri: JSON string {"brand":"Apple","fuel":"Benzin"}
+  @IsOptional() @IsString() attrs?: string;
   @IsOptional() @IsEnum(ListingSource) source?: ListingSource;
 
   @IsOptional() @Type(() => Number) @IsNumber() priceMin?: number;
