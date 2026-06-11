@@ -77,13 +77,27 @@ export class SearchService implements OnModuleInit {
         filterableAttributes: ['vertical', 'categorySlug', 'regionSlug', 'districtId', 'source', 'inStock', 'isVip', 'price'],
         sortableAttributes: ['price', 'createdAt'],
         synonyms: {
-          maşın: ['avtomobil'], avtomobil: ['maşın'],
-          telefon: ['smartfon'], smartfon: ['telefon'],
-          ev: ['mənzil', 'menzil'], mənzil: ['ev'],
-          kirayə: ['icarə', 'kiraye'], noutbuk: ['laptop'], iş: ['vakansiya'],
+          maşın: ['avtomobil', 'masin', 'avto'], avtomobil: ['maşın', 'masin'],
+          telefon: ['smartfon', 'mobil'], smartfon: ['telefon'],
+          ev: ['mənzil', 'menzil', 'həyət evi'], mənzil: ['ev', 'menzil'],
+          kirayə: ['icarə', 'kiraye'],
+          kompüter: ['noutbuk', 'laptop', 'komputer', 'macbook'],
+          komputer: ['kompüter', 'noutbuk', 'laptop'],
+          noutbuk: ['laptop', 'kompüter', 'komputer', 'macbook'],
+          laptop: ['noutbuk', 'kompüter'],
+          televizor: ['tv', 'televiziya'], tv: ['televizor'],
+          paltar: ['geyim'], geyim: ['paltar'],
+          iş: ['vakansiya', 'is'], vakansiya: ['iş'],
           ayfon: ['iphone'], aypad: ['ipad'], samsunq: ['samsung'],
+          mersedes: ['mercedes'], bemve: ['bmw'],
         },
       });
+      // İlk dəfə (index boşdursa) avtomatik populyasiya — Meili qoşulan kimi elanlar indekslənir
+      const stats = await this.index.getStats().catch(() => null);
+      if (stats && stats.numberOfDocuments === 0) {
+        const n = await this.reindexActive().catch(() => 0);
+        this.logger.log(`Meili ilk indeksləmə: ${n} elan`);
+      }
     } catch (e) {
       this.logger.warn(`Meili init alınmadı: ${String(e)}`);
     }
@@ -196,9 +210,10 @@ export class SearchService implements OnModuleInit {
       select: {
         id: true, title: true, description: true, price: true, currency: true,
         vertical: true, status: true, source: true, inStock: true, isVip: true,
-        districtId: true, attributes: true, createdAt: true,
+        districtId: true, attributes: true, createdAt: true, priceType: true,
         category: { select: { slug: true, nameAz: true } },
         district: { select: { region: { select: { slug: true, nameAz: true } } } },
+        images: { select: { url: true }, orderBy: { sortOrder: 'asc' }, take: 1 },
       },
     });
   }
@@ -210,7 +225,9 @@ export class SearchService implements OnModuleInit {
       title: l.title,
       description: typeof l.description === 'string' ? l.description.slice(0, 500) : '',
       price: l.price ? Number(l.price) : null,
+      priceType: l.priceType,
       currency: l.currency,
+      cover: l.images[0]?.url ?? null,
       vertical: l.vertical,
       categorySlug: l.category.slug,
       categoryName: l.category.nameAz,

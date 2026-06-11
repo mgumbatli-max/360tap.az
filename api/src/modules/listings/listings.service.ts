@@ -12,6 +12,7 @@ import type { CreateListingDto } from './dto/create-listing.dto';
 import { toListingResponse, type ListingResponse } from './dto/listing-response.dto';
 import type { QueryListingsDto } from './dto/query-listings.dto';
 import { uniqueSlug } from './utils/slug.util';
+import { SearchService } from '../../search/search.service';
 
 const LISTING_TTL_DAYS = 30;
 
@@ -44,6 +45,7 @@ export class ListingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly categories: CategoriesService,
+    private readonly search: SearchService,
   ) {}
 
   /**
@@ -122,6 +124,7 @@ export class ListingsService {
       });
     });
 
+    void this.search.indexListing(created.id); // best-effort, axını qırmır
     return toListingResponse(created);
   }
 
@@ -245,6 +248,7 @@ export class ListingsService {
       data: { status },
       include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
     });
+    void this.search.indexListing(updated.id); // status dəyişdi → index yenilə/sil
     return toListingResponse(updated);
   }
 
@@ -276,6 +280,7 @@ export class ListingsService {
       data,
       include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
     });
+    void this.search.indexListing(updated.id); // redaktə → index yenilə
     return toListingResponse(updated);
   }
 
