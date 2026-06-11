@@ -108,7 +108,10 @@ const themeInitScript = `
 // === BACKEND-İ OYAQ SAXLA (Render free cold-start qarşısı) ===
 // Səhifə açılan kimi backend oyadılır ki, növbəti naviqasiya soyuq olmasın; sonra hər 10 dəq.
 (function() {
-  function ping() { try { fetch('/api/health', { cache: 'no-store' }).catch(function(){}); } catch(e) {} }
+  function ping() {
+    if (document.visibilityState === 'hidden') return; // gizli tab-larda lazımsız ping yox
+    try { fetch('/api/health', { cache: 'no-store' }).catch(function(){}); } catch(e) {}
+  }
   ping();
   setInterval(ping, 600000);
 })();

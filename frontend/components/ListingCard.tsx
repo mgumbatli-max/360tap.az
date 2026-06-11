@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Heart, MapPin, Star, Truck, Crown, Shield, GitCompareArrows } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatPrice, timeAgo } from '@/lib/api';
@@ -98,12 +99,12 @@ export default function ListingCard({ item }: { item: Listing }) {
     <Link href={`/elanlar/${item.id}`} prefetch={true} className="group block transition-transform hover:-translate-y-0.5 duration-300">
       <div className="relative aspect-square bg-gradient-to-br from-ink-100 to-ink-200 dark:from-ink-800 dark:to-ink-700 rounded-2xl overflow-hidden mb-2.5 shadow-sm">
         {cover ? (
-          <img
+          <Image
             src={cover}
             alt={item.title}
-            loading="lazy"
-            decoding="async"
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-ink-400 text-xs">
