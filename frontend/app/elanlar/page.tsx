@@ -96,6 +96,7 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
   let hasMore = false;
   let baseQuery = ''; // client sonsuz scroll üçün API sorğusu (page/limit-siz)
   let catAttrs: CatAttr[] = [];
+  let catName = ''; // backend meta-dan kateqoriya adı (h1)
   let understanding: Understanding | null = null;
 
   if (sp.q) {
@@ -182,13 +183,14 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
           .catch(() => null)
       : Promise.resolve(null);
     const [listD, attrD] = (await Promise.all([listingsP, attrsP])) as [
-      { data?: NestListing[]; meta?: { total: number; hasMore: boolean } } | null,
+      { data?: NestListing[]; meta?: { total: number; hasMore: boolean; categoryName?: string } } | null,
       { data?: CatAttr[] } | null,
     ];
     if (listD) {
       items = (listD.data ?? []).map(mapListing);
       total = listD.meta?.total ?? items.length;
       hasMore = listD.meta?.hasMore ?? false;
+      catName = listD.meta?.categoryName ?? '';
     }
     if (attrD) catAttrs = attrD.data ?? [];
   }
@@ -225,7 +227,7 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
         ) : (
           <>
             <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white mb-1">
-              {sp.category ? sp.category.replace(/-/g, ' ') : 'Bütün elanlar'}
+              {sp.category ? (catName || sp.category.replace(/-/g, ' ')) : 'Bütün elanlar'}
               {sp.region ? ` — ${REGIONS.find((r) => r.slug === sp.region)?.name ?? sp.region}` : ''}
             </h1>
             <p className="text-ink-500 text-sm mb-4">{total} elan tapıldı</p>

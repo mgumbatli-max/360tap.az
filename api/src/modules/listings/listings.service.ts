@@ -21,6 +21,7 @@ export interface ListMeta {
   limit: number;
   total: number;
   hasMore: boolean;
+  categoryName?: string;
 }
 
 /** Atribut options-undan icazəli dəyərləri çıxarır (massiv və ya {choices} formatı). */
@@ -329,12 +330,14 @@ export class ListingsService {
       where.districtId = { in: region.districts.map((d) => d.id) };
     }
 
+    let categoryName: string | undefined;
     if (q.category) {
       const cat = await this.prisma.category.findUnique({
         where: { slug: q.category },
-        select: { id: true },
+        select: { id: true, nameAz: true },
       });
       if (cat) {
+        categoryName = cat.nameAz;
         // Bütün alt-ağacı (istənilən dərinlik) daxil et — kök kateqoriya öz nəvə leaf-lərini də göstərsin
         // (məs. elektronika → telefonlar → mobil-telefonlar). Əvvəl yalnız birbaşa uşaqlar daxil idi.
         const all = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
@@ -430,7 +433,7 @@ export class ListingsService {
 
     return {
       data: items.map(toListingResponse),
-      meta: { page, limit, total, hasMore: page * limit < total },
+      meta: { page, limit, total, hasMore: page * limit < total, categoryName },
     };
   }
 }
