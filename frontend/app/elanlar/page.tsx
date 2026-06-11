@@ -78,13 +78,14 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
   let understanding: Understanding | null = null;
 
   if (sp.q) {
-    // ---- AI axtarış (təbii dil) ----
+    // ---- Hibrid axtarış: AI smart (timeout 9s) → boş/uğursuz olsa ani keyword ----
     try {
       const r = await fetch(`${API}/ai/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: sp.q }),
         cache: 'no-store',
+        signal: AbortSignal.timeout(9000),
       });
       if (r.ok) {
         const d = (await r.json()) as {
@@ -96,7 +97,22 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
         understanding = d.meta?.understanding ?? null;
       }
     } catch {
-      /* AI əlçatmaz */
+      /* AI əlçatmaz / timeout → keyword fallback */
+    }
+    // Fallback: AI heç nə tapmadısa, ani DB keyword axtarışı
+    if (items.length === 0) {
+      try {
+        const r = await fetch(`${API}/listings?q=${encodeURIComponent(sp.q)}&limit=24`, {
+          cache: 'no-store',
+        });
+        if (r.ok) {
+          const d = (await r.json()) as { data?: NestListing[]; meta?: { total: number } };
+          items = (d.data ?? []).map(mapListing);
+          total = d.meta?.total ?? items.length;
+        }
+      } catch {
+        /* backend əlçatmaz */
+      }
     }
   } else {
     // ---- Adi filter axtarış ----

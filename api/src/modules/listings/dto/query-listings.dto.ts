@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 
 export class QueryListingsDto {
+  @IsOptional() @IsString() q?: string; // ani keyword axtarış (title/description)
   @IsOptional() @IsString() region?: string; // region slug
   @IsOptional() @IsUUID('4') district?: string; // district id
   @IsOptional() @IsString() category?: string; // category slug

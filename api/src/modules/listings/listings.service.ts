@@ -92,7 +92,7 @@ export class ListingsService {
           address: dto.address ?? null,
           lat: dto.lat ?? null,
           lng: dto.lng ?? null,
-          status: 'review',
+          status: 'active', // avto-dərc (moderasiya sonra aktivləşdirilə bilər)
           expiresAt,
         },
       });
@@ -262,6 +262,21 @@ export class ListingsService {
 
     if (q.vertical) where.vertical = q.vertical;
     if (q.source) where.source = q.source;
+
+    // Ani keyword axtarış (title VƏ YA description, sözlər OR)
+    if (q.q) {
+      const words = q.q
+        .trim()
+        .split(/\s+/)
+        .filter((w) => w.length >= 2)
+        .slice(0, 6);
+      if (words.length) {
+        where.OR = words.flatMap((w) => [
+          { title: { contains: w, mode: 'insensitive' as const } },
+          { description: { contains: w, mode: 'insensitive' as const } },
+        ]);
+      }
+    }
 
     // Kateqoriya-spesifik atribut filtrləri (JSON path bərabərlik)
     if (q.attrs) {
