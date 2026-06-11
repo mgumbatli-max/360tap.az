@@ -51,4 +51,31 @@ export class ListingsController {
   listMine(@CurrentUser() user: JwtPayload): Promise<ListingResponse[]> {
     return this.listings.listByOwner(user.sub);
   }
+
+  @Post(':id/sold')
+  @HttpCode(HttpStatus.OK)
+  markSold(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ListingResponse> {
+    return this.listings.setStatus(user.sub, id, 'sold');
+  }
+
+  @Post(':id/archive')
+  @HttpCode(HttpStatus.OK)
+  archive(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ListingResponse> {
+    return this.listings.setStatus(user.sub, id, 'archived');
+  }
+
+  @Post(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  reactivate(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<ListingResponse> {
+    return this.listings.setStatus(user.sub, id, 'active');
+  }
 }

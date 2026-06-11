@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ProfileLayout from '@/components/ProfileLayout';
 import { api } from '@/lib/api';
-import { Eye, Heart, Plus, Pencil } from 'lucide-react';
+import { Eye, Heart, Plus, Pencil, CheckCircle, Archive, RefreshCw } from 'lucide-react';
 
 type Item = {
   id: string;
@@ -37,13 +37,30 @@ export default function MyListingsPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('all');
 
-  useEffect(() => {
+  const load = () => {
     // NestJS: { data: ListingResponse[] }
     api<{ data?: Item[] }>('/listings/me/list')
       .then((d) => setItems(d.data ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
+  };
+  useEffect(() => {
+    load();
   }, []);
+
+  const action = async (id: string, type: 'sold' | 'archive' | 'reactivate') => {
+    if (
+      (type === 'sold' || type === 'archive') &&
+      !confirm(type === 'sold' ? 'Satıldı kimi qeyd edilsin?' : 'Arxivləşdirilsin?')
+    )
+      return;
+    try {
+      await api(`/listings/${id}/${type}`, { method: 'POST' });
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Xəta baş verdi');
+    }
+  };
 
   const filtered = tab === 'all' ? items : items.filter((i) => i.status === tab);
 
@@ -126,10 +143,34 @@ export default function MyListingsPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex sm:flex-col gap-2 sm:w-32 shrink-0">
-                  <Link href={`/elanlar/${it.id}`} className="btn-secondary text-xs flex-1 justify-center">
+                <div className="flex flex-wrap sm:flex-col gap-2 sm:w-36 shrink-0">
+                  <Link href={`/elanlar/${it.id}`} className="btn-secondary text-xs flex-1 sm:flex-none justify-center">
                     <Pencil className="w-3.5 h-3.5" /> Bax
                   </Link>
+                  {it.status === 'active' && (
+                    <>
+                      <button
+                        onClick={() => action(it.id, 'sold')}
+                        className="btn-secondary text-xs flex-1 sm:flex-none justify-center"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" /> Satıldı
+                      </button>
+                      <button
+                        onClick={() => action(it.id, 'archive')}
+                        className="btn-secondary text-xs flex-1 sm:flex-none justify-center !text-red-600 !border-red-200 hover:!bg-red-50"
+                      >
+                        <Archive className="w-3.5 h-3.5" /> Arxiv
+                      </button>
+                    </>
+                  )}
+                  {(it.status === 'archived' || it.status === 'sold') && (
+                    <button
+                      onClick={() => action(it.id, 'reactivate')}
+                      className="btn-tap text-xs flex-1 sm:flex-none justify-center"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Aktivləşdir
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

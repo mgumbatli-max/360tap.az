@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { ListingStatus } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CategoriesService } from '../categories/categories.service';
@@ -224,6 +230,22 @@ export class ListingsService {
       include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
     });
     return items.map(toListingResponse);
+  }
+
+  // Status dəyişdir (sahiblik yoxlaması ilə) — satıldı/arxiv/aktiv
+  async setStatus(ownerId: string, id: string, status: ListingStatus): Promise<ListingResponse> {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id },
+      select: { ownerId: true },
+    });
+    if (!listing) throw new NotFoundException('Elan tapılmadı');
+    if (listing.ownerId !== ownerId) throw new ForbiddenException('Bu elan sizə aid deyil');
+    const updated = await this.prisma.listing.update({
+      where: { id },
+      data: { status },
+      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+    });
+    return toListingResponse(updated);
   }
 
   /**
