@@ -286,9 +286,28 @@ async function cleanupTestData(): Promise<void> {
  *   · Default (production-safe): YALNIZ real data — geo + kateqoriyalar + brendlər.
  *   · Demo elanlar üçün açıq şəkildə: SEED_DEMO_LISTINGS=true
  */
+/**
+ * HƏDƏF BAZANI ÇAP ET — yalnız host/db adı (parol və istifadəçi GÖSTƏRİLMİR).
+ * Səbəb: `npm run prisma:seed` Prisma-nın avtomatik `.env` yüklənməsi ilə
+ * SƏSSİZCƏ lokal DB-yə yazır. Production-a seed etdiyini düşünüb lokala
+ * yazmaq real və baş vermiş səhvdir — indi hədəf hər işə salmada görünür.
+ */
+function printTarget(): void {
+  const raw = process.env.DATABASE_URL ?? '';
+  try {
+    const u = new URL(raw);
+    const db = u.pathname.replace(/^\//, '').split('?')[0];
+    const isLocal = /^(localhost|127\.0\.0\.1|::1)$/.test(u.hostname);
+    console.log(`   HƏDƏF DB: ${u.hostname} / ${db}${isLocal ? '   ⚠️  LOKAL BAZA' : '   ☁️  UZAQ BAZA'}`);
+  } catch {
+    console.log('   HƏDƏF DB: (DATABASE_URL oxuna bilmədi)');
+  }
+}
+
 async function main(): Promise<void> {
   const withDemo = process.env.SEED_DEMO_LISTINGS === 'true';
   console.log(`🌱 Seed başladı... (demo elanlar: ${withDemo ? 'BƏLİ' : 'XEYR — yalnız real data'})`);
+  printTarget();
   await seedGeo();
   await seedCategories();
   await seedBrands();
