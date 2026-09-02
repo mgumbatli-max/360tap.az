@@ -271,14 +271,34 @@ async function cleanupTestData(): Promise<void> {
   if (res.count) console.log(`  cleanup: ${res.count} test elan silindi`);
 }
 
+/**
+ * Faza 0 təhlükəsizlik düzəlişi — DEMO ELANLAR ARTIQ OPT-IN-dir.
+ *
+ * Əvvəl `npm run prisma:seed` HƏMİŞƏ ~104 saxta elan yaradırdı:
+ *   · seedListings()            → `demo@360tap.az` («Demo Satıcı») + ~46 nümunə elan
+ *   · seedFillEmptyCategories() → hər boş leaf kateqoriyaya 1 avtomatik elan (~58)
+ *   · hər ikisi picsum.photos placeholder şəkilləri ilə
+ *
+ * Bu, DEMO/dev mühiti üçün faydalıdır, lakin CANLI marketplace-də zərərlidir
+ * (istifadəçi saxta inventar görür, SEO saxta məzmun indeksləyir).
+ *
+ * İndi:
+ *   · Default (production-safe): YALNIZ real data — geo + kateqoriyalar + brendlər.
+ *   · Demo elanlar üçün açıq şəkildə: SEED_DEMO_LISTINGS=true
+ */
 async function main(): Promise<void> {
-  console.log('🌱 Seed başladı...');
+  const withDemo = process.env.SEED_DEMO_LISTINGS === 'true';
+  console.log(`🌱 Seed başladı... (demo elanlar: ${withDemo ? 'BƏLİ' : 'XEYR — yalnız real data'})`);
   await seedGeo();
   await seedCategories();
   await seedBrands();
-  await seedListings();
-  await cleanupTestData();
-  await seedFillEmptyCategories();
+  if (withDemo) {
+    await seedListings();
+    await cleanupTestData();
+    await seedFillEmptyCategories();
+  } else {
+    console.log('  demo elanlar atlandı (aktivləşdirmək üçün: SEED_DEMO_LISTINGS=true)');
+  }
   await seedCategoryCounts();
   console.log('✅ Seed tamam.');
 }
