@@ -1,10 +1,13 @@
 import type { NextConfig } from 'next';
 
 const config: NextConfig = {
-  // Faza 1: ~140 komponentdə köhnə implicit-any tipi borcu var; runtime işləyir.
-  // Deploy-u açmaq üçün build-də type/lint gate keçilir. TODO (Faza 1.5): tipləri düzəlt.
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
+  // Faza 0: build gate BƏRPA OLUNDU.
+  //  · `typescript.ignoreBuildErrors` çıxarıldı — real tip borcu iddia edildiyi kimi
+  //    "~140 komponent" deyil, cəmi 11 xəta idi (hamısı TransportFullFilter.tsx-də,
+  //    səbəb köməkçi komponentlərin `any` proplarıydı). Düzəldildi → tsc təmizdir.
+  //  · `eslint.ignoreDuringBuilds` çıxarıldı — layihədə ESLint ümumiyyətlə
+  //    quraşdırılmamışdı, yəni bu bayraq mövcud olmayan yoxlamanı söndürürdü.
+  //    İndi `eslint.config.mjs` (next/core-web-vitals) var və build-də işləyir.
   images: {
     remotePatterns: [
       { protocol: 'http', hostname: 'localhost', port: '5400', pathname: '/uploads/**' },
@@ -16,22 +19,23 @@ const config: NextConfig = {
     ],
   },
   async rewrites() {
-    // Production (Vercel): API_ORIGIN = deploy olunmuş NestJS backend URL-i.
-    const API = process.env.API_ORIGIN;
-    if (API) {
-      return [
-        { source: '/api/health', destination: `${API}/health` },
-        { source: '/api/:path*', destination: `${API}/api/v1/:path*` },
-      ];
-    }
-    // Dev: NestJS (5500) miqrasiya olunmuş yollar ↔ Express (5400) qalanı.
-    const NEST = 'http://localhost:5500';
-    const EXPRESS = 'http://localhost:5400';
+    // Faza 0 — DEV ↔ PROD PARİTETİ.
+    //
+    // ƏVVƏL: dev-də yalnız /api/health, /api/geo/*, /api/media/* NestJS-ə (5500),
+    // QALAN HƏR ŞEY isə köhnə Express-ə (5400) gedirdi. Production-da isə bütün
+    // /api/* NestJS-ə gedir. Nəticə: 30-dan çox endpoint lokalda "işləyirmiş kimi"
+    // görünürdü, canlıda isə 404 verirdi (məs. /api/ai/*, /api/realestate/*,
+    // /api/voice/*, /api/import/*, /api/cities, /api/auth/send-otp, /api/insights/*).
+    // Bu, sınıq funksiyaların aylarla fərq edilməməsinin əsas səbəbi idi.
+    //
+    // İNDİ: dev və prod EYNİ hədəfə (NestJS) yönləndirir. Express-də qalan, NestJS-ə
+    // köçürülməmiş endpoint-lər artıq lokalda da 404 verir — bu, REALLIQDIR və
+    // problemin gizlənməsindən yaxşıdır. `backend/` qovluğu SİLİNMİR (Faza 1).
+    const API = process.env.API_ORIGIN ?? 'http://localhost:5500';
     return [
-      { source: '/api/health', destination: `${NEST}/health` },
-      { source: '/api/geo/:path*', destination: `${NEST}/api/v1/geo/:path*` },
-      { source: '/api/media/:path*', destination: `${NEST}/api/v1/media/:path*` },
-      { source: '/api/:path*', destination: `${EXPRESS}/api/:path*` },
+      { source: '/api/health', destination: `${API}/health` },
+      { source: '/api/health/ready', destination: `${API}/health/ready` },
+      { source: '/api/:path*', destination: `${API}/api/v1/:path*` },
     ];
   },
   // Qeyd: əvvəl /elanlar?category=dasinmaz-emlak → /emlak → /elanlar dairəvi redirect var idi

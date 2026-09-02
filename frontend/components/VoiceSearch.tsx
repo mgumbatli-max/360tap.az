@@ -179,7 +179,7 @@ export default function VoiceSearch({ onResult }: { onResult?: (text: string) =>
 
             {transcript && (
               <p className="text-lg font-medium text-ink-700 mt-4 px-4 py-3 bg-ink-50 rounded-xl">
-                "{transcript}"
+                &quot;{transcript}&quot;
               </p>
             )}
 
@@ -204,7 +204,7 @@ export default function VoiceSearch({ onResult }: { onResult?: (text: string) =>
 
             {!transcript && status === 'listening' && (
               <p className="text-sm text-ink-500 mt-3">
-                Misal: "Bakıda 2018-ci ildən sonra BMW tap"
+                Misal: &quot;Bakıda 2018-ci ildən sonra BMW tap&quot;
               </p>
             )}
 

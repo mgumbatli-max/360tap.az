@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ListingCard, { type Listing } from '@/components/ListingCard';
@@ -83,7 +84,7 @@ function ListingsContent({ initialItems = [], initialTotal = 0 }: { initialItems
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <nav className="flex items-center gap-1 text-sm text-ink-500 mb-3 overflow-x-auto">
-        <a href="/" className="hover:text-tap">Ana</a>
+        <Link href="/" className="hover:text-tap">Ana</Link>
         <span>/</span>
         <span className="text-ink-900 font-medium">
           {filters.q ? `"${filters.q}" üzrə nəticə` : 'Bütün elanlar'}

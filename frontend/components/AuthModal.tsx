@@ -16,7 +16,11 @@ export default function AuthModal({
   onClose: () => void;
   initialMode?: EmailMode;
 }) {
-  const [method, setMethod] = useState<Method>('phone');  // ⚡ Telefon ilə default
+  // Faza 0: default metod 'phone' idi, lakin telefon-OTP backend-i (POST /auth/send-otp)
+  // NestJS-də MÖVCUD DEYİL → istifadəçi modalı açan kimi işləməyən axına düşürdü.
+  // İşlək metod (email) default edildi; OTP tab-ı qalır, amma aydın "tezliklə" mesajı verir.
+  // Real OTP + SMS provayderi Faza 5-dədir.
+  const [method, setMethod] = useState<Method>('email');
   const [emailMode, setEmailMode] = useState<EmailMode>(initialMode);
   const { login, register } = useAuth();
   const [error, setError] = useState('');

@@ -3,16 +3,37 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import ProfileLayout from '@/components/ProfileLayout';
-import { api } from '@/lib/api';
+import { api, unwrap } from '@/lib/api';
 import { Eye, Heart, MessageCircle, Phone, TrendingUp, ArrowLeft } from 'lucide-react';
 
 export default function ListingStatsPage() {
   const { id } = useParams<{ id: string }>();
   const [listing, setListing] = useState<any>(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    api<{ listing: any }>(`/listings/${id}`).then((d) => setListing(d.listing));
+    // Faza 0: köhnə `d.listing` → `{ ok, data }`. Əvvəl səhifə sonsuz "Yüklənir..."də qalırdı.
+    api<any>(`/listings/${id}`)
+      .then((d) => setListing(unwrap<any>(d, null)))
+      .catch(() => setLoadError(true));
   }, [id]);
+
+  // Faza 0 (§10): xəta halında sonsuz spinner YOX — aydın mesaj + geri yolu.
+  if (loadError) {
+    return (
+      <ProfileLayout>
+        <div className="p-8 text-center">
+          <p className="font-bold text-ink-900 dark:text-white">Statistika yüklənmədi</p>
+          <p className="text-ink-500 mt-1 text-sm">
+            Xidmətdə qısamüddətli problem ola bilər. Bir azdan yenidən cəhd edin.
+          </p>
+          <Link href="/profil/elanlarim" className="btn-secondary inline-flex mt-4">
+            <ArrowLeft className="w-4 h-4" /> Elanlarıma qayıt
+          </Link>
+        </div>
+      </ProfileLayout>
+    );
+  }
 
   if (!listing) return <ProfileLayout><div className="p-8 text-center">Yüklənir...</div></ProfileLayout>;
 

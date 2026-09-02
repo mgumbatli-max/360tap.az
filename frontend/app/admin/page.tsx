@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, unwrapMeta } from '@/lib/api';
 import {
   Users, ListOrdered, Wallet, ShieldAlert, TrendingUp, Crown, Eye, Tag,
 } from 'lucide-react';
@@ -21,10 +21,11 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     // Çox sadə KPI — listings count, users count
+    // Faza 0: say `meta.total`-dadır, kök `total`-da deyil → KPI həmişə "..." göstərirdi.
     Promise.all([
-      api<{ total: number }>('/listings'),
+      api<any>('/listings'),
     ]).then(([l]) => setStats({
-      listings: l.total,
+      listings: unwrapMeta(l).total ?? '—',
       users: '—',
       revenue: '—',
       complaints: '—',

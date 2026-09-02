@@ -6,10 +6,7 @@ import ListingCard, { type Listing } from '@/components/ListingCard';
 import MessageSeller from '@/components/MessageSeller';
 import SellerReviews from '@/components/SellerReviews';
 import ReportButton from '@/components/ReportButton';
-
-const API = process.env.API_ORIGIN
-  ? `${process.env.API_ORIGIN}/api/v1`
-  : 'http://localhost:5500/api/v1';
+import { serverGet } from '@/lib/server-fetch';
 
 function mapSimilar(l: any): Listing {
   return {
@@ -21,20 +18,19 @@ function mapSimilar(l: any): Listing {
   };
 }
 
+// Faza 0: timeout-lu — "oxşar elanlar" bloku backend asılı qalanda bütün
+// detal səhifəsini gözlədə bilməz (ikinci dərəcəli məzmundur).
 async function getSimilar(id: string): Promise<Listing[]> {
-  try {
-    const r = await fetch(`${API}/listings/${id}/similar`, { next: { revalidate: 60 } });
-    if (!r.ok) return [];
-    const d = (await r.json()) as { data?: any[] };
-    return (d.data ?? []).map(mapSimilar);
-  } catch {
-    return [];
-  }
+  const r = await serverGet<any[]>(`/listings/${id}/similar`, {
+    next: { revalidate: 60 },
+    timeoutMs: 3_000,
+  });
+  return (r.data ?? []).map(mapSimilar);
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const l = await getListing(id);
+  const { listing: l } = await getListing(id);
   if (!l) return { title: 'Elan tapılmadı — 360tap.az' };
   const price = l.price != null ? `${Number(l.price).toLocaleString('az-AZ')} ${l.currency}` : 'Razılaşma';
   const loc = [l.districtName, l.regionName].filter(Boolean).join(', ');
@@ -80,21 +76,42 @@ type Detail = {
   images?: { url: string }[];
 };
 
-async function getListing(id: string): Promise<Detail | null> {
-  try {
-    const r = await fetch(`${API}/listings/${id}`, { cache: 'no-store' });
-    if (!r.ok) return null;
-    const d = (await r.json()) as { data?: Detail };
-    return d.data ?? null;
-  } catch {
-    return null;
-  }
+/**
+ * Faza 0: timeout-lu. `unavailable` ayrıca qaytarılır ki, səhifə
+ * "elan tapılmadı" (404) ilə "backend əlçatmaz" (503) hallarını ayırd etsin —
+ * əks halda backend düşəndə bütün mövcud elanlar 404 kimi göstərilirdi.
+ */
+async function getListing(id: string): Promise<{ listing: Detail | null; unavailable: boolean }> {
+  const r = await serverGet<Detail>(`/listings/${id}`, { cache: 'no-store' });
+  return { listing: r.data, unavailable: r.unavailable };
 }
 
 export default async function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const l = await getListing(id);
-  if (!l) notFound();
+  const { listing: l, unavailable } = await getListing(id);
+  if (!l) {
+    if (unavailable) {
+      // Backend əlçatmazdır — elanı "yoxdur" kimi göstərmək yanlışdır.
+      return (
+        <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
+          <div className="max-w-3xl mx-auto px-4 py-16">
+            <div className="card p-12 text-center">
+              <p className="text-ink-900 dark:text-white text-lg font-bold">
+                Elan müvəqqəti yüklənmir
+              </p>
+              <p className="text-ink-500 mt-2">
+                Xidmətdə qısamüddətli problem var. Bir neçə dəqiqədən sonra yenidən yoxlayın.
+              </p>
+              <Link href="/elanlar" className="btn-secondary inline-flex mt-4">
+                Bütün elanlara bax
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    notFound();
+  }
 
   const cover = l.images?.[0]?.url;
   const price =

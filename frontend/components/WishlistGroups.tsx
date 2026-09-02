@@ -31,7 +31,7 @@ export default function WishlistGroups() {
         <button onClick={create} className="btn-tap !py-2 !text-sm">+ Yarat</button>
       </div>
       {groups.length === 0 ? (
-        <p className="text-xs text-ink-500 text-center py-4">Qrup yoxdur. "BMW-lərim", "Bakıda mənzillər" kimi qruplar yaradın</p>
+        <p className="text-xs text-ink-500 text-center py-4">Qrup yoxdur. &quot;BMW-lərim&quot;, &quot;Bakıda mənzillər&quot; kimi qruplar yaradın</p>
       ) : (
         <div className="space-y-1.5">
           {groups.map((g) => (

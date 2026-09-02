@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import {
   CAR_BRANDS, BODY_TYPES, FUEL_TYPES, TRANSMISSION_TYPES, DRIVETRAIN_TYPES,
@@ -229,7 +229,11 @@ export default function TransportFullFilter({
   );
 }
 
-function Section({ title, children }: any) {
+// Faza 0: bu köməkçi komponentlərin propsları `any` idi — buna görə hər
+// `onChange={(v) => ...}` callback-ində `v` implicit any olurdu (11 TS7006 xətası).
+// Kök səbəb propsların tiplənməməsi idi; xətalar suppress edilmədi, tiplər verildi.
+
+function Section({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <div>
       <div className="font-bold text-ink-900 dark:text-white mb-3 text-base">{title}</div>
@@ -238,19 +242,41 @@ function Section({ title, children }: any) {
   );
 }
 
-function Select({ label, value, onChange, options, disabled }: any) {
+type SelectOption = { value: string; label: string };
+
+function Select({
+  label,
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  label?: string;
+  value?: string;
+  onChange: (value: string) => void;
+  options: readonly SelectOption[];
+  disabled?: boolean;
+}) {
   return (
     <div>
       {label && <label className="block text-xs font-medium text-ink-500 mb-1">{label}</label>}
       <select value={value || ''} onChange={(e) => onChange(e.target.value)} disabled={disabled}
         className="input disabled:opacity-50">
-        {options.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
   );
 }
 
-function Pill({ active, onClick, children }: any) {
+function Pill({
+  active,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button onClick={onClick}
       className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition ${
@@ -259,7 +285,15 @@ function Pill({ active, onClick, children }: any) {
   );
 }
 
-function Check({ checked, onChange, label }: any) {
+function Check({
+  checked,
+  onChange,
+  label,
+}: {
+  checked?: boolean;
+  onChange: (checked: boolean) => void;
+  label: ReactNode;
+}) {
   return (
     <label className="flex items-center gap-3 cursor-pointer">
       <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)} className="w-[18px] h-[18px] accent-tap" />

@@ -77,7 +77,7 @@ export default function AIAssistant({
     setLoading(false);
   };
 
-  const useThisTitle = (t: string) => {
+  const applyTitle = (t: string) => {
     onPickTitle?.(t);
     toast.success('Başlıq tətbiq edildi');
   };
@@ -109,7 +109,7 @@ export default function AIAssistant({
           {titles.map((t, i) => (
             <button
               key={i}
-              onClick={() => useThisTitle(t)}
+              onClick={() => applyTitle(t)}
               className="w-full text-left p-2 rounded bg-white hover:bg-amber-100 border border-amber-200 text-sm group"
             >
               <Check className="w-3 h-3 inline mr-1.5 opacity-0 group-hover:opacity-100 text-emerald-500" />

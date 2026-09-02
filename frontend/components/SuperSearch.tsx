@@ -234,7 +234,7 @@ export default function SuperSearch({ open, onClose }: { open: boolean; onClose:
               {data.items.length === 0 && data.categories.length === 0 && data.pages.length === 0 && (
                 <div className="py-12 text-center px-5">
                   <Search className="w-10 h-10 mx-auto text-ink-300 mb-2" />
-                  <p className="text-sm text-ink-500">"<strong>{q}</strong>" üzrə nəticə tapılmadı</p>
+                  <p className="text-sm text-ink-500">&quot;<strong>{q}</strong>&quot; üzrə nəticə tapılmadı</p>
                   {data.suggestions.length > 0 && (
                     <div className="mt-3">
                       <div className="text-xs text-ink-400 mb-2">Bəlkə bunu axtarırsınız?</div>
@@ -252,7 +252,7 @@ export default function SuperSearch({ open, onClose }: { open: boolean; onClose:
               {(data.items.length > 0 || data.categories.length > 0) && (
                 <div className="px-5 py-3 border-t border-ink-100 sticky bottom-0 bg-white dark:bg-[#1c2128]">
                   <button onClick={() => submit()} className="btn-tap w-full text-sm">
-                    "{q}" üzrə bütün nəticələri göstər <ArrowRight className="w-4 h-4" />
+                    &quot;{q}&quot; üzrə bütün nəticələri göstər <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               )}

@@ -22,7 +22,7 @@ export default function SavedMatches() {
       <div className="space-y-1 text-xs">
         {matches.slice(0, 3).map((m) => (
           <div key={m.id} className="flex justify-between">
-            <span className="text-ink-700">"{m.name}"</span>
+            <span className="text-ink-700">&quot;{m.name}&quot;</span>
             <span className="font-bold text-tap">+{m.new_matches} yeni</span>
           </div>
         ))}

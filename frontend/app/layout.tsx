@@ -91,20 +91,11 @@ const themeInitScript = `
     document.documentElement.dataset.mode = 'lite';
   }
 })();
-// === BRAUZER XƏTASINI SERVER-Ə GÖNDƏR ===
-(function() {
-  function send(error, stack, type) {
-    try {
-      fetch('/api/clientlog', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: String(error), stack: stack, type: type, url: location.href, userAgent: navigator.userAgent })
-      }).catch(function(){});
-    } catch(e) {}
-  }
-  window.addEventListener('error', function(e) { send(e.message, e.error && e.error.stack, 'window.error'); });
-  window.addEventListener('unhandledrejection', function(e) { send(e.reason, e.reason && e.reason.stack, 'promise.reject'); });
-})();
+// Faza 0 qeydi: burada hər brauzer xətasını /api/clientlog ünvanına göndərən blok var idi.
+// Həmin endpoint NestJS-də mövcud deyil (yalnız deploy olunmayan legacy Express-də idi),
+// yəni hər xəta əlavə bir 404 sorğusu yaradırdı. Blok çıxarıldı; xətalar brauzer
+// konsolunda onsuz da görünür. Real klient-telemetriyası Faza 1-də ayrıca qurulacaq.
+
 // === BACKEND-İ OYAQ SAXLA (Render free cold-start qarşısı) ===
 // Səhifə açılan kimi backend oyadılır ki, növbəti naviqasiya soyuq olmasın; sonra hər 10 dəq.
 (function() {

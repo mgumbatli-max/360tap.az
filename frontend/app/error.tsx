@@ -10,23 +10,15 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Faza 0:
+  //  · `/api/clientlog` endpoint-i NestJS-də mövcud deyil (yalnız silinmiş Express-də
+  //    var idi) — hər xətada 404 sorğusu göndərilirdi. Çıxarıldı.
+  //  · Stack trace artıq YALNIZ development-də göstərilir (aşağıya bax).
   useEffect(() => {
     console.error('App error:', error);
-    // Send to server log
-    try {
-      fetch('/api/clientlog', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          error: error.message || 'unknown',
-          stack: error.stack || '',
-          type: 'react.error.boundary',
-          url: typeof window !== 'undefined' ? window.location.href : '',
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-        }),
-      });
-    } catch {}
   }, [error]);
+
+  const isDev = process.env.NODE_ENV !== 'production';
 
   return (
     <div className="min-h-[calc(100vh-200px)] flex items-center justify-center px-4 py-10">
@@ -43,20 +35,24 @@ export default function GlobalError({
         {error.digest && (
           <p className="text-xs text-ink-400 mb-2 font-mono">Kod: {error.digest}</p>
         )}
-        <details className="text-left mb-4 mx-auto max-w-full bg-red-50 border border-red-200 rounded-lg p-3 text-xs">
-          <summary className="cursor-pointer font-semibold text-red-700">Texniki detallar</summary>
-          <div className="mt-2 font-mono text-red-800 whitespace-pre-wrap break-all">
-            <strong>Mesaj:</strong> {error.message || 'naməlum'}
-            {error.stack && (
-              <>
-                {'\n\n'}
-                <strong>Stack:</strong>
-                {'\n'}
-                {error.stack.slice(0, 600)}
-              </>
-            )}
-          </div>
-        </details>
+        {isDev && (
+          <details className="text-left mb-4 mx-auto max-w-full bg-red-50 border border-red-200 rounded-lg p-3 text-xs">
+            <summary className="cursor-pointer font-semibold text-red-700">
+              Texniki detallar (yalnız development)
+            </summary>
+            <div className="mt-2 font-mono text-red-800 whitespace-pre-wrap break-all">
+              <strong>Mesaj:</strong> {error.message || 'naməlum'}
+              {error.stack && (
+                <>
+                  {'\n\n'}
+                  <strong>Stack:</strong>
+                  {'\n'}
+                  {error.stack.slice(0, 600)}
+                </>
+              )}
+            </div>
+          </details>
+        )}
         <div className="flex flex-col sm:flex-row gap-2 justify-center mt-4">
           <button onClick={reset} className="btn-tap">
             <RefreshCw className="w-4 h-4" /> Yenidən cəhd et

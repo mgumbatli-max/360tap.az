@@ -33,7 +33,7 @@ export default function AutoCategorize({ title, onSuggest }: { title: string; on
     <div className="card p-3 bg-gradient-to-r from-tap-50 to-violet-50 border-tap/30 flex items-center gap-2 animate-fade-in-up">
       <Sparkles className="w-4 h-4 text-tap shrink-0" />
       <div className="flex-1 text-sm">
-        <strong className="text-tap">AI təklifi:</strong> Kateqoriya "{suggestion.name}" ola bilər
+        <strong className="text-tap">AI təklifi:</strong> Kateqoriya &quot;{suggestion.name}&quot; ola bilər
       </div>
       <button onClick={() => onSuggest(suggestion.slug)} className="text-xs btn-tap !py-1 !px-2">
         <Check className="w-3 h-3" /> Tətbiq

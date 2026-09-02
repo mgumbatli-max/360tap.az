@@ -1,20 +1,6 @@
 import Link from 'next/link';
 import ListingCard, { type Listing } from '@/components/ListingCard';
-
-// SSR: production-da Vercel env API_ORIGIN = Render backend; dev-də lokal NestJS.
-const API = process.env.API_ORIGIN
-  ? `${process.env.API_ORIGIN}/api/v1`
-  : 'http://localhost:5500/api/v1';
-
-async function getJSON(path: string): Promise<{ data?: unknown } | null> {
-  try {
-    const res = await fetch(`${API}${path}`, { next: { revalidate: 30 } });
-    if (!res.ok) return null;
-    return (await res.json()) as { data?: unknown };
-  } catch {
-    return null;
-  }
-}
+import { serverGet } from '@/lib/server-fetch';
 
 type Cat = { id: string; slug: string; nameAz: string; icon?: string | null };
 
@@ -84,12 +70,16 @@ const CAT_ICONS: Record<string, string> = {
 };
 
 export default async function HomePage() {
+  // Hər ikisi timeout-lu və xəta udan (serverGet heç vaxt throw etmir) →
+  // backend düşəndə səhifə asılı qalmır, dərhal fallback ilə render olunur.
   const [catRes, listRes] = await Promise.all([
-    getJSON('/categories'),
-    getJSON('/listings?limit=12'),
+    serverGet<Cat[]>('/categories', { next: { revalidate: 300 } }),
+    serverGet<NestListing[]>('/listings?limit=12', { next: { revalidate: 30 } }),
   ]);
-  const categories = (catRes?.data as Cat[] | undefined) ?? [];
-  const listings = ((listRes?.data as NestListing[] | undefined) ?? []).map(mapListing);
+  const categories = catRes.data ?? [];
+  const listings = (listRes.data ?? []).map(mapListing);
+  // Backend əlçatmazdır (timeout/şəbəkə/5xx) — "elan yoxdur"dan fərqli haldır.
+  const backendDown = listRes.unavailable && catRes.unavailable;
 
   return (
     <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
@@ -165,7 +155,19 @@ export default async function HomePage() {
           </Link>
         </div>
 
-        {listings.length === 0 ? (
+        {backendDown ? (
+          <div className="card p-10 text-center">
+            <p className="text-ink-900 dark:text-white text-lg font-bold">
+              Elanlar müvəqqəti yüklənmir
+            </p>
+            <p className="text-ink-500 mt-2">
+              Xidmətdə qısamüddətli problem var. Bir neçə dəqiqədən sonra yenidən yoxlayın.
+            </p>
+            <Link href="/elanlar" className="btn-secondary inline-flex mt-4">
+              Yenidən cəhd et
+            </Link>
+          </div>
+        ) : listings.length === 0 ? (
           <div className="card p-10 text-center">
             <p className="text-ink-500 text-lg">Hələ elan yoxdur</p>
             <Link href="/elan-yerlesdir" className="btn-tap inline-flex mt-4">

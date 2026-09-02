@@ -6,7 +6,7 @@ export default function TermsPage() {
 
       <Section title="1. Ümumi müddəalar">
         <p>
-          360tap.az saytı (bundan sonra "Sayt") fiziki və hüquqi şəxslərin elan yerləşdirməsi və axtarması
+          360tap.az saytı (bundan sonra &quot;Sayt&quot;) fiziki və hüquqi şəxslərin elan yerləşdirməsi və axtarması
           üçün universal platformadır. Sayta daxil olmaqla siz bu qaydaları qəbul etmiş sayılırsınız.
         </p>
       </Section>

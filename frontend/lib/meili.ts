@@ -20,7 +20,14 @@ export type MeiliHit = {
   createdAt?: string;
 };
 
-export async function meiliSearch(q: string, limit = 24): Promise<MeiliHit[]> {
+/**
+ * Faza 0: timeout parametrləşdirildi. Axtarış zənciri (Meili → AI → keyword)
+ * ardıcıl işlədiyi üçün hər mərhələnin sabit timeout-u cəmlənib səhifəni
+ * 15-20 saniyə gözlədə bilirdi; indi çağıran tərəf ümumi büdcədən pay ayırır.
+ * timeoutMs <= 0 olduqda sorğu ümumiyyətlə göndərilmir.
+ */
+export async function meiliSearch(q: string, limit = 24, timeoutMs = 4000): Promise<MeiliHit[]> {
+  if (timeoutMs <= 0) return [];
   try {
     const r = await fetch(`${MEILI_HOST}/indexes/listings/search`, {
       method: 'POST',
@@ -30,7 +37,7 @@ export async function meiliSearch(q: string, limit = 24): Promise<MeiliHit[]> {
       },
       body: JSON.stringify({ q, limit }),
       cache: 'no-store',
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!r.ok) return [];
     const d = (await r.json()) as { hits?: MeiliHit[] };

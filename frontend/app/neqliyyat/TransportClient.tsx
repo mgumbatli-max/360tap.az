@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import TransportTopBar from '@/components/TransportTopBar';
@@ -71,7 +72,7 @@ export default function TransportClient({ initialItems = [], initialTotal = 0 }:
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <nav className="text-sm text-ink-500 mb-3">
-        <a href="/" className="hover:text-tap">Ana</a> / <span className="text-ink-900 font-medium">Nəqliyyat</span>
+        <Link href="/" className="hover:text-tap">Ana</Link> / <span className="text-ink-900 font-medium">Nəqliyyat</span>
       </nav>
 
       <div className="card p-5 mb-4 bg-gradient-to-br from-red-50 via-orange-50 to-amber-50 border-red-200">

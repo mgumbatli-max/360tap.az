@@ -26,7 +26,13 @@ export default function BulkUploadPage() {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
-      setError('Şablon yüklənmədi');
+      // Faza 0 (§10): /api/import/* NestJS-ə köçürülməyib (yalnız legacy Express-də idi).
+      // İstifadəçi səssiz uğursuzluq yox, səbəbi görür.
+      setError(
+        res.status === 404
+          ? 'Toplu yükləmə hazırda əlçatan deyil (funksiya köçürülmə mərhələsindədir).'
+          : 'Şablon yüklənmədi',
+      );
       return;
     }
     const blob = await res.blob();
@@ -170,7 +176,7 @@ export default function BulkUploadPage() {
             <div className="flex-1">
               <h2 className="font-bold text-ink-900">Yoxla və ya birbaşa yüklə</h2>
               <p className="text-sm text-ink-600 mt-1">
-                "Yoxla" — sadəcə validasiya edir, heç nə dərc etmir. "Yüklə" — bütün düzgün sətirləri elan kimi yaradır.
+                &quot;Yoxla&quot; — sadəcə validasiya edir, heç nə dərc etmir. &quot;Yüklə&quot; — bütün düzgün sətirləri elan kimi yaradır.
               </p>
               <div className="flex gap-2 mt-3">
                 <button onClick={() => submit(true)} disabled={uploading} className="btn-secondary disabled:opacity-50">

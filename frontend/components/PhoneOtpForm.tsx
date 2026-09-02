@@ -52,7 +52,12 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
       // İlk inputa fokuslan
       setTimeout(() => codeRefs.current[0]?.focus(), 100);
     } catch (err: any) {
-      setError(err.message || 'SMS göndərilmədi');
+      // Faza 0 (§10): endpoint hazırda mövcud deyil (Faza 5-də qurulacaq) —
+      // istifadəçiyə xam API xətası yox, aydın izah göstərilir.
+      setError(
+        'Telefonla giriş hazırda əlçatan deyil. Zəhmət olmasa email ilə daxil olun.',
+      );
+      if (process.env.NODE_ENV !== 'production') console.warn('[otp] send-otp:', err?.message);
     } finally { setLoading(false); }
   };
 

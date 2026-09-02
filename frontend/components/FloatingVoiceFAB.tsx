@@ -154,7 +154,7 @@ export default function FloatingVoiceFAB() {
               {status === 'done' && '✓ Hazırdır!'}
             </h3>
             {transcript && (
-              <p className="text-lg font-medium px-4 py-3 bg-ink-50 dark:bg-ink-800 rounded-xl mt-4">"{transcript}"</p>
+              <p className="text-lg font-medium px-4 py-3 bg-ink-50 dark:bg-ink-800 rounded-xl mt-4">&quot;{transcript}&quot;</p>
             )}
             {parsed && (
               <div className="mt-4 text-sm text-tap font-bold flex items-center justify-center gap-2">
@@ -163,7 +163,7 @@ export default function FloatingVoiceFAB() {
             )}
             {!transcript && status === 'listening' && (
               <p className="text-sm text-ink-500 mt-3">
-                Misallar: "BMW axtar", "yeni elan", "favoritlərim"
+                Misallar: &quot;BMW axtar&quot;, &quot;yeni elan&quot;, &quot;favoritlərim&quot;
               </p>
             )}
           </div>

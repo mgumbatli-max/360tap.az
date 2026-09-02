@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ListingCard, { type Listing } from '@/components/ListingCard';
@@ -91,7 +92,7 @@ export default function RealEstateClient() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <nav className="text-sm text-ink-500 mb-3">
-        <a href="/" className="hover:text-tap">Ana</a> / <span className="text-ink-900 font-medium">Daşınmaz əmlak</span>
+        <Link href="/" className="hover:text-tap">Ana</Link> / <span className="text-ink-900 font-medium">Daşınmaz əmlak</span>
       </nav>
 
       {/* Hero */}
@@ -170,7 +171,7 @@ export default function RealEstateClient() {
         <Sparkles className="w-5 h-5 text-tap shrink-0" />
         <div className="text-sm">
           <strong className="text-tap">AI tövsiyəsi:</strong>{' '}
-          <span className="text-ink-700">"Bakı, 2-3 otaq, 80-120 m², 100-150K ₼ aralığı" — sizin profilinizə görə ən çox baxılan diapazon</span>
+          <span className="text-ink-700">&quot;Bakı, 2-3 otaq, 80-120 m², 100-150K ₼ aralığı&quot; — sizin profilinizə görə ən çox baxılan diapazon</span>
         </div>
       </div>
 

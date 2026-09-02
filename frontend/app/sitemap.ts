@@ -13,6 +13,28 @@ const API = process.env.API_ORIGIN
   ? `${process.env.API_ORIGIN}/api/v1`
   : 'http://localhost:5500/api/v1';
 
+// Faza 0: sitemap generasiyası backend asılı qalanda build/ISR revalidate-i
+// bloklaya bilməz. Həmçinin uğursuzluqlar artıq SƏSSİZ udulmur — loglanır,
+// çünki canlıda sitemap sükutla 5 URL-ə düşmüşdü və bunu heç nə göstərmirdi.
+const SITEMAP_TIMEOUT_MS = 8_000;
+
+async function fetchJson(url: string, revalidate: number, label: string): Promise<any | null> {
+  try {
+    const r = await fetch(url, {
+      next: { revalidate },
+      signal: AbortSignal.timeout(SITEMAP_TIMEOUT_MS),
+    });
+    if (!r.ok) {
+      console.warn(`[sitemap] ${label} → HTTP ${r.status}`);
+      return null;
+    }
+    return await r.json();
+  } catch (e) {
+    console.warn(`[sitemap] ${label} → alınmadı: ${e instanceof Error ? e.name : String(e)}`);
+    return null;
+  }
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const urls: MetadataRoute.Sitemap = [];
@@ -22,55 +44,37 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   });
 
   // Kateqoriyalar → /elanlar?category=
-  try {
-    const r = await fetch(`${API}/categories`, { next: { revalidate: 3600 } });
-    if (r.ok) {
-      const d = await r.json();
-      const flat: { slug: string }[] = [];
-      const walk = (arr: { slug: string; children?: unknown[] }[]) =>
-        arr.forEach((c) => {
-          flat.push(c);
-          if (Array.isArray(c.children)) walk(c.children as typeof arr);
-        });
-      walk(d.data ?? []);
-      flat.forEach((c) =>
-        urls.push({ url: `${SITE.url}/elanlar?category=${c.slug}`, lastModified: now, changeFrequency: 'hourly', priority: 0.8 }),
-      );
-    }
-  } catch {
-    /* ignore */
-  }
+  const catD = await fetchJson(`${API}/categories`, 3600, 'categories');
+  const flat: { slug: string }[] = [];
+  const walk = (arr: { slug: string; children?: unknown[] }[]) =>
+    arr.forEach((c) => {
+      flat.push(c);
+      if (Array.isArray(c.children)) walk(c.children as typeof arr);
+    });
+  walk(catD?.data ?? []);
+  flat.forEach((c) =>
+    urls.push({ url: `${SITE.url}/elanlar?category=${c.slug}`, lastModified: now, changeFrequency: 'hourly', priority: 0.8 }),
+  );
 
   // Regionlar → /elanlar?region=
-  try {
-    const cr = await fetch(`${API}/geo/regions`, { next: { revalidate: 86400 } });
-    if (cr.ok) {
-      const regions = (await cr.json()).data ?? [];
-      regions.forEach((c: { slug: string }) =>
-        urls.push({ url: `${SITE.url}/elanlar?region=${c.slug}`, lastModified: now, changeFrequency: 'daily', priority: 0.7 }),
-      );
-    }
-  } catch {
-    /* ignore */
-  }
+  const regionsD = await fetchJson(`${API}/geo/regions`, 86400, 'geo/regions');
+  const regions = regionsD?.data ?? [];
+  regions.forEach((c: { slug: string }) =>
+    urls.push({ url: `${SITE.url}/elanlar?region=${c.slug}`, lastModified: now, changeFrequency: 'daily', priority: 0.7 }),
+  );
 
   // Elanlar
-  try {
-    const lr = await fetch(`${API}/listings?limit=50`, { next: { revalidate: 600 } });
-    if (lr.ok) {
-      const items = (await lr.json()).data ?? [];
-      items.forEach((l: { id: string; updatedAt?: string; createdAt?: string }) =>
-        urls.push({
-          url: `${SITE.url}/elanlar/${l.id}`,
-          lastModified: l.updatedAt ? new Date(l.updatedAt) : l.createdAt ? new Date(l.createdAt) : now,
-          changeFrequency: 'weekly',
-          priority: 0.6,
-        }),
-      );
-    }
-  } catch {
-    /* ignore */
-  }
+  const listD = await fetchJson(`${API}/listings?limit=50`, 600, 'listings');
+  const items = listD?.data ?? [];
+  items.forEach((l: { id: string; updatedAt?: string; createdAt?: string }) =>
+    urls.push({
+      url: `${SITE.url}/elanlar/${l.id}`,
+      lastModified: l.updatedAt ? new Date(l.updatedAt) : l.createdAt ? new Date(l.createdAt) : now,
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    }),
+  );
 
+  console.log(`[sitemap] ${urls.length} URL (statik ${STATIC_PATHS.length}, kateqoriya ${flat.length}, region ${regions.length}, elan ${items.length})`);
   return urls;
 }

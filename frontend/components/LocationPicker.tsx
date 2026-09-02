@@ -95,7 +95,7 @@ export default function LocationPicker({
             })}
           </div>
           {filtered.length === 0 && (
-            <div className="text-center py-12 text-ink-400">"{q}" tapılmadı</div>
+            <div className="text-center py-12 text-ink-400">&quot;{q}&quot; tapılmadı</div>
           )}
         </div>
 

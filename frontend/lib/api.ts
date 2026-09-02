@@ -24,6 +24,40 @@ export async function api<T = any>(path: string, opts: ApiOptions = {}): Promise
   return data as T;
 }
 
+/**
+ * NestJS cavab zərfi: `{ ok, data, meta }` (TransformInterceptor).
+ * Köhnə Express `{ items }` / `{ listing }` / `{ categories }` formatı hələ də
+ * bəzi çağırış yerlərində gözlənilirdi — bu, canlıda 4 səhifəni sındırırdı
+ * (profil statistikası, elan statistikası, müqayisə, admin KPI).
+ *
+ * Faza 0: mərkəzləşdirilmiş açıcı. Yeni format prioritetdir, köhnə açarlar
+ * geriyə uyğunluq üçün saxlanılır ki, qalan çağırış yerləri sınmasın.
+ */
+export interface Envelope<T> {
+  ok?: boolean;
+  data?: T;
+  meta?: Record<string, any>;
+  // köhnə (legacy Express) açarlar
+  items?: T;
+  listing?: T;
+  categories?: T;
+  regions?: T;
+  attributes?: T;
+}
+
+export function unwrap<T>(res: Envelope<T> | T, fallback: T): T {
+  if (res == null) return fallback;
+  if (Array.isArray(res)) return res as T;
+  const e = res as Envelope<T>;
+  const v = e.data ?? e.items ?? e.listing ?? e.categories ?? e.regions ?? e.attributes;
+  return (v ?? (typeof res === 'object' && 'ok' in e ? fallback : (res as T))) ?? fallback;
+}
+
+/** `meta` (pagination və s.) — köhnə formatda kök səviyyədə ola bilər. */
+export function unwrapMeta(res: any): Record<string, any> {
+  return res?.meta ?? (res && typeof res === 'object' ? res : {});
+}
+
 export const formatPrice = (price: number | null | undefined, currency = 'AZN') => {
   if (price == null) return 'Razılaşma yolu ilə';
   return new Intl.NumberFormat('az-AZ').format(price) + ' ' + currency;

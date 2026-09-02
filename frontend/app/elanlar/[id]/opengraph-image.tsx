@@ -9,19 +9,31 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function OG({ params }: Props) {
   const { id } = await params;
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5400/api';
+  // Faza 0 düzəlişi:
+  //  · köhnə default `localhost:5400` (silinmiş Express) → API_ORIGIN/NestJS
+  //  · köhnə zərf `.listing` → NestJS `{ ok, data }`
+  //  · köhnə sahələr `city_name`/`media` → `regionName`/`images`
+  //  · timeout əlavə olundu (OG generasiyası asılı qalmasın)
+  const apiUrl = process.env.API_ORIGIN
+    ? `${process.env.API_ORIGIN}/api/v1`
+    : 'http://localhost:5500/api/v1';
   let listing: any = null;
   try {
-    const r = await fetch(`${apiUrl}/listings/${id}`, { cache: 'no-store' });
-    if (r.ok) listing = (await r.json()).listing;
-  } catch {}
+    const r = await fetch(`${apiUrl}/listings/${id}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(4000),
+    });
+    if (r.ok) listing = (await r.json()).data;
+  } catch {
+    /* OG şəkli fallback mətnlə render olunur */
+  }
 
   const title = listing?.title || '360tap.az elanı';
   const price = listing?.price
     ? `${Number(listing.price).toLocaleString('az-AZ')} ${listing.currency || 'AZN'}`
     : 'Razılaşma';
-  const city = listing?.city_name || 'Azərbaycan';
-  const cover = listing?.media?.[0]?.url;
+  const city = listing?.regionName || 'Azərbaycan';
+  const cover = listing?.images?.[0]?.url;
 
   return new ImageResponse(
     (

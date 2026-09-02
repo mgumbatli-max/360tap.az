@@ -4,6 +4,7 @@ import CategoryFilters, { type CatAttr } from '@/components/CategoryFilters';
 import InfiniteListings from '@/components/InfiniteListings';
 import SaveSearchButton from '@/components/SaveSearchButton';
 import { meiliSearch, type MeiliHit } from '@/lib/meili';
+import { serverGet } from '@/lib/server-fetch';
 
 function mapMeiliHit(h: MeiliHit): Listing {
   return {
@@ -19,10 +20,6 @@ function mapMeiliHit(h: MeiliHit): Listing {
     media: h.cover ? [{ url: h.cover, sort_order: 0 }] : [],
   };
 }
-
-const API = process.env.API_ORIGIN
-  ? `${process.env.API_ORIGIN}/api/v1`
-  : 'http://localhost:5500/api/v1';
 
 interface SP {
   q?: string;
@@ -98,50 +95,51 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
   let catAttrs: CatAttr[] = [];
   let catName = ''; // backend meta-dan kateqoriya adı (h1)
   let understanding: Understanding | null = null;
+  let backendDown = false; // timeout/şəbəkə/5xx → "elan yoxdur"dan fərqli fallback
 
   if (sp.q) {
     // ---- Hibrid axtarış: Meili (typo+sinonim) → AI semantik → keyword ----
-    const hits = await meiliSearch(sp.q, 24);
+    // Faza 0: üç mərhələ ARDICIL işlədiyi üçün sabit timeout-lar cəmlənib səhifəni
+    // 15-20 s gözlədə bilirdi. İndi ÜMUMİ büdcə var: hansı mərhələdə olursa olsun,
+    // axtarış render-i bu həddi keçmir.
+    const SEARCH_BUDGET_MS = 8_000;
+    const deadline = Date.now() + SEARCH_BUDGET_MS;
+    const left = (): number => Math.max(0, deadline - Date.now());
+
+    const hits = await meiliSearch(sp.q, 24, Math.min(4_000, left()));
     if (hits.length) {
       items = hits.map(mapMeiliHit);
       total = hits.length;
     }
     // AI fallback (Meili heç nə tapmadısa — mürəkkəb təbii dil)
-    if (items.length === 0)
-    try {
-      const r = await fetch(`${API}/ai/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: sp.q }),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(9000),
-      });
-      if (r.ok) {
-        const d = (await r.json()) as {
-          data?: NestListing[];
-          meta?: { total: number; understanding?: Understanding };
-        };
-        items = (d.data ?? []).map(mapListing);
-        total = d.meta?.total ?? items.length;
-        understanding = d.meta?.understanding ?? null;
+    if (items.length === 0 && left() > 500) {
+      const ai = await serverGet<NestListing[], { total: number; understanding?: Understanding }>(
+        '/ai/search',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: sp.q }),
+          cache: 'no-store',
+          timeoutMs: Math.min(5_000, left()),
+        },
+      );
+      if (ai.data) {
+        items = ai.data.map(mapListing);
+        total = ai.meta?.total ?? items.length;
+        understanding = ai.meta?.understanding ?? null;
       }
-    } catch {
-      /* AI əlçatmaz / timeout → keyword fallback */
     }
     // Fallback: AI heç nə tapmadısa, ani DB keyword axtarışı
     if (items.length === 0) {
-      try {
-        const r = await fetch(`${API}/listings?q=${encodeURIComponent(sp.q)}&limit=24`, {
-          cache: 'no-store',
-        });
-        if (r.ok) {
-          const d = (await r.json()) as { data?: NestListing[]; meta?: { total: number } };
-          items = (d.data ?? []).map(mapListing);
-          total = d.meta?.total ?? items.length;
-        }
-      } catch {
-        /* backend əlçatmaz */
+      const kw = await serverGet<NestListing[], { total: number }>(
+        `/listings?q=${encodeURIComponent(sp.q)}&limit=24`,
+        { cache: 'no-store', timeoutMs: Math.max(2_000, Math.min(4_000, left())) },
+      );
+      if (kw.data) {
+        items = kw.data.map(mapListing);
+        total = kw.meta?.total ?? items.length;
       }
+      if (kw.unavailable) backendDown = true;
     }
   } else {
     // ---- Adi filter axtarış ----
@@ -173,26 +171,27 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
     baseQuery = params.toString(); // sonsuz scroll üçün (page/limit-siz)
     params.set('page', '1');
     params.set('limit', '50');
-    // Listings VƏ kateqoriya atributlarını PARALEL çək (waterfall yox — bir round trip qənaət)
-    const listingsP = fetch(`${API}/listings?${params}`, { next: { revalidate: 30 } })
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
-    const attrsP = sp.category
-      ? fetch(`${API}/categories/${sp.category}/attributes`, { next: { revalidate: 600 } })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null)
-      : Promise.resolve(null);
-    const [listD, attrD] = (await Promise.all([listingsP, attrsP])) as [
-      { data?: NestListing[]; meta?: { total: number; hasMore: boolean; categoryName?: string } } | null,
-      { data?: CatAttr[] } | null,
-    ];
-    if (listD) {
-      items = (listD.data ?? []).map(mapListing);
+    // Listings VƏ kateqoriya atributlarını PARALEL çək (waterfall yox — bir round trip qənaət).
+    // Hər ikisi timeout-ludur: backend asılı qalsa da render bir neçə saniyəyə tamamlanır.
+    const [listD, attrD] = await Promise.all([
+      serverGet<NestListing[], { total: number; hasMore: boolean; categoryName?: string }>(
+        `/listings?${params}`,
+        { next: { revalidate: 30 } },
+      ),
+      sp.category
+        ? serverGet<CatAttr[]>(`/categories/${sp.category}/attributes`, {
+            next: { revalidate: 600 },
+          })
+        : Promise.resolve({ data: null, meta: null, unavailable: false }),
+    ]);
+    if (listD.data) {
+      items = listD.data.map(mapListing);
       total = listD.meta?.total ?? items.length;
       hasMore = listD.meta?.hasMore ?? false;
       catName = listD.meta?.categoryName ?? '';
     }
-    if (attrD) catAttrs = attrD.data ?? [];
+    if (listD.unavailable) backendDown = true;
+    if (attrD.data) catAttrs = attrD.data;
   }
 
   const uChips = understanding
@@ -269,7 +268,21 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
           </>
         )}
 
-        {items.length === 0 ? (
+        {items.length === 0 && backendDown ? (
+          // Backend əlçatmazdır — bu, "nəticə yoxdur"dan fərqli haldır və
+          // istifadəçiyə düzgün mesaj + təkrar cəhd yolu göstərilməlidir.
+          <div className="card p-12 text-center">
+            <p className="text-ink-900 dark:text-white text-lg font-bold">
+              Elanlar müvəqqəti yüklənmir
+            </p>
+            <p className="text-ink-500 mt-2">
+              Xidmətdə qısamüddətli problem var. Bir neçə dəqiqədən sonra yenidən yoxlayın.
+            </p>
+            <Link href="/elanlar" className="btn-secondary inline-flex mt-4">
+              Yenidən cəhd et
+            </Link>
+          </div>
+        ) : items.length === 0 ? (
           <div className="card p-12 text-center">
             <p className="text-ink-500 text-lg">
               {sp.q ? 'AI bu sorğuya uyğun elan tapmadı' : 'Bu filtrlə elan tapılmadı'}

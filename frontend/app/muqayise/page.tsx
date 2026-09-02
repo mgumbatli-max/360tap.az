@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Plus, X, Scale } from 'lucide-react';
-import { api, formatPrice } from '@/lib/api';
+import { api, formatPrice, unwrap } from '@/lib/api';
 
 const KEY = 'tap_car_compare';
 
@@ -11,7 +11,8 @@ export default function ComparePage() {
   useEffect(() => {
     try {
       const ids: string[] = JSON.parse(localStorage.getItem(KEY) || '[]');
-      Promise.all(ids.map((id) => api<{ listing: any }>(`/listings/${id}`).then((d) => d.listing).catch(() => null)))
+      // Faza 0: köhnə `d.listing` → `{ ok, data }` (müqayisə cədvəli həmişə boş görünürdü).
+      Promise.all(ids.map((id) => api<any>(`/listings/${id}`).then((d) => unwrap<any>(d, null)).catch(() => null)))
         .then((r) => setItems(r.filter(Boolean)));
     } catch {}
   }, []);

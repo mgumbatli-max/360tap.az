@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ProfileLayout from '@/components/ProfileLayout';
 import { useAuth } from '@/lib/auth';
-import { api } from '@/lib/api';
+import { api, unwrap } from '@/lib/api';
 import TrustScore from '@/components/TrustScore';
 import LoyaltyPoints from '@/components/LoyaltyPoints';
 import AchievementBadges from '@/components/AchievementBadges';
@@ -20,8 +20,10 @@ export default function ProfileDashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-    api<{ items: any[] }>('/listings/me/list').then((d) => {
-      const items = d.items ?? [];
+    // Faza 0: NestJS `{ ok, data }` qaytarır — köhnə `d.items` həmişə undefined idi,
+    // buna görə profil statistikası (aktiv/satılan/arxiv) həmişə 0 görünürdü.
+    api<any>('/listings/me/list').then((d) => {
+      const items = unwrap<any[]>(d, []);
       setStats({
         active: items.filter((x) => x.status === 'active').length,
         sold: items.filter((x) => x.status === 'sold').length,
