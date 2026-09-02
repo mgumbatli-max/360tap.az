@@ -2,6 +2,14 @@ import { Test } from '@nestjs/testing';
 import { ListingsService } from './listings.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CategoriesService } from '../categories/categories.service';
+import { SearchService } from '../../search/search.service';
+
+// ListingsService konstruktoru SearchService tələb edir (indeksləmə best-effort çağırılır).
+// Mock olmadan Nest DI bu spec-i qırırdı — Faza 0-da düzəldildi.
+const searchMock = {
+  indexListing: async () => undefined,
+  removeListing: async () => undefined,
+};
 
 describe('ListingsService.findAll', () => {
   let captured: { where?: Record<string, unknown> } = {};
@@ -26,6 +34,7 @@ describe('ListingsService.findAll', () => {
         ListingsService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: CategoriesService, useValue: {} },
+        { provide: SearchService, useValue: searchMock },
       ],
     }).compile();
     service = mod.get(ListingsService);
@@ -49,6 +58,7 @@ describe('ListingsService.findAll', () => {
         ListingsService,
         { provide: PrismaService, useValue: { region: { findUnique: async () => null } } },
         { provide: CategoriesService, useValue: {} },
+        { provide: SearchService, useValue: searchMock },
       ],
     }).compile();
     const svc = mod.get(ListingsService);

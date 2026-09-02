@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query } from '@nestjs/common';
+import { Controller, Get, Post, Query, ServiceUnavailableException } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { Public } from '../common/decorators/public.decorator';
@@ -27,7 +27,15 @@ export class SearchController {
   @Roles('admin', 'super_admin')
   @Post('reindex')
   async reindex() {
-    const reindexed = await this.search.reindexActive();
-    return { reindexed };
+    try {
+      const reindexed = await this.search.reindexActive();
+      return { reindexed };
+    } catch (e) {
+      if (e instanceof ServiceUnavailableException) throw e;
+      // Meili əlçatmazdırsa 500 yox, aydın 503 qaytar.
+      throw new ServiceUnavailableException(
+        `Axtarış servisi əlçatmazdır: ${String(e).slice(0, 200)}`,
+      );
+    }
   }
 }

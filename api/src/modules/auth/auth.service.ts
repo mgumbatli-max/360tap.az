@@ -157,6 +157,8 @@ export class AuthService {
       email: user.email,
       role: user.role as UserRole,
       type: 'refresh',
+      // Unikal token id — eyni saniyədə verilən token-lərin eyni olmasının qarşısını alır.
+      jti: randomBytes(16).toString('hex'),
     };
 
     const accessToken = this.jwt.sign(accessPayload, { expiresIn: accessTtl });

@@ -22,5 +22,22 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/package.json ./package.json
 EXPOSE 5500
-# Migrasiya + seed (idempotent, xəta app-ı qırmır) + başlat
-CMD ["sh", "-c", "npx prisma migrate deploy && (npm run prisma:seed || echo 'seed skipped') && node dist/main.js"]
+
+# ---- Faza 0: startup zənciri ----
+# ƏVVƏL: `migrate deploy && (seed) && node dist/main.js`
+#   → `&&` səbəbindən migrasiya uğursuz olanda VƏ YA asılı qalanda `node dist/main.js`
+#     HEÇ VAXT işə düşmürdü; konteyner çıxırdı, Render restart döngəsinə düşürdü və
+#     HTTP server heç vaxt `listen()`-ə çatmırdı (bütün API, /health daxil, timeout verirdi).
+#   → Həmçinin `prisma:seed` HƏR başlanğıcda production DB-də deleteMany/cleanupTestData
+#     icra edirdi (destruktiv).
+#
+# İNDİ:
+#   · `;` → migrasiya nəticəsindən ASILI OLMADAN app qalxır (graceful degradation;
+#     DB vəziyyəti /health/ready-də görünür).
+#   · `timeout 120` → migrasiya sonsuz asıla bilməz.
+#   · seed CMD-dən ÇIXARILDI — manual/one-off job kimi işlədilməlidir:
+#       render → Shell:  npm run prisma:seed
+#   · `exec` → node PID 1 olur və SIGTERM-i alır (enableShutdownHooks düzgün işləsin).
+#   · `timeout` mövcud deyilsə (bəzi minimal image-lərdə) migrasiya YENƏ DƏ işləyir —
+#     sadəcə vaxt həddi olmadan; hər halda app başlayır.
+CMD ["sh", "-c", "if command -v timeout >/dev/null 2>&1; then timeout 120 npx prisma migrate deploy || echo '[boot] prisma migrate deploy UGURSUZ/TIMEOUT - API degraded rejimde baslayir (bax /health/ready)'; else npx prisma migrate deploy || echo '[boot] prisma migrate deploy UGURSUZ - API degraded rejimde baslayir (bax /health/ready)'; fi; exec node dist/main.js"]

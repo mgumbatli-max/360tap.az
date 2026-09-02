@@ -1,6 +1,13 @@
-# 360tap.az — Render Blueprint (PULSUZ: NestJS API + Postgres + Redis)
-# Meilisearch sonra əlavə olunur (pulsuz private service yoxdur) — axtarış o vaxta qədər degrade.
+# 360tap.az — Render Blueprint (NestJS API + Postgres + Redis)
 # Frontend ayrıca Vercel-də (bax DEPLOY.md).
+#
+# Faza 0 qeydi — BLUEPRINT DRIFT:
+#   Bəzi dəyişənlər (GROQ_API_KEY, MEILI_HOST/MEILI_KEY) əvvəllər YALNIZ Render
+#   dashboard-unda əl ilə təyin olunmuşdu və bu faylda ya yox idi, ya da yalançı
+#   `localhost` dəyəri ilə görünürdü. Nəticə: blueprint reallığı əks etdirmirdi və
+#   servis blueprint-dən yenidən yaradılsaydı həmin dəyərlər itəcəkdi.
+#   İndi hamısı `sync: false` ilə ELAN OLUNUB: dəyər dashboard-da qalır (repoda secret yoxdur),
+#   amma dəyişənin MÖVCUDLUĞU koddan görünür.
 
 databases:
   - name: tap360-db
@@ -22,6 +29,8 @@ services:
     dockerfilePath: ./api/Dockerfile
     dockerContext: ./api
     plan: free
+    # LIVENESS probe — xarici asılılıqları yoxlamır, yalnız prosesin diri olduğunu.
+    # Readiness (DB/search vəziyyəti) ayrıca: GET /health/ready
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -47,13 +56,35 @@ services:
         value: "60"
       - key: THROTTLE_LIMIT
         value: "300"
-      # Meilisearch hələ yoxdur — degrade (app boot olur, search xəta tutulur)
+
+      # --- Axtarış (OPSİONAL) ---
+      # Təyin olunmasa API "degraded" rejimdə işləyir: /search Postgres fallback-i ilə
+      # cavab verir, listing CRUD isə heç bir halda axtarışdan asılı deyil.
+      # Dəyər Render dashboard-unda saxlanılır (sync: false → blueprint üzərinə yazmır).
       - key: MEILI_HOST
-        value: "http://localhost:7700"
+        sync: false
       - key: MEILI_KEY
-        value: ""
-      # Vercel proxy server-side olduğu üçün CORS funksional kritik deyil (boş olmamalıdır):
-      - key: CORS_ORIGINS
-        value: "https://360tap-az.vercel.app,http://localhost:5401"
+        sync: false
+
+      # --- AI (OPSİONAL) ---
+      # Yoxdursa /ai/* endpoint-ləri aydın xəta qaytarır; qalan API işləyir.
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false
+      # Kodda istifadə olunur (ai.service.ts vision axını), blueprint-də çatışmırdı.
+      - key: GROQ_VISION_MODEL
+        sync: false
+
+      # --- Media ---
+      # ⚠️ Render free tier-də disk EFEMERDİR: bu qovluqdakı fayllar hər deploy/restart-da
+      # silinir. Kalıcı həll (obyekt storage + CDN) Faza 1-dədir.
+      - key: MEDIA_DIR
+        value: "./uploads"
       - key: MEDIA_BASE_URL
         value: "https://tap360-api.onrender.com/uploads"
+
+      # Vercel proxy server-side olduğu üçün CORS funksional kritik deyil,
+      # lakin canlı domen siyahıda olmalıdır (gələcək birbaşa brauzer→API çağırışları üçün).
+      - key: CORS_ORIGINS
+        value: "https://360tap.az,https://www.360tap.az,https://360tap-az.vercel.app,http://localhost:5401"

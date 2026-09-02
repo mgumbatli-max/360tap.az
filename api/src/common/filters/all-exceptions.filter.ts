@@ -49,15 +49,42 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const message = typeof res === 'string' ? res : (res as { message?: string | string[] }).message ?? exception.message;
       const error = typeof res === 'object' && 'error' in res ? (res as { error?: string }).error ?? exception.name : exception.name;
 
+      // Struktur cavab (məs. /health/ready-in dependency detalları) itməsin.
+      let details: unknown;
+      if (typeof res === 'object' && res !== null) {
+        const RESERVED = new Set(['statusCode', 'error', 'message']);
+        const rest = Object.fromEntries(
+          Object.entries(res as Record<string, unknown>).filter(([k]) => !RESERVED.has(k)),
+        );
+        if (Object.keys(rest).length > 0) details = rest;
+      }
+
       return {
         status,
-        payload: { statusCode: status, error: error ?? 'Error', message, path, timestamp },
+        payload: { statusCode: status, error: error ?? 'Error', message, path, timestamp, details },
       };
     }
 
     // Prisma error
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       return this.fromPrisma(exception, path, timestamp);
+    }
+    // DB əlçatmazdır (bağlantı qurula bilmir) — bu, "daxili xəta" deyil, müvəqqəti
+    // əlçatmazlıqdır. 503 klienti düzgün fallback göstərməyə yönləndirir.
+    if (
+      exception instanceof Prisma.PrismaClientInitializationError ||
+      exception instanceof Prisma.PrismaClientRustPanicError
+    ) {
+      return {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        payload: {
+          statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+          error: 'ServiceUnavailable',
+          message: 'Xidmət müvəqqəti əlçatmazdır, bir azdan yenidən cəhd edin',
+          path,
+          timestamp,
+        },
+      };
     }
     if (exception instanceof Prisma.PrismaClientValidationError) {
       return {

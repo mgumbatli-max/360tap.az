@@ -8,6 +8,27 @@ import 'reflect-metadata';
 import { AppModule } from './app.module';
 import type { AppConfig } from './config/configuration';
 
+const bootLogger = new Logger('Bootstrap');
+
+/**
+ * Faza 0 (observability): emal olunmamış xətalar səssiz çıxışa səbəb olurdu.
+ * İndi hər ikisi loglanır; yalnız uncaughtException prosesi dayandırır
+ * (unhandledRejection-da API degraded rejimdə işləməyə davam edir).
+ */
+function installProcessHandlers(): void {
+  process.on('unhandledRejection', (reason) => {
+    bootLogger.error(
+      `Emal olunmamış Promise rejection (proses davam edir): ${
+        reason instanceof Error ? `${reason.message}\n${reason.stack ?? ''}` : String(reason)
+      }`,
+    );
+  });
+  process.on('uncaughtException', (err) => {
+    bootLogger.error(`Emal olunmamış exception — proses dayanır: ${err.message}\n${err.stack ?? ''}`);
+    process.exit(1);
+  });
+}
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log'],
@@ -50,12 +71,31 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  app.setGlobalPrefix('api/v1', { exclude: ['health'] });
+  // health VƏ health/ready prefiksdən kənarda qalmalıdır (Render healthCheckPath=/health)
+  app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/ready'] });
   app.enableShutdownHooks();
 
   await app.listen(port);
-  const logger = new Logger('Bootstrap');
-  logger.log(`🚀 Marketplace API → http://localhost:${port}/api/v1`);
+
+  // Startup loqu — hansı asılılıqların konfiqurasiya olunduğu görünsün (SECRET YOX, yalnız var/yox)
+  const meili = config.get('meili', { infer: true });
+  const groq = config.get('groq', { infer: true });
+  bootLogger.log(`🚀 360tap.az API dinləyir → port ${port}, prefiks /api/v1`);
+  bootLogger.log(
+    `Konfiqurasiya: NODE_ENV=${config.get('nodeEnv', { infer: true })} · ` +
+      `DATABASE_URL=${process.env.DATABASE_URL ? 'set' : 'MISSING'} · ` +
+      `REDIS_URL=${process.env.REDIS_URL ? 'set' : 'default(localhost)'} · ` +
+      `MEILI_HOST=${meili.host ? (/localhost|127\.0\.0\.1/.test(meili.host) ? 'localhost(=yoxdur)' : 'set') : 'MISSING'} · ` +
+      `GROQ_API_KEY=${groq.apiKey ? 'set' : 'MISSING(AI söndürülüb)'} · ` +
+      `MEDIA_DIR=${mediaDir} · CORS=${cors.origins.length} origin`,
+  );
 }
 
-void bootstrap();
+installProcessHandlers();
+
+bootstrap().catch((err: unknown) => {
+  bootLogger.error(
+    `API başladıla bilmədi: ${err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err)}`,
+  );
+  process.exit(1);
+});
