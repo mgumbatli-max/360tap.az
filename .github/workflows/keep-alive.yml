@@ -1,0 +1,16 @@
+name: keep-alive
+
+# Render free tier 15 dəq passivlikdən sonra yuxuya gedir.
+# Bu cron hər 5 dəqiqə /health-ı pingləyir → backend oyaq qalır (cold-start yox).
+# */5: GitHub cron gecikmələrinə qarşı 15dəq yuxu hədinə geniş təhlükəsizlik payı.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health
+        run: curl -fsS --max-time 60 https://tap360-api.onrender.com/health || true
