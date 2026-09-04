@@ -2,8 +2,8 @@
 
 **Tarix:** 2026-09-02
 **Əhatə:** Yalnız FAZA 0. Kateqoriya engine, `AttributeOption`, vertikallar (Auto/Əmlak/İş), UI redesign və böyük DB migration-lara **TOXUNULMAYIB**.
-**Deploy:** **EDİLMƏYİB** — production-a çıxış üçün ayrıca icazəniz gözlənilir (§14, aşağıda «Manual Actions»).
-**DB:** Heç bir migration işlədilməyib, production DB-yə heç nə yazılmayıb, heç nə silinməyib.
+**Deploy:** **BACKEND EDİLDİ** (`8ce5328` → Render, 2026-09-02 11:20–11:27 UTC — bax §13) · **FRONTEND PUSH EDİLDİ** (`5150ee0` → `origin/main`, bu gün — Vercel auto-deploy tetikləndi; production-da **hələ təsdiqlənməyib**, bax §14.6) · **CI EDİLDİ** (`ffc44d8` — `.github/workflows/keep-alive.yml`). Qalan manual addımlar: §6 «Manual Actions».
+**DB:** Mənim tərəfimdən **əl ilə** heç bir migration işlədilməyib, production DB-yə heç nə yazılmayıb, heç nə silinməyib. (Render konteyneri deploy zamanı `prisma migrate deploy` icra edir → sxem mövcuddur. Seed **istifadəçi tərəfindən** işlədilir — nəticə §14.9, status: ⏳ **GÖZLƏYİR**.)
 
 ---
 
@@ -157,7 +157,16 @@ Dev-də `/api/*`-ın böyük hissəsi legacy Express-ə, prod-da NestJS-ə gedir
 
 **Konfiqurasiya (1):** `render.yaml`
 
-**Toxunulmayanlar (qəsdən):** `api/prisma/schema.prisma`, bütün migration-lar, seed faylları, `backend/` qovluğu (tam), kateqoriya/atribut modeli, vertikal modellər.
+**Toxunulmayanlar (qəsdən):** `api/prisma/schema.prisma`, bütün migration-lar, `backend/` qovluğu (tam), kateqoriya/atribut modeli, vertikal modellər.
+
+> **⚠️ DÜZƏLİŞ (2026-09-02):** Bu hesabatın ilk versiyası (`57735f3`) «seed faylları»nı da toxunulmayanlar siyahısına yazmışdı. Həmin iddia **KÖHNƏLİB** — hesabat commit-indən **sonra** `api/prisma/seed.ts` iki commit-də dəyişdirildi:
+>
+> | Commit | Dəyişiklik |
+> |---|---|
+> | `25ee6c8` | Demo elanlar **OPT-IN** edildi (`SEED_DEMO_LISTINGS=true`). Default seed artıq yalnız real data yazır (geo + kateqoriyalar + brendlər); `seedListings()`, `cleanupTestData()`, `seedFillEmptyCategories()` yalnız flag ilə işə düşür → production-a saxta inventar yazılmır |
+> | `366ecd5` | `printTarget()` — seed hər işə salmada hədəf DB-nin host/ad-ını çap edir (`⚠️ LOKAL BAZA` / `☁️ UZAQ BAZA`); parol və istifadəçi **çap olunmur**. Səbəb: Prisma `.env`-i avtomatik yükləyir və seed səssizcə lokala yazır — bu real baş vermiş səhvdir |
+>
+> **Sübut:** `git diff --stat 8ce5328^ HEAD -- api/prisma/` → `api/prisma/seed.ts | 47 ++++----` (43 əlavə / 4 silinmə). `schema.prisma` və migration qovluğu **həqiqətən toxunulmayıb** — diff-də yalnız `seed.ts` görünür.
 
 ---
 
@@ -190,21 +199,22 @@ Dev-də `/api/*`-ın böyük hissəsi legacy Express-ə, prod-da NestJS-ə gedir
 ## 6. MANUAL ACTIONS REQUIRED
 
 > Bunları **mən edə bilmirəm** — Render/Vercel dashboard-una çıxış və ya sizin təsdiqiniz lazımdır.
+> **Status sütunu 2026-09-02 axşam vəziyyətini göstərir** (§13 və §14 ölçmələrindən sonra).
 
-| # | Addım | Harada | Niyə |
-|---|---|---|---|
-| **M-1** | **Render Postgres (`tap360-db`) vəziyyətini yoxlayın** — free plan dayandırılıb/limitə çatıb? | Render → Databases | P-01-in ehtimal olunan ilkin tetikləyicisi. Kod düzəlişi API-ni qaldırır, amma DB özü ölüdürsə `/health/ready` 503 qalacaq |
-| **M-2** | **Deploy icazəsi verin** (aşağıdakı ardıcıllıqla) | — | Kod hazırdır, deploy edilməyib |
-| **M-3** | Blueprint sync-dən sonra dashboard-da `MEILI_HOST`, `MEILI_KEY`, `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_VISION_MODEL` dəyərlərinin **hələ də mövcud olduğunu** təsdiqləyin | Render → tap360-api → Environment | `sync: false` dəyəri qorumalıdır, amma yoxlamaq lazımdır |
-| **M-4** | Vercel-də `API_ORIGIN` təyin olunduğunu təsdiqləyin | Vercel → Project → Env | Yoxdursa frontend `localhost`-a gedər |
-| **M-5** | Seed artıq avtomatik işləmir — **lazım olduqda bir dəfəlik** `npm run prisma:seed` işlədin | Render → Shell | Faza 0-da destruktiv avto-seed çıxarıldı |
-| **M-6** | Meilisearch Cloud instansı **ölüdür** (`Instance does not exist or is not ready yet`) — bərpa edin və ya Faza 4-ə saxlayın | Meilisearch Cloud | Axtarış hazırda DEGRADED (Postgres fallback) rejimdə işləyir — **sistem çökmür** |
-| **M-7** | UptimeRobot monitorunu `/health` üzərində saxlayın (dəyişiklik lazım deyil) | UptimeRobot | `/health` artıq DB-dən asılı deyil |
+| # | Addım | Harada | Niyə | Status |
+|---|---|---|---|---|
+| **M-1** | **Render Postgres (`tap360-db`) vəziyyətini yoxlayın** — free plan dayandırılıb/limitə çatıb? | Render → Databases | P-01-in ehtimal olunan ilkin tetikləyicisi. Kod düzəlişi API-ni qaldırır, amma DB özü ölüdürsə `/health/ready` 503 qalacaq | ✅ **BAĞLANDI** — `/health/ready` 200, `database: connected`. İnstans **canlıdır**; problem **məzmun** boşluğudur (R-15) |
+| **M-2** | **Deploy icazəsi verin** (aşağıdakı ardıcıllıqla) | — | ~~Kod hazırdır, deploy edilməyib~~ | ✅ **BAĞLANDI** — backend `8ce5328` deploy edildi (§13.2); frontend `5150ee0` push edildi. ⏳ Vercel production build təsdiqi qalır (§14.6) |
+| **M-3** | Blueprint sync-dən sonra dashboard-da `MEILI_HOST`, `MEILI_KEY`, `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_VISION_MODEL` dəyərlərinin **hələ də mövcud olduğunu** təsdiqləyin | Render → tap360-api → Environment | `sync: false` dəyəri qorumalıdır, amma yoxlamaq lazımdır | ⏳ **AÇIQ** — dashboard çıxışı tələb edir |
+| **M-4** | Vercel-də `API_ORIGIN` təyin olunduğunu təsdiqləyin | Vercel → Project → Env | Yoxdursa frontend `localhost`-a gedər | ✅ **DOLAYI TƏSDİQ** — canlı `360tap.az` boş DB-nin cavablarını göstərir (0 elan), yəni real backend-ə gedir, `localhost`-a yox |
+| **M-5** | Seed artıq avtomatik işləmir — **lazım olduqda bir dəfəlik** `npm run prisma:seed` işlədin | Render → Shell | Faza 0-da destruktiv avto-seed çıxarıldı | ⏳ **İCRADADIR** — istifadəçi tərəfindən işlədilir, nəticə §14.9-a yazılacaq |
+| **M-6** | Meilisearch Cloud instansı **ölüdür** (`Instance does not exist or is not ready yet`) — bərpa edin və ya Faza 4-ə saxlayın | Meilisearch Cloud | Axtarış hazırda DEGRADED (Postgres fallback) rejimdə işləyir — **sistem çökmür** | ⏳ **AÇIQ** — canlıda hələ `degraded` (§14.8 / A-1) |
+| **M-7** | UptimeRobot monitorunu `/health` üzərində saxlayın (dəyişiklik lazım deyil) | UptimeRobot | `/health` artıq DB-dən asılı deyil | ✅ **CI qatı əlavə olundu** — `ffc44d8` ilə `.github/workflows/keep-alive.yml` (hər 5 dəq `/health` ping) |
 
-**Tövsiyə olunan deploy ardıcıllığı (icazənizdən sonra):**
-1. Əvvəlcə **backend** (Render) — `/health` və `/health/ready` yoxlanılır.
-2. `/health` 200 verdikdən sonra **frontend** (Vercel).
-3. Hər ikisindən sonra canlı smoke test təkrarlanır.
+**Deploy ardıcıllığı — icra olundu:**
+1. ✅ **Backend** (Render, `8ce5328`) — `/health` və `/health/ready` yoxlanıldı (§13.2).
+2. ✅ **Frontend push** (`5150ee0` → `origin/main`) — `/health` 200 verdikdən sonra. ⏳ Vercel production build-i hələ təsdiqlənməyib (§14.6).
+3. ⏳ **Canlı smoke test** — §14-də icra olundu, lakin **boş DB** üzərində. Seed-dən sonra §9 matrisi canlıda **təkrarlanmalıdır**.
 
 ---
 
@@ -241,7 +251,9 @@ FRONTEND   typecheck ✓   lint ✓ (0 error / 307 warning)   build ✓
 ```
 
 Frontend build çıxışı: `/` statik + ISR (30 s revalidate), `/elanlar` və `/elanlar/[id]` dinamik (searchParams / no-store — gözlənilən).
-Sitemap build loqu: `[sitemap] 235 URL (statik 5, kateqoriya 106, region 74, elan 50)` — əvvəl canlıda 5 URL idi və uğursuzluq səssiz udulurdu.
+Sitemap build loqu (**KEŞLİ LOKAL BUILD**): `[sitemap] 235 URL (statik 5, kateqoriya 106, region 74, elan 50)`.
+
+> **⚠️ Bu rəqəm build sübutu kimi ETİBARSIZDIR.** 235 URL Next.js `fetch` keşindən gəlir — həmin entry-lər əvvəllər **dolu lokal DB** (`localhost:5500`) ilə yazılmışdı. Keş təmiz olduqda və ya canlı (boş) API ilə işlədikdə sitemap **5 URL**-dir (yalnız statik marşrutlar). Canlı təsdiq: `curl https://360tap.az/sitemap.xml | grep -c '<loc>'` → **5**. Sitemap-ın həqiqi düzəlişi URL sayı deyil, **uğursuzluğun artıq səssiz udulmaması**dır (`console.warn` + yekun URL sayının loglanması). Real URL sayı yalnız production DB seed edildikdən sonra ölçülməlidir.
 
 **307 warning-in tərkibi (bloklamır, Faza 1 borcu):** əsasən `@typescript-eslint/no-explicit-any`, `no-unused-vars`, `@next/next/no-img-element`, `react-hooks/exhaustive-deps`.
 
@@ -264,7 +276,7 @@ Sitemap build loqu: `[sitemap] 235 URL (statik 5, kateqoriya 106, region 74, ela
 | 9 | Favorites | **PASS** | add 201 → list 200 (1) → remove 200 |
 | 10 | Profile | **PASS** | 200; `/listings/me/list` 200 (envelope düzəldi) |
 | 11 | Admin login/API | **PARTIAL** | səhifə 200 və rol qapısı işləyir; **admin API-ləri hələ mövcud deyil** (Faza 5) |
-| 12 | Sitemap / robots | **PASS** | 235 `<loc>` / 200 |
+| 12 | Sitemap / robots | **PASS (şərti)** | robots 200 · sitemap 200. `<loc>` sayı **ölçü sübutu deyil**: lokalda keşdən 235, canlıda (boş DB) **5** — bax §8 qeydi |
 
 ### 9.2 Backend TAM ÖLÜ ikən (əsas qəbul meyarı)
 
@@ -296,8 +308,8 @@ Heç bir səhifədə stack trace görünmür.
 
 | # | Risk | Şiddət | Faza |
 |---|---|---|---|
-| R-1 | **Production hələ də ölüdür** — kod düzəldilib, deploy edilməyib (icazəniz gözlənilir) | CRITICAL | indi (M-2) |
-| R-2 | Render Postgres-in özü dayandırılıbsa, kod düzəlişi API-ni qaldırar, amma `/health/ready` 503 qalar | CRITICAL | indi (M-1) |
+| ~~R-1~~ | ~~**Production hələ də ölüdür** — kod düzəldilib, deploy edilməyib~~ → ✅ **RESOLVED (2026-09-02)** — backend `8ce5328` deploy edildi və canlıda sağlamdır (45/45 sorğu 200); frontend `5150ee0` push edildi. Qalıq: Vercel production build-inin təsdiqi (§14.6) | ~~CRITICAL~~ | ✅ bitdi |
+| ~~R-2~~ | ~~Render Postgres-in özü dayandırılıbsa `/health/ready` 503 qalar~~ → ✅ **RESOLVED (2026-09-02)** — `GET /health/ready` **200**, `database: {"ok":true,"status":"connected"}`. DB instansı **canlıdır**; problem instans deyil, **məzmun** boşluğudur (R-15) | ~~CRITICAL~~ | ✅ bitdi |
 | R-3 | **Yüklənən şəkillər hər deploy-da itir** (efemer disk, obyekt storage yoxdur) | CRITICAL | Faza 1 |
 | R-4 | Rate limiting Vercel proxy səbəbindən tək bucket-dir (bütün sayt üçün ortaq) | CRITICAL | Faza 5 |
 | R-5 | Refresh token frontend-də saxlanmır → istifadəçi 15 dəqiqədə çıxarılır | CRITICAL | Faza 5 |
@@ -310,30 +322,43 @@ Heç bir səhifədə stack trace görünmür.
 | R-12 | DB indeks planı milyonlarla elan üçün yararsızdır (GIN/FTS/composite yoxdur) | HIGH | Faza 3 |
 | R-13 | `/auth/refresh` cavabı `{data:{accessToken,...}}`, register/login isə `{data:{user,tokens}}` — kontrakt uyğunsuzluğu (frontend hazırda refresh çağırmır) | LOW | Faza 5 |
 | R-14 | Dev DB-də 2 test istifadəçisi + 1 arxivlənmiş test elanı qalıb | LOW | — |
+| **R-15** | **Production DB boşdur** — sxem mövcuddur, sətir yoxdur (`categories` 0, `geo/regions` 0, `listings` 0 / `meta.total: 0`). Sayt qalxıb, amma **məzmunsuzdur**: kateqoriya menyusu boş, elan siyahısı boş, sitemap 5 URL, axtarış 0 nəticə. Seed **istifadəçi tərəfindən icra olunur** — nəticə §14.9 | **CRITICAL** | ⏳ indi (M-5) |
+| **R-16** | **Render Postgres `plan: free`** (`render.yaml:14`) — Render free Postgres yaradıldıqdan **30 gün sonra silinir** və **avtomatik backup yoxdur**. Yəni seed-dən sonra da data **müddətlidir**: instans ömrü bitəndə hər şey yenidən itəcək və bərpa mənbəyi yalnız `seed.ts` olacaq. ⚠️ Qeyd: bu risk **gələcəyə** aiddir — mövcud boşluğun səbəbi kimi **sübut olunmayıb** (bax §14.7 «təkzib cəhdi») | **HIGH** | Faza 1 (plan qərarı Faza 1-ə saxlanıldı) |
 
 ---
 
 ## 11. PHASE 0 ACCEPTANCE CRITERIA
 
-| # | Meyar | Vəziyyət | Sübut |
-|---|---|---|---|
-| 1 | Backend normal cavab verir | ✅ **kod səviyyəsində** / ⏳ prod deploy gözləyir | DB+Redis+Meili ölü ikən 3 s-də qalxdı; canlı DB ilə bütün endpoint-lər 200 |
-| 2 | `/health` işləyir | ✅ | 200, 0.089 s — DB düşəndə də |
-| 3 | `/health/ready` işləyir | ✅ | DB varsa 200; yoxsa 503 + tam dependency detalı |
-| 4 | DB connection healthy | ✅ | `{"database":{"required":true,"ok":true,"status":"connected"}}` |
-| 5 | Backend unavailable olduqda frontend asılı qalmır | ✅ | Bütün route-lar ≤1.35 s (bax 9.2) |
-| 6 | `/elanlar` 60–120 s gözləmir | ✅ | **0.04 s** (keşli) / **0.05 s** (keşsiz, fallback ilə) |
-| 7 | Homepage sonsuz skeleton göstərmir | ✅ | Backend varsa 12 elan; yoxsa fallback mesajı, 0.03 s |
-| 8 | TypeScript real errors = 0 | ✅ | api 0, frontend 0 (əvvəl 11) |
-| 9 | `ignoreBuildErrors` silinib | ✅ | `next.config.ts` |
-| 10 | ESLint blocking errors = 0 | ✅ | 40 error → 0 |
-| 11 | `ignoreDuringBuilds` silinib | ✅ | `next.config.ts` + real ESLint quruldu |
-| 12 | Production build PASS | ✅ | hər iki paket, gate-lər aktiv |
-| 13 | Search failure sistemi çökdürmür | ✅ | `/search` DEGRADED-də 200 + 5 nəticə; listing CRUD təsirlənmir |
-| 14 | API contract kritik mismatch-ləri düzəldilib | ✅ | 4 canlı səhifə + mərkəzi `unwrap()` |
-| 15 | Əsas route-larda graceful error handling | ✅ | fallback UI, 503 mapping, stack trace gizlədildi |
-| 16 | Auth/media/taxonomy regress etməyib | ✅ | argon2/guard-lar toxunulmayıb; auth axını **yaxşılaşdı** (409 bug düzəldi); 13 kök kateqoriya, 74 region, 108 elan sağlam |
-| 17 | Smoke test report hazırlanıb | ✅ | Bölmə 9 |
+> **«Mühit» sütunu niyə əlavə olundu:** meyarların bir hissəsi **yalnız lokal DB-də** doğrulanıb. Production DB
+> boş olduğu üçün eyni rəqəmlər canlıda **təkrarlanmır** (məs. meyar 16: lokal 13/74/108 ↔ production **0/0/0**).
+> Kağız üzərində PASS ≠ production-da PASS — cədvəl bunu artıq özü göstərir.
+>
+> Mühit dəyərləri: **KOD** = repo/konfiq faylı · **BUILD** = lokal build/test gate-i · **LOKAL** = lokal DB
+> (`marketplace_dev`, dolu) · **CANLI** = production (`tap360-api.onrender.com` / `360tap.az`, boş DB).
+
+| # | Meyar | Mühit | Vəziyyət | Sübut |
+|---|---|---|---|---|
+| 1 | Backend normal cavab verir | LOKAL + **CANLI** | ✅ | Lokal: DB+Redis+Meili ölü ikən 3 s-də qalxdı. Canlı: 45/45 paralel sorğu **200**, maks 0.91 s (§14.3) |
+| 2 | `/health` işləyir | LOKAL + **CANLI** | ✅ | Lokal 200 / 0.089 s (DB düşəndə də). Canlı 200, `uptimeSec` monoton artır |
+| 3 | `/health/ready` işləyir | LOKAL + **CANLI** | ✅ | Lokal: DB yoxdursa 503 + detal. Canlı: **200**, tam dependency ağacı |
+| 4 | DB connection healthy | **CANLI** | ✅ | `{"database":{"required":true,"ok":true,"status":"connected"}}` — canlıdan alınıb. ⚠️ **Bağlantı** sağlamdır, **məzmun** yoxdur (R-15) |
+| 5 | Backend unavailable olduqda frontend asılı qalmır | LOKAL (Faza 0 build-i) | ✅ / ⏳ | Bütün route-lar ≤ 1.35 s (§9.2). Canlıda bu ssenari **təkrarlana bilmir** — backend hazırda sağlamdır; həm də Vercel production hələ Faza 0 build-ini vermir (§14.6) |
+| 6 | `/elanlar` 60–120 s gözləmir | LOKAL + **CANLI** | ✅ | Lokal **0.04 s** / **0.05 s** (keşsiz). Canlı `GET https://360tap.az/elanlar` → **200, 0.54 s** |
+| 7 | Homepage sonsuz skeleton göstərmir | LOKAL + **CANLI** | ✅ | Lokal: 12 elan / fallback, 0.03 s. Canlı: **200, 0.58 s**, SSR markup-da `$RX` = **0** (həll olunmamış Suspense sərhədi yoxdur) |
+| 8 | TypeScript real errors = 0 | KOD + BUILD | ✅ | `api` 0, `frontend` 0 (əvvəl 11) |
+| 9 | `ignoreBuildErrors` silinib | KOD | ✅ | `next.config.ts`-də yalnız şərh qalıb, açar yoxdur |
+| 10 | ESLint blocking errors = 0 | BUILD | ✅ | 40 error → **0** (307 warning qalır — R-11) |
+| 11 | `ignoreDuringBuilds` silinib | KOD | ✅ | `next.config.ts` + real ESLint quruldu |
+| 12 | Production build PASS | BUILD | ✅ | Hər iki paket, gate-lər aktiv; `next build` exit 0, 38/38 statik səhifə (§14.2) |
+| 13 | Search failure sistemi çökdürmür | LOKAL + **CANLI** | ✅ | Lokal: DEGRADED-də 200 + 5 nəticə. Canlı: `/search?q=iphone` **200**, `meta.degraded: true`, 0 nəticə (boş DB) |
+| 14 | API contract kritik mismatch-ləri düzəldilib | LOKAL | ✅ / ⏳ | 4 səhifə + mərkəzi `unwrap()`. **Canlıda ölçülə bilmir** — boş DB heç bir siyahı qaytarmır, envelope faktiki data ilə yoxlanmayıb |
+| 15 | Əsas route-larda graceful error handling | LOKAL + **CANLI** | ✅ | Lokal: fallback UI, 503 mapping. Canlı: 14 route-un heç birində xam xəta/stack trace yoxdur (§14.4) |
+| 16 | Auth/media/taxonomy regress etməyib | **YALNIZ LOKAL** | ⚠️ **PASS (lokal) / ⏳ CANLI** | Lokal: argon2/guard-lar toxunulmayıb, auth axını **yaxşılaşdı** (409 bug düzəldi), **13 kök kateqoriya, 74 region, 108 elan**. ⛔ **Bu rəqəmlər production-a AİD DEYİL** — canlıda **0 kateqoriya / 0 region / 0 elan**. Taksonomiya production-da yalnız seed-dən sonra doğrulana bilər (§14.9) |
+| 17 | Smoke test report hazırlanıb | SƏNƏD | ✅ | §9 (lokal) + §14 (production doğrulaması) |
+
+**Nəticə:** 17 meyardan **16-sı** öz mühitində ödənilib. Meyar **16** kağız üzərində PASS-dır, **production-da hələ
+yox** — production DB seed edilib eyni sayğaclar (kateqoriya / region / elan) canlıda ≠ 0 alınana qədər bu meyar
+production üçün **AÇIQ** sayılır.
 
 ---
 
@@ -402,10 +427,159 @@ Köhnə kodda bu ssenari prosesin ölümü ilə bitirdi (`$connect()` throw → 
 | Meilisearch | ⚠️ `degraded` (`MeiliSearchApiError`) | **Sistem çökmür** — `/search` Postgres fallback ilə 200 qaytarır (`meta.degraded: true`). Auditdə tapılan ölü Meili Cloud instansı ilə uyğundur |
 | Redis | ⚠️ `reconnecting` | Opsional — API işləyir. Render free Key Value yoxlanmalıdır |
 
-### 13.5 Frontend deploy — DAYANDIRILDI
-Göstərişinizə uyğun (**«Backend healthy olmadan frontend deploy ETMƏ»** və **«gözlənilməyən problem yaranarsa: DAYAN»**), boş DB blokeri həll olunana qədər Vercel deploy-u **icra edilmədi**. Canlı 360tap.az hazırda hələ də köhnə (asılı qalan) build-dədir.
+### 13.5 Frontend deploy — DAYANDIRILDI *(bu status sonra dəyişdi — bax §14.6)*
+Göstərişinizə uyğun (**«Backend healthy olmadan frontend deploy ETMƏ»** və **«gözlənilməyən problem yaranarsa: DAYAN»**), 11:27 UTC-də Vercel deploy-u **icra edilmədi**.
+
+> **YENİLƏNMƏ (2026-09-02, günortadan sonra):** Backend sağlam olduğu təsdiqləndikdən sonra frontend commit-i `5150ee0` **`origin/main`-ə push edildi** (əvvəl `ahead 1` idi) → Vercel auto-deploy tetikləndi. Eyni gün `ffc44d8` (`.github/workflows/keep-alive.yml`) də push edildi — bu, `workflow` scope problemi həll olunduğu üçün mümkün oldu (§13.1-də «qəsdən commit edilmədi» yazılmışdı; artıq git-də 1 workflow var). **Vercel production build-inin faktiki vəziyyəti §14.6-də ölçülüb.**
 
 ---
+
+## 14. FAZA 0 PRODUCTION DOĞRULAMASI (2026-09-02)
+
+### 14.1 Metodologiya
+
+**23 agentli paralel doğrulama.** Faza 0-ın hər iddiası (§7, §8, §9, §11) müstəqil agentlərə paylandı; hər agent
+öz sahəsini sıfırdan ölçdü. **Hər kritik tapıntı üçün ayrıca «adversarial təkzib cəhdi»** aparıldı — yəni tapıntını
+təsdiqləmək yox, **yıxmaq** üçün kontr-sübut axtarıldı. Yalnız təkzib cəhdindən sağ çıxan iddialar bu bölməyə düşdü.
+
+> Bu metodun praktiki nəticəsi: aşağıdakı «Açıq problemlər» cədvəlindəki bəndlərin bir hissəsi məhz təkzib
+> cəhdləri zamanı üzə çıxdı, hesabatın ilkin iddialarından deyil. Eyni səbəbdən §8-dəki `235 URL` rəqəmi
+> **etibarsız elan olundu** və §4-dəki «seed faylları toxunulmayıb» iddiası **köhnəlmiş** kimi düzəldildi.
+
+### 14.2 Build gate-ləri — həqiqətən işləyirmi?
+
+| Paket | Yoxlama | Nəticə |
+|---|---|---|
+| API | `tsc` | ✅ **0 xəta** |
+| API | `eslint` | ✅ **0 xəta, 0 xəbərdarlıq** |
+| API | `jest` | ✅ **8 suite, 15 test** |
+| API | `nest build` | ✅ OK |
+| Frontend | `tsc` | ✅ **0 xəta** |
+| Frontend | `eslint` | ✅ **0 xəta**, 307 xəbərdarlıq (bloklamır — R-11) |
+| Frontend | `next build` | ✅ **exit 0**, **38/38 statik səhifə**, **9.81 s** |
+
+**Gate-lərin real olduğu ayrıca təsdiqləndi:** `next.config.ts`-də `typescript.ignoreBuildErrors` və
+`eslint.ignoreDuringBuilds` açarları **fiziki olaraq yoxdur** (yalnız niyə silindiyini izah edən şərh qalıb), və
+build çıxışında **«Linting and checking validity of types»** mərhələsi real işləyir. Yəni gate «bərpa olundu»
+iddiası kosmetik deyil — build tipi/lint xətası ilə **həqiqətən düşür**.
+
+### 14.3 Canlı backend — davranış və təhlükəsizlik
+
+| Ölçü | Nəticə |
+|---|---|
+| Paralel yük | **45 sorğunun hamısı 200**, ən yavaş **0.91 s** |
+| Proses sabitliyi | `uptimeSec` **monoton artır** → **restart döngəsi YOXDUR** (Faza 0-ın əsas düzəlişinin canlı sübutu) |
+| Auth qapısı | Tokensiz qorunan endpoint-lər → **401** |
+| Validasiya | Səhv gövdə/parametr → **422** |
+| CORS | Yalnız `https://360tap.az` + `https://www.360tap.az`; digər origin-lər rədd olunur |
+| Təhlükəsizlik başlıqları | **helmet** aktiv · **HSTS** var · `x-powered-by` **yoxdur** |
+| Rate limit | **300 sorğu / 60 s** (aktiv və cavab başlıqlarında görünür) |
+| Yazma cəhdləri | ⛔ **Bütün yazma cəhdləri 401/422 ilə rədd olundu** — production DB-yə bu doğrulama zamanı **heç nə yazılmadı** |
+
+### 14.4 Frontend × boş DB — asılı qalma aradan qalxıbmı?
+
+| Ölçü | Nəticə |
+|---|---|
+| Yoxlanan route sayı | **14** |
+| Ən yavaş route | **2.26 s** |
+| Əvvəlki davranış | 60–120 s asılı qalma → ✅ **ARADAN QALXIB** |
+| Suspense sərhədləri | **Hamısı həll olunur** — SSR markup-da `$RX` = **0**, sonsuz skeleton yoxdur |
+| Xəta sızması | Xam xəta mətni / stack trace **yoxdur** |
+| Şablon bütövlüyü | header + footer **hər route-da** render olunur |
+| Boş-vəziyyət mesajları | SSR markup-ında **real gəlir** (client-side «sonradan görünən» mesaj deyil) |
+
+> Yəni boş DB **çirkin, lakin sınıq olmayan** sayt verir: səhifələr açılır, naviqasiya işləyir, istifadəçi
+> «heç nə yoxdur» mesajı görür — spinner-də ilişmir və xəta ekranı almır.
+
+### 14.5 Performans bazası (**BOŞ DB** — bu tavan deyil, **döşəmə**dir)
+
+| Ölçü | Nəticə |
+|---|---|
+| Backend median cavab | **0.25–0.58 s** |
+| Frontend median cavab | **0.25–0.36 s** |
+| Timeout | **Yoxdur** |
+| Sıxılma | **brotli hər yerdə** — FE HTML-də **78–82 %** azalma |
+| Statik asset | `immutable` + CDN **HIT** |
+| Cold start | 17 dəqiqəlik boşdayanmadan sonra **MÜŞAHİDƏ OLUNMADI** |
+
+> ⚠️ **Bu rəqəmlər baza (döşəmə) sayılmalıdır, hədəf yox.** Boş DB-də sorğular sıfır sətir qaytarır — nə JOIN,
+> nə sıralama, nə səhifələmə yükü var. Seed-dən sonra eyni ölçmələr **təkrar** aparılmalı və real baza kimi
+> yazılmalıdır.
+
+### 14.6 Vercel production build-i — ⏳ TƏSDİQLƏNMƏYİB
+
+`5150ee0` **`origin/main`-ə push edildi** (təsdiqləndi: `git branch -r --contains 5150ee0` → `origin/main`).
+Lakin bu doğrulama anında canlı Vercel deployment-i **hələ Faza 0-dan əvvəlki build-i** verirdi. Sübut:
+
+| Yoxlama | Nəticə |
+|---|---|
+| Marker | `5150ee0` `frontend/app/layout.tsx`-dən `fetch('/api/clientlog', …)` inline blokunu **sildi** |
+| Lokal mənbə | `grep clientlog frontend/app/layout.tsx` → yalnız şərh (blok yoxdur) |
+| Canlı HTML | 3 ayrı **`x-vercel-cache: MISS`** (təzə render) cavabında `clientlog` **hər dəfə 2 dəfə** mövcuddur |
+| Nəticə | Canlı production build-i `5150ee0`-dən **əvvəlkidir** — deploy ya davam edir, ya tetiklənməyib, ya da uğursuz olub |
+
+> **Bu, «frontend deploy edildi» iddiasını hazırda təsdiqləmir.** Push faktdır; **production-a çatması fakt deyil**.
+> Yoxlama əmri (təkrar icra üçün):
+> `curl -s "https://360tap.az/elanlar?q=cb$RANDOM" | grep -c clientlog` → **0** olduqda yeni build canlıdadır.
+> Vercel dashboard-da `5150ee0` deployment-inin statusu da yoxlanmalıdır.
+
+### 14.7 Təkzib cəhdi — «Production DB artıq bir dəfə itibmi?»
+
+R-16 (Render free Postgres) qeyd edilərkən cazibədar, lakin **təhlükəli** bir izah özünü təklif edir:
+*«DB artıq bir dəfə silinib, ona görə boşdur.»* Bu iddia **xüsusi olaraq yıxılmağa cəhd edildi və SÜBUT OLUNMADI.**
+
+**İddianın yeganə görünən dayağı:** Next.js `fetch` keşində **74 region** və **46 elan** qaytaran cavab
+entry-lərinin mövcudluğu — yəni «nə vaxtsa dolu API cavab vermişdi».
+
+| Yoxlama | Tapıntı | Nəticə |
+|---|---|---|
+| Həmin 74 region / 46 elan entry-lərinin **hədəf host**-u | `localhost:5500` / `127.0.0.1:5500` | ⛔ **LOKAL API** — production deyil |
+| `tap360-api.onrender.com` üçün olan keş entry-ləri | **hamısı bu gün yazılıb** | Tarixi məlumat daşımır |
+| Həmin production entry-lərinin məzmunu | **hamısı 0 element** qaytarır | Production heç vaxt dolu görünməyib |
+
+**Hökm:** keşdəki «dolu» cavablar **lokal dev API-nin izidir**, production-un deyil. Production DB-nin
+nə vaxtsa dolu olduğuna dair **heç bir sübut tapılmadı** — §13.3-dəki müşahidələr (audit günü canlıda
+0 qiymət etiketi, sitemap 5 URL) də əksini deyil, **eynisini** göstərir.
+
+> **Buna görə R-16 keçmişə deyil, GƏLƏCƏYƏ aid risk kimi yazılıb.** «DB itib» kimi bir izah sənədə
+> **qəsdən salınmadı** — çünki o, sübutsuzdur. R-16-nın real məzmunu budur: `plan: free` Postgres-in
+> ömrü məhduddur və backup-ı yoxdur, ona görə **seed-dən sonrakı data da müddətlidir**.
+>
+> **İstifadəçi qərarı:** indi seed edilir; **plan (free → paid) qərarı Faza 1-ə saxlanılır.**
+
+### 14.8 Açıq problemlər (Faza 0-dan qalan)
+
+| # | Problem | Hazırkı təsir | Faza |
+|---|---|---|---|
+| A-1 | **Meilisearch instansı mövcud deyil** | `/search` **DEGRADED** — Postgres fallback ilə 200 qaytarır, təxminən **~326 ms cərimə**. **Circuit breaker yoxdur** → hər sorğu ölü Meili-yə cəhd edib timeout-a düşür | Faza 4 |
+| A-2 | **Redis heç vaxt qoşulmur** | API işləyir (opsional), lakin **ERP nonce yolu latent 500 riski** daşıyır — hazırda **atəş açmır**, çünki həmin yol canlıda çağırılmır | Faza 1 |
+| A-3 | **SEO status kodları** — `/k/*`, `/seher/*` 301/307 yerinə 200 + `<meta refresh>` | Axtarış sistemləri üçün zəif siqnal | ayrıca düzəldilir (§9.3, Faza 8) |
+| A-4 | **Frontend-də 0 test** | Heç bir avtomatik regress qoruması yoxdur — bütün frontend doğrulaması əl ilə/agent ilə aparılır | Faza 1 |
+| A-5 | **Vercel production build-i təsdiqlənməyib** | Faza 0 frontend düzəlişləri (SSR timeout, fallback UI, error.tsx) canlıda **hələ aktiv olmaya bilər** — bax §14.6 | indi |
+
+### 14.9 Production seed — ⏳ **GÖZLƏYİR**
+
+Seed **istifadəçi tərəfindən** icra olunur (`npm run prisma:seed`, `M-5`). Bu bölmə **nəticə gəldikdən sonra**
+doldurulacaq. **Nəticə məlum olmadığı üçün burada heç bir rəqəm yazılmayıb.**
+
+**Seed-dən dərhal sonra yoxlanmalı (doldurulacaq):**
+
+| Yoxlama | Gözlənilən | Faktiki | Status |
+|---|---|---|---|
+| Seed loqunda hədəf DB | `☁️ UZAQ BAZA` (lokal **deyil**) | — | ⏳ GÖZLƏYİR |
+| `GET /api/v1/categories` | 13 kök kateqoriya | — | ⏳ GÖZLƏYİR |
+| `GET /api/v1/geo/regions` | 74 region | — | ⏳ GÖZLƏYİR |
+| `GET /api/v1/listings?limit=5` | `meta.total` > 0 (demo OPT-IN olduğu üçün **0 gözləniləndir**, əgər `SEED_DEMO_LISTINGS=true` verilməyibsə) | — | ⏳ GÖZLƏYİR |
+| `curl https://360tap.az/sitemap.xml \| grep -c '<loc>'` | > 5 | — | ⏳ GÖZLƏYİR |
+| Ana səhifədə kateqoriya menyusu | dolu | — | ⏳ GÖZLƏYİR |
+| §11 meyar 16 (taksonomiya) | production-da PASS | — | ⏳ GÖZLƏYİR |
+
+> ⚠️ **Diqqət (`25ee6c8`-dən sonra):** default seed **demo elan yaratmır**. Yəni seed uğurlu olsa belə
+> `listings` **0 qalacaq** — bu **gözlənilən** davranışdır, nasazlıq deyil. Elan sayının artması üçün ya real
+> istifadəçi elanları, ya da açıq şəkildə `SEED_DEMO_LISTINGS=true` lazımdır (production-da **tövsiyə olunmur**).
+
+---
+
 ## PHASE 0 VERDICT (LOKAL): **PASS**  ·  PRODUCTION PHASE 0: **GÖZLƏMƏDƏ**
 
 **Bütün 17 qəbul meyarı ödənilib və lokal olaraq uçdan-uca doğrulanıb.**
@@ -420,11 +594,17 @@ Faza 0-ın əsas hədəfi — *«Frontend → API → Database → Search → Me
 
 ### ⚠️ PASS-ın şərti: production-da təsdiq hələ qalır
 
-Bu «PASS» **mühəndislik işinin tamamlanmasına** aiddir. **Canlı sayt hələ də ölüdür**, çünki:
+Bu «PASS» **mühəndislik işinin tamamlanmasına** aiddir. **Canlı sayt artıq ölü deyil — qalxıb və cavab verir, lakin məzmunsuzdur.** Ölçülmüş vəziyyət:
 
-1. **Deploy edilməyib** — sizin göstərişinizə uyğun olaraq (§14) icazə gözləyirəm.
-2. **Render Postgres-in öz vəziyyəti yoxlanılmalıdır (M-1)** — əgər DB dayandırılıbsa, kod düzəlişi API-ni qaldıracaq (artıq `/health` cavab verəcək və restart döngəsi olmayacaq), lakin data endpoint-ləri DB bərpa olunana qədər 503 qaytaracaq.
+| Nə | Vəziyyət | Sübut |
+|---|---|---|
+| Backend əlçatanlığı | ✅ **HƏLL OLUNDU** | `tap360-api.onrender.com` — 45/45 sorğu 200, `/health/ready` 200, `database: connected` |
+| Frontend əlçatanlığı | ✅ **HƏLL OLUNDU** | `360tap.az/` 200 / 0.58 s · `/elanlar` 200 / 0.54 s — 60–120 s asılı qalma **yoxdur** |
+| Saytın **məzmunu** | ⛔ **BOŞ** | 0 kateqoriya, 0 region, 0 elan, sitemap 5 URL. Səbəb: production DB boşdur (R-15); seed **istifadəçi tərəfindən icra olunur** — §14.9 |
+| Vercel production **build-i** | ⏳ **TƏSDİQLƏNMƏYİB** | Canlı HTML hələ `5150ee0`-də silinmiş `/api/clientlog` blokunu daşıyır → §14.6 |
 
-**Növbəti addım sizdədir:** M-1-i yoxlayın və deploy üçün icazə verin. Deploy-dan sonra eyni smoke matrisini canlıda təkrar icra edib nəticəni təsdiqləyəcəyəm.
+**Yəni əvvəlki iki bloker-dən biri bağlandı:** M-1 (Render Postgres instansı) ✅ — DB canlıdır və qoşulur; M-2 (deploy icazəsi) ✅ — backend deploy edildi, frontend push edildi. **Açıq qalan:** M-5 (seed) və Vercel build təsdiqi.
+
+**Növbəti addımlar:** (1) seed nəticəsini §14.9-ya yazmaq, (2) Vercel deployment-in `5150ee0`-ə keçdiyini təsdiqləmək (§14.6), (3) hər ikisindən sonra §9 smoke matrisini **canlıda** təkrar icra etmək.
 
 **FAZA 1-ə keçmirəm — göstərişinizi gözləyirəm.**

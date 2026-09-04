@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -86,6 +87,24 @@ async function getListing(id: string): Promise<{ listing: Detail | null; unavail
   return { listing: r.data, unavailable: r.unavailable };
 }
 
+/**
+ * SEO — BU ROUTE-UN ÜZƏRİNDƏ SUSPENSE SƏRHƏDİ OLMAMALIDIR.
+ *
+ * ƏVVƏL: `app/loading.tsx` (root) və `app/elanlar/loading.tsx` — HƏR İKİSİ bu route-un
+ * əcdadı idi və Next shell-i `getListing()` bitmədən flush edirdi. Shell flush olunanda
+ * HTTP statusu artıq göndərilmiş olur, ona görə aşağıdakı `notFound()` cavabın kodunu
+ * dəyişə bilmirdi: mövcud olmayan elan HTTP 200 qaytarırdı və 404 yalnız klientdə
+ * `$RX("B:2","NEXT_HTTP_ERROR_FALLBACK;404")` kimi render olunurdu (SOFT-404 —
+ * axtarış motorları belə səhifəni "mövcud" sayıb indeksləyir).
+ *
+ * İNDİ: hər iki `loading.tsx` silindi (onların skeleton-ları öz səhifələrinin İÇİNDƏKİ
+ * `<Suspense>` sərhədlərinə köçdü), yəni `getListing()` shell flush-dan ƏVVƏL bitir və
+ * `notFound()` real HTTP 404 qaytarır.
+ *
+ * Aşağıdakı yeganə Suspense sərhədi "Oxşar elanlar" blokunun ətrafındadır — o, status
+ * kodu artıq təyin ediləndən SONRA render olunur, ona görə təhlükəsizdir və eyni
+ * zamanda ikinci dərəcəli sorğunun 3 saniyəsini kritik yoldan çıxarır.
+ */
 export default async function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { listing: l, unavailable } = await getListing(id);
@@ -117,7 +136,6 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   const price =
     l.price != null ? `${Number(l.price).toLocaleString('az-AZ')} ${l.currency}` : 'Razılaşma yolu ilə';
   const phone = l.contactPhone ?? undefined;
-  const similar = await getSimilar(l.id);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -220,18 +238,27 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           </aside>
         </div>
 
-        {/* Oxşar elanlar */}
-        {similar.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-xl font-extrabold text-ink-900 dark:text-white mb-4">Oxşar elanlar</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-              {similar.map((s) => (
-                <ListingCard key={s.id} item={s} />
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Oxşar elanlar — ikinci dərəcəli məzmun, ayrıca stream olunur.
+            Status kodu (200/404) bu nöqtəyə çatanda artıq təyin olunub. */}
+        <Suspense fallback={null}>
+          <SimilarListings id={l.id} />
+        </Suspense>
       </div>
     </div>
+  );
+}
+
+async function SimilarListings({ id }: { id: string }) {
+  const similar = await getSimilar(id);
+  if (similar.length === 0) return null;
+  return (
+    <section className="mt-10">
+      <h2 className="text-xl font-extrabold text-ink-900 dark:text-white mb-4">Oxşar elanlar</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+        {similar.map((s) => (
+          <ListingCard key={s.id} item={s} />
+        ))}
+      </div>
+    </section>
   );
 }

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Upload, X, Sparkles, Check } from 'lucide-react';
@@ -26,7 +26,34 @@ function flattenCats(cats: Cat[], depth = 0, out: { id: string; label: string }[
   return out;
 }
 
-export default function ElanYerlesdir() {
+/**
+ * `/elan-yerlesdir` — ÖZ Suspense SƏRHƏDİ.
+ *
+ * Bu səhifə `useSearchParams()` istifadə edir (`?edit=<id>`), yəni prerender zamanı
+ * mütləq bir Suspense sərhədi tələb edir. ƏVVƏL həmin sərhədi root `app/loading.tsx`
+ * verirdi — amma o sərhəd BÜTÜN app ağacının üzərində idi və `/elanlar/[id]`-in
+ * HTTP 404-nü, `/k/[category]`-nin 307-sini sıradan çıxarırdı.
+ *
+ * İNDİ sərhəd yalnız buradadır: `useSearchParams` tələbi ödənir, digər route-ların
+ * status kodlarına isə heç bir təsiri yoxdur.
+ */
+export default function ElanYerlesdirPage() {
+  return (
+    <Suspense fallback={<PageSpinner />}>
+      <ElanYerlesdirForm />
+    </Suspense>
+  );
+}
+
+function PageSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-tap" />
+    </div>
+  );
+}
+
+function ElanYerlesdirForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('edit');

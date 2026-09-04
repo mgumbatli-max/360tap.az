@@ -1,5 +1,17 @@
-// Ani skeleton — SSR backend cavabını gözləyərkən (Render cold-start) ağ ekran əvəzinə dərhal görünür.
-export default function Loading() {
+/**
+ * Elan siyahısı skeleton-u.
+ *
+ * ƏVVƏL bu markup `app/elanlar/loading.tsx` idi. Route-səviyyəli `loading.tsx`
+ * Next-in route seqmentinin ÜZƏRİNƏ Suspense sərhədi qoyur — yəni shell (və onunla
+ * birlikdə HTTP status kodu + başlıqlar) data gəlməmişdən ƏVVƏL flush olunur.
+ * Bu, /elanlar üçün zərərsiz idi, amma eyni sərhəd `/elanlar/[id]`-ə də miras qalırdı
+ * və orada `notFound()` artıq HTTP 404 qaytara bilmirdi (soft-404: 200 + klient xətası).
+ *
+ * İNDİ: eyni skeleton `page.tsx` İÇİNDƏ `<Suspense fallback={...}>` ilə istifadə olunur.
+ * Sərhəd yalnız bu səhifənin daxilindədir, alt route-lara miras qalmır — UX eynidir,
+ * status kodu isə düzgündür.
+ */
+export default function ListingsSkeleton() {
   return (
     <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-6 animate-pulse">

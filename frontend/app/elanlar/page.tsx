@@ -1,10 +1,14 @@
+import { Suspense } from 'react';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import CategoryFilters, { type CatAttr } from '@/components/CategoryFilters';
 import InfiniteListings from '@/components/InfiniteListings';
 import SaveSearchButton from '@/components/SaveSearchButton';
+import ListingsSkeleton from './ListingsSkeleton';
 import { meiliSearch, type MeiliHit } from '@/lib/meili';
 import { serverGet } from '@/lib/server-fetch';
+import { buildMetadata } from '@/lib/seo';
 
 function mapMeiliHit(h: MeiliHit): Listing {
   return {
@@ -85,7 +89,74 @@ function qs(sp: SP, patch: Partial<SP>): string {
   return s ? `/elanlar?${s}` : '/elanlar';
 }
 
-export default async function ListingsPage({ searchParams }: { searchParams: Promise<SP> }) {
+/**
+ * Vertikal landing SEO-su.
+ *
+ * `/emlak` və `/neqliyyat` route-ları silindi (indi `next.config.ts` → 308 redirect),
+ * amma onların `metadata` ixracı SEO dəyəri daşıyırdı. Həmin başlıq/təsvir/açar sözlər
+ * burada — YÖNLƏNDİRMƏNİN HƏDƏFİNDƏ — bərpa olunur, yəni indekslənən səhifə artıq
+ * boş meta-refresh səhifəsi yox, real kateqoriya nəticələridir.
+ */
+const VERTICAL_SEO: Record<string, { title: string; description: string; keywords: string[] }> = {
+  'dasinmaz-emlak': {
+    title: 'Daşınmaz əmlak — Alqı, Kirayə, Yeni tikili',
+    description:
+      'Bakı və regionlarda mənzil, həyət evi, ofis, qaraj, torpaq elanları. 360tap.az',
+    keywords: ['daşınmaz əmlak', 'mənzil', 'kirayə', 'yeni tikili', 'həyət evi', 'ofis', 'bakı'],
+  },
+  neqliyyat: {
+    title: 'Nəqliyyat — Avtomobil alqı-satqı, kredit, barter',
+    description:
+      'Bakı və Azərbaycanda avtomobil elanları. Marka, model üzrə axtarış, kredit, barter. 360tap.az',
+    keywords: ['avtomobil', 'maşın', 'nəqliyyat', 'bmw', 'mercedes', 'toyota', 'kredit', 'barter'],
+  },
+};
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SP>;
+}): Promise<Metadata> {
+  const sp = await searchParams;
+
+  if (sp.category && VERTICAL_SEO[sp.category]) {
+    const v = VERTICAL_SEO[sp.category];
+    return buildMetadata({ ...v, path: `/elanlar?category=${sp.category}` });
+  }
+  if (sp.q) {
+    // Axtarış nəticələri indekslənməməlidir (sonsuz sayda dublikat URL).
+    return buildMetadata({
+      title: `«${sp.q}» üzrə axtarış nəticələri`,
+      path: '/elanlar',
+      noindex: true,
+    });
+  }
+  return buildMetadata({
+    title: 'Bütün elanlar — Azərbaycan üzrə alqı-satqı',
+    description:
+      'Azərbaycanın bütün regionlarından elanlar: avtomobil, daşınmaz əmlak, elektronika, iş və xidmətlər. 360tap.az',
+    path: '/elanlar',
+  });
+}
+
+/**
+ * Route-un giriş nöqtəsi: SÜRƏTLİ SHELL.
+ *
+ * `searchParams` promise-i AWAIT EDİLMİR — burada heç nə gözlənilmir, ona görə
+ * shell dərhal flush olunur və istifadəçi ani skeleton görür (əvvəl bunu
+ * `app/elanlar/loading.tsx` edirdi). Fərq: bu Suspense sərhədi route seqmentinin
+ * ÜZƏRİNDƏ deyil, İÇİNDƏDİR — yəni `/elanlar/[id]` alt route-una MİRAS QALMIR,
+ * və orada `notFound()` artıq real HTTP 404 qaytara bilir.
+ */
+export default function ListingsPage({ searchParams }: { searchParams: Promise<SP> }) {
+  return (
+    <Suspense fallback={<ListingsSkeleton />}>
+      <ListingsResults searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
 
   let items: Listing[] = [];

@@ -38,9 +38,33 @@ const config: NextConfig = {
       { source: '/api/:path*', destination: `${API}/api/v1/:path*` },
     ];
   },
-  // Qeyd: əvvəl /elanlar?category=dasinmaz-emlak → /emlak → /elanlar dairəvi redirect var idi
-  // (lazımsız hop + döngə riski). /elanlar artıq kateqoriyanı birbaşa render edir (filtr + sonsuz scroll),
-  // ona görə redirect-lər çıxarıldı. /emlak,/neqliyyat tək-yönlü /elanlar-a yönləndirir (öz page.tsx-lərində).
+  async redirects() {
+    // SEO — SIRF-YÖNLƏNDİRMƏ ROUTE-LARI PLATFORMA SƏVİYYƏSİNDƏ.
+    //
+    // ƏVVƏL: /emlak, /neqliyyat, /register hər biri `redirect()` çağıran page.tsx idi.
+    // Bu route-lar statik prerender olunduğu üçün Next onları HTML faylı kimi yazırdı və
+    // cavab HTTP 200 + `<meta http-equiv="refresh" content="1;url=...">` olurdu.
+    // Nəticə: axtarış motorları üçün bu, yönləndirmə DEYİL — 200-lük dublikat səhifədir
+    // (link equity ötürülmür, indeksdə boş səhifə qalır, istifadəçi 1 saniyə gözləyir).
+    //
+    // İNDİ: yönləndirmə routing mərhələsində baş verir → HTTP 308 + `Location` başlığı,
+    // heç bir React render-i olmadan. `permanent: true` = 308 (307 deyil), yəni
+    // "bu ünvan həmişəlik köçüb" siqnalı. Sorğu string-i avtomatik ötürülür
+    // (məs. /neqliyyat?brand=BMW → /elanlar?category=neqliyyat&brand=BMW).
+    //
+    // Qeyd: /emlak və /neqliyyat-ın SEO metadata-sı itmir — hədəf kateqoriyalar üçün
+    // `app/elanlar/page.tsx`-dəki `generateMetadata` onu bərpa edir (VERTICAL_SEO).
+    //
+    // Qeyd: /k/[category] və /seher/* DİNAMİKDİR (statik pattern-ə sığmır), ona görə
+    // onlar `redirect()` ilə qalır; onların 200-lük meta-refresh problemi isə
+    // route-un üzərindəki `loading.tsx` Suspense sərhədinin götürülməsi ilə həll olunub
+    // (shell flush olunmadığı üçün Next artıq real 307 + Location qaytara bilir).
+    return [
+      { source: '/emlak', destination: '/elanlar?category=dasinmaz-emlak', permanent: true },
+      { source: '/neqliyyat', destination: '/elanlar?category=neqliyyat', permanent: true },
+      { source: '/register', destination: '/qeydiyyat', permanent: true },
+    ];
+  },
 };
 
 export default config;
