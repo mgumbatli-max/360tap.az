@@ -67,6 +67,7 @@ model User {
   favorites       Favorite[]
   savedSearches   SavedSearch[]
   notifications   Notification[]
+  verificationCodes VerificationCode[]
   reviewsWritten  Review[]   @relation("reviewer")
   reviewsReceived Review[]   @relation("reviewed")
 
@@ -840,4 +841,59 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([actorId])
   @@map("audit_logs")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOĞRULAMA KODLARI — e-poçt təsdiqi, telefon OTP, parol sıfırlama.
+//
+// NİYƏ AYRICA CƏDVƏL (User-də sahə deyil): eyni istifadəçinin eyni anda birdən
+// çox açıq kodu ola bilər (telefon dəyişir + parol sıfırlanır), üstəlik kod
+// QEYDİYYATDAN ƏVVƏL də lazımdır — o anda hələ `User` sətri yoxdur, ona görə
+// `userId` nullable-dır və hədəf (`target`) müstəqil saxlanılır.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum VerificationChannel {
+  email
+  sms
+}
+
+enum VerificationPurpose {
+  register        // qeydiyyatı tamamla
+  login           // telefonla girişdə OTP
+  verify_contact  // mövcud hesabın e-poçt/telefonunu təsdiqlə
+  reset_password  // parol sıfırlama
+}
+
+model VerificationCode {
+  id      String              @id @default(uuid()) @db.Uuid
+  userId  String?             @map("user_id") @db.Uuid
+  user    User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel VerificationChannel
+  purpose VerificationPurpose
+
+  /// Normallaşdırılmış hədəf: e-poçt kiçik hərflə, telefon E.164 (+994…).
+  /// Normallaşdırma OLMASA «A@x.az» və «a@x.az» ayrı sətir yaradar və limit sızar.
+  target String @db.VarChar(190)
+
+  /// Kod AÇIQ SAXLANILMIR. SHA-256(kod + hədəf + server pepper) saxlanılır:
+  /// baza sızsa belə kod bərpa oluna bilməz. Argon2 seçilmədi — doğrulama
+  /// istifadəçinin gözlədiyi kritik yoldadır və 6 rəqəmli kod üçün müdafiəni
+  /// hash-in bahalığı deyil, qısa TTL + cəhd limiti verir.
+  codeHash String @map("code_hash") @db.VarChar(64)
+
+  /// Uğurlu doğrulamadan sonra verilir — «bir dəfəlik» hüquq tokeni.
+  /// Qeydiyyatı tamamlamaq üçün kodun özü yox, bu token göndərilir.
+  grantToken String? @map("grant_token") @db.VarChar(64)
+
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  /// Açıq kod axtarışı: hədəf + məqsəd üzrə ən yeni istifadə olunmamış sətir.
+  @@index([target, purpose, consumedAt])
+  /// Sürət limiti: son N dəqiqədə həmin hədəfə neçə kod göndərilib.
+  @@index([target, createdAt])
+  @@index([userId])
+  @@map("verification_codes")
 }

@@ -2,15 +2,61 @@
 import { useState, useRef, useEffect } from 'react';
 import { Phone, ArrowLeft, Loader2 } from 'lucide-react';
 import { api, setTokens } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
 
 type Step = 'phone' | 'code';
+
+/**
+ * Backend kontraktı (POST /api/v1/auth/send-otp):
+ *   { ok:true, data:{ expiresInSec, resendAfterSec, devCode? } }
+ * `devCode` YALNIZ NODE_ENV!==production-da gəlir — dev-də SMS provayderi olmadan
+ * axını sınamaq üçün. Production cavabında bu sahə ümumiyyətlə mövcud olmur.
+ */
+type SendOtpData = {
+  expiresInSec: number;
+  resendAfterSec: number;
+  devCode?: string;
+};
+
+/** POST /api/v1/auth/verify-otp — doğrulama uğurlu olduqda istifadəçi DƏRHAL daxil olur. */
+type VerifyOtpData = {
+  user: Record<string, unknown>;
+  tokens: { accessToken: string; refreshToken?: string; accessExpiresIn?: number };
+  isNew: boolean;
+};
+
+/**
+ * Serverin mətnini olduğu kimi göstəririk — sürət limiti, yanlış kod, cəhd limiti
+ * kimi hallar üçün ən dəqiq izah odur. Yalnız İSTİFADƏÇİYƏ HEÇ NƏ DEMƏYƏN texniki
+ * mətnlər (NestJS 404 gövdəsi, `fetch` şəbəkə xətası) aydın cümləyə çevrilir ki,
+ * backend hazır olmayanda ekranda «Cannot POST /api/v1/...» qalmasın.
+ */
+function readableError(err: unknown): string {
+  const msg = err instanceof Error ? err.message.trim() : '';
+  if (
+    !msg ||
+    msg === 'Server xətası' ||
+    /Cannot (POST|GET)/i.test(msg) ||
+    /failed to fetch|networkerror|load failed/i.test(msg)
+  ) {
+    return 'Xidmət hazırda əlçatan deyil. Bir azdan yenidən cəhd edin.';
+  }
+  return msg;
+}
+
+/**
+ * Server dəyəri gəlmədikdə istifadə olunan ehtiyat ömür (kontrakt: kod 5 dəqiqəlikdir).
+ * `0`-a düşmək TƏHLÜKƏLİDİR: sayğac dərhal «vaxtı bitdi» deyib təsdiq düyməsini
+ * bağlayardı və işlək kodla belə axın kilidlənərdi.
+ */
+const FALLBACK_EXPIRES_SEC = 300;
+
+const mmss = (sec: number) =>
+  `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 
 export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
   onSuccess: () => void;
   onSwitchToEmail?: () => void;
 }) {
-  const { setUserAndToken } = useAuth() as any;
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('+994');
   const [fullName, setFullName] = useState('');
@@ -18,15 +64,20 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resendIn, setResendIn] = useState(0);
+  const [expiresIn, setExpiresIn] = useState(0);
   const [devCode, setDevCode] = useState('');
   const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Resend countdown
+  // Tək saniyəlik taymer HƏM təkrar-göndərmə, HƏM kodun ömrü sayğacını idarə edir —
+  // iki ayrı interval qurmaq lazımsızdır və eyni tick-də sinxron qalırlar.
   useEffect(() => {
-    if (resendIn <= 0) return;
-    const t = setTimeout(() => setResendIn(resendIn - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendIn]);
+    if (step !== 'code') return;
+    const t = setInterval(() => {
+      setResendIn((s) => Math.max(0, s - 1));
+      setExpiresIn((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [step]);
 
   // Telefon yarımauto-format
   const onPhoneChange = (v: string) => {
@@ -42,22 +93,24 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
     e?.preventDefault();
     setError(''); setLoading(true);
     try {
-      const r = await api<{ phone: string; dev_code?: string }>('/auth/send-otp', {
+      // Kontrakt: send-otp gövdəsi YALNIZ `{ phone }` qəbul edir.
+      // Ad-soyad doğrulama anında (verify-otp) göndərilir — yeni hesab orada yaranır.
+      const res = await api<{ data?: SendOtpData }>('/auth/send-otp', {
         method: 'POST',
-        body: JSON.stringify({ phone, full_name: fullName || undefined }),
+        body: JSON.stringify({ phone }),
       });
+      const data = (res.data ?? res) as unknown as SendOtpData;
       setStep('code');
-      setResendIn(60);
-      setDevCode(r.dev_code ?? '');
+      // Sayğac serverin dəyərindən qidalanır: sabit 60 saniyə serverin real
+      // sürət limiti ilə uzlaşmaya bilər (limit dəyişəndə UI yalan danışardı).
+      setResendIn(data.resendAfterSec ?? 60);
+      setExpiresIn(data.expiresInSec ?? FALLBACK_EXPIRES_SEC);
+      setDevCode(data.devCode ?? '');
+      setCode(['', '', '', '', '', '']);
       // İlk inputa fokuslan
       setTimeout(() => codeRefs.current[0]?.focus(), 100);
-    } catch (err: any) {
-      // Faza 0 (§10): endpoint hazırda mövcud deyil (Faza 5-də qurulacaq) —
-      // istifadəçiyə xam API xətası yox, aydın izah göstərilir.
-      setError(
-        'Telefonla giriş hazırda əlçatan deyil. Zəhmət olmasa email ilə daxil olun.',
-      );
-      if (process.env.NODE_ENV !== 'production') console.warn('[otp] send-otp:', err?.message);
+    } catch (err: unknown) {
+      setError(readableError(err));
     } finally { setLoading(false); }
   };
 
@@ -93,24 +146,30 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
     if (c.length !== 6) return;
     setError(''); setLoading(true);
     try {
-      const r = await api<{ token: string; user: any; isNew: boolean }>('/auth/verify-otp', {
+      const res = await api<{ data?: VerifyOtpData }>('/auth/verify-otp', {
         method: 'POST',
-        body: JSON.stringify({ phone, code: c, full_name: fullName || undefined }),
+        body: JSON.stringify({ phone, code: c, fullName: fullName || undefined }),
       });
-      // Auth state-i yenilə — `setTokens()` ilə, xam localStorage ilə DEYİL:
-      // token açarı bir yerdə (lib/api.ts) idarə olunur və refresh qatı ilə uzlaşır.
-      // QEYD: `/auth/verify-otp` NestJS-ə hələ köçürülməyib (yalnız login/register/
-      // refresh/logout/me mövcuddur) — bu axın backend hazır olana qədər 404 alacaq.
-      setTokens({ accessToken: r.token });
-      // Səhifəni yenilə (auth context push)
-      window.location.reload();
+      const data = (res.data ?? res) as unknown as VerifyOtpData;
+      // Tokenlər `setTokens()` ilə yazılır, xam localStorage ilə DEYİL: açar adları
+      // və refresh rotasiyası tək yerdə (lib/api.ts) idarə olunur. refreshToken
+      // atılsaydı sessiya access ömrü (15 dəq) bitəndə səssizcə ölərdi.
+      setTokens(data.tokens);
       onSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Yanlış kod');
+      // AuthProvider (lib/auth.tsx) xaricdən istifadəçi yazmağa yol vermir —
+      // yalnız `login`/`register` daxili olaraq setUser çağırır. Ona görə OTP axını
+      // kontekst yeniləməsini reload ilə alır: yüklənmədə provider tokeni görüb
+      // `/auth/me` sorğusu ilə istifadəçini bərpa edir. AuthContext `setUser`
+      // ixrac edən kimi bu sətir silinməlidir (lib/auth.tsx bu tapşırığa daxil deyil).
+      window.location.reload();
+    } catch (err: unknown) {
+      setError(readableError(err));
       setCode(['', '', '', '', '', '']);
       codeRefs.current[0]?.focus();
     } finally { setLoading(false); }
   };
+
+  const expired = step === 'code' && expiresIn === 0;
 
   return (
     <div>
@@ -133,6 +192,7 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
               className="input"
               maxLength={120}
             />
+            <p className="text-xs text-ink-500 mt-1">Hesabınız yoxdursa, bu adla yaradılacaq</p>
           </div>
 
           <div>
@@ -209,10 +269,24 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
                 onKeyDown={(e) => onCodeKey(i, e)}
                 inputMode="numeric"
                 maxLength={1}
-                className="w-11 h-14 text-center text-2xl font-bold rounded-xl border-2 border-ink-200 focus:border-tap focus:outline-none focus:ring-2 focus:ring-tap-100 bg-white"
+                disabled={expired}
+                className="w-11 h-14 text-center text-2xl font-bold rounded-xl border-2 border-ink-200 focus:border-tap focus:outline-none focus:ring-2 focus:ring-tap-100 bg-white disabled:opacity-50"
               />
             ))}
           </div>
+
+          {/* Kodun ömrü serverdən gəlir (5 dəq). Sayğac olmasa istifadəçi vaxtı keçmiş
+              kodu təkrar-təkrar yazıb cəhd limitini yandırardı. */}
+          {!expired && expiresIn > 0 && (
+            <p className="text-center text-xs text-ink-500">
+              Kod <span className="font-mono font-semibold">{mmss(expiresIn)}</span> ərzində etibarlıdır
+            </p>
+          )}
+          {expired && (
+            <p className="text-center text-xs text-amber-700">
+              Kodun vaxtı bitdi — yeni kod istəyin
+            </p>
+          )}
 
           {error && (
             <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200 text-center">
@@ -222,7 +296,7 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
 
           <button
             type="button"
-            disabled={loading || code.join('').length !== 6}
+            disabled={loading || expired || code.join('').length !== 6}
             onClick={() => verifyOtp()}
             className="btn-tap w-full disabled:opacity-50"
           >
@@ -238,8 +312,9 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
             ) : (
               <button
                 type="button"
+                disabled={loading}
                 onClick={() => sendOtp()}
-                className="text-sm text-tap hover:underline font-semibold"
+                className="text-sm text-tap hover:underline font-semibold disabled:opacity-50"
               >
                 Kodu yenidən göndər
               </button>

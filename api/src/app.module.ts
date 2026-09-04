@@ -22,6 +22,8 @@ import { QueueModule } from './queue/queue.module';
 import { HealthModule } from './health/health.module';
 import { MediaModule } from './media/media.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
+import { VerificationModule } from './modules/verification/verification.module';
 import { SearchModule } from './search/search.module';
 import { AiModule } from './ai/ai.module';
 import { GeoModule } from './modules/geo/geo.module';
@@ -261,6 +263,8 @@ class RedisThrottlerStorage implements ThrottlerStorage, OnApplicationShutdown {
     MediaModule,
     SearchModule,
     AiModule,
+    MessagingModule, // @Global — MailService/SmsService bütün modullara açılır
+    VerificationModule,
     AuthModule,
     GeoModule,
     StoresModule,

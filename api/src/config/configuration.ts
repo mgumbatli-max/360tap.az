@@ -27,6 +27,27 @@ export interface AppConfig {
     model: string;
     visionModel: string;
   };
+  /** Saytın ictimai ünvanı — mektublardakı linklər (təsdiq, parol sıfırlama) bundan qurulur. */
+  publicUrl: string;
+  mail: {
+    /** `resend` | `console`. Boş/naməlum dəyər → console (heç vaxt çökmür). */
+    provider: string;
+    apiKey: string;
+    /** Göndərən: «360tap.az <no-reply@360tap.az>». Domen Resend-də təsdiqlənməlidir. */
+    from: string;
+  };
+  sms: {
+    /** `twilio` | `http` (lokal AZ aqreqator) | `console`. */
+    provider: string;
+    /** Twilio */
+    accountSid: string;
+    authToken: string;
+    /** Twilio göndərən nömrə VƏ YA lokal aqreqatorda təsdiqlənmiş alfa-nömrə. */
+    from: string;
+    /** Lokal aqreqator üçün ümumi HTTP adapteri */
+    httpUrl: string;
+    httpToken: string;
+  };
 }
 
 function required(key: string): string {
@@ -58,6 +79,20 @@ export default (): AppConfig => ({
   media: {
     dir: process.env.MEDIA_DIR ?? './uploads',
     baseUrl: process.env.MEDIA_BASE_URL ?? 'http://localhost:5500/uploads',
+  },
+  publicUrl: process.env.PUBLIC_URL ?? 'https://360tap.az',
+  mail: {
+    provider: process.env.MAIL_PROVIDER ?? '',
+    apiKey: process.env.MAIL_API_KEY ?? '',
+    from: process.env.MAIL_FROM ?? '360tap.az <no-reply@360tap.az>',
+  },
+  sms: {
+    provider: process.env.SMS_PROVIDER ?? '',
+    accountSid: process.env.SMS_ACCOUNT_SID ?? '',
+    authToken: process.env.SMS_AUTH_TOKEN ?? '',
+    from: process.env.SMS_FROM ?? '360tap',
+    httpUrl: process.env.SMS_HTTP_URL ?? '',
+    httpToken: process.env.SMS_HTTP_TOKEN ?? '',
   },
   groq: {
     apiKey: process.env.GROQ_API_KEY ?? '',

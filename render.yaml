@@ -76,6 +76,42 @@ services:
       - key: GROQ_VISION_MODEL
         sync: false
 
+      # --- E-POÇT (OPSİONAL, LAKİN QEYDİYYAT ÜÇÜN LAZIM) ---
+      # Təyin olunmasa mail «console» adapterinə düşür: mektub GÖNDƏRİLMİR, yalnız
+      # loga yazılır. API çökmür, qeydiyyat işləyir — sadəcə təsdiq mektubu getmir.
+      # MAIL_PROVIDER=resend olduqda MAIL_API_KEY məcburidir.
+      # MAIL_FROM-dakı domen provayderdə TƏSDİQLƏNMİŞ olmalıdır (SPF+DKIM DNS qeydləri).
+      - key: MAIL_PROVIDER
+        sync: false
+      - key: MAIL_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+
+      # --- SMS / OTP (OPSİONAL) ---
+      # SMS_PROVIDER: `twilio` (müqavilə tələb etmir) və ya `http` (lokal AZ aqreqator).
+      # Təyin olunmasa «console»: kod loga yazılır, SMS getmir — dev/staging üçün.
+      # ⚠️ Bu endpoint-lər PULA çevrilir — auth.controller-də sərt @Throttle var.
+      - key: SMS_PROVIDER
+        sync: false
+      - key: SMS_ACCOUNT_SID
+        sync: false
+      - key: SMS_AUTH_TOKEN
+        sync: false
+      # Twilio-da göndərən nömrə; lokal aqreqatorda operatorlarda təsdiqlənmiş alfa-nömrə.
+      - key: SMS_FROM
+        sync: false
+      # Yalnız SMS_PROVIDER=http olduqda: aqreqatorun endpoint-i və tokeni.
+      - key: SMS_HTTP_URL
+        sync: false
+      - key: SMS_HTTP_TOKEN
+        sync: false
+
+      # --- Saytın ictimai ünvanı ---
+      # Mektublardakı linklər (e-poçt təsdiqi, parol sıfırlama) bundan qurulur.
+      - key: PUBLIC_URL
+        value: "https://360tap.az"
+
       # --- Media ---
       # ⚠️ Render free tier-də disk EFEMERDİR: bu qovluqdakı fayllar hər deploy/restart-da
       # silinir. Kalıcı həll (obyekt storage + CDN) Faza 1-dədir.

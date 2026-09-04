@@ -6,6 +6,7 @@ import type { AppConfig } from '../../config/configuration';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { VerificationModule } from '../verification/verification.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         signOptions: { algorithm: 'HS256' },
       }),
     }),
+    VerificationModule, // OTP/e-poçt kodlarının bütün məntiqi orada
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

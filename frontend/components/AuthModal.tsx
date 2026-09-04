@@ -34,10 +34,10 @@ export default function AuthModal({
   onClose: () => void;
   initialMode?: EmailMode;
 }) {
-  // Faza 0: default metod 'phone' idi, lakin telefon-OTP backend-i (POST /auth/send-otp)
-  // NestJS-də MÖVCUD DEYİL → istifadəçi modalı açan kimi işləməyən axına düşürdü.
-  // İşlək metod (email) default edildi; OTP tab-ı qalır, amma aydın "tezliklə" mesajı verir.
-  // Real OTP + SMS provayderi Faza 5-dədir.
+  // Telefon-OTP backend-i (POST /auth/send-otp + /auth/verify-otp) artıq REALDIR —
+  // «tezliklə» məhdudiyyəti qalxdı. Default metod yenə də 'email' saxlanılır: OTP
+  // hər cəhddə SMS xərci yaradır, ona görə istifadəçi onu qəsdən seçməlidir,
+  // modal açılan kimi avtomatik SMS axınına düşməməlidir.
   const [method, setMethod] = useState<Method>('email');
   const [emailMode, setEmailMode] = useState<EmailMode>(initialMode);
   const { login, register } = useAuth();
@@ -174,10 +174,10 @@ export default function AuthModal({
                     <input type="checkbox" defaultChecked className="w-4 h-4 accent-tap" />
                     Parolu yadda saxla
                   </label>
-                  {/* Parol bərpası endpoint-i hələ yoxdur — ölü düymə qoymamaq üçün
-                      link mövcud «Kömək» səhifəsinə yönəlir. Header layout-da yaşadığı üçün
-                      naviqasiya modalı özü bağlamır → `onClose` əl ilə çağırılır. */}
-                  <Link href="/komek" onClick={onClose} className="text-sm text-tap hover:underline">
+                  {/* Parol bərpası axını qoşuldu: /sifre-unutdum → POST /auth/password/forgot.
+                      Modal header layout-da yaşadığı üçün naviqasiya onu özü bağlamır →
+                      `onClose` əl ilə çağırılır, əks halda modal yeni səhifənin üstündə qalardı. */}
+                  <Link href="/sifre-unutdum" onClick={onClose} className="text-sm text-tap hover:underline">
                     Parolu unutdunuz?
                   </Link>
                 </div>
