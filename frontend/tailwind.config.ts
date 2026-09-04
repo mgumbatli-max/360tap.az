@@ -6,33 +6,49 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Avito-style brand
+        // ═══════════════════════════════════════════════════════════════════
+        // BREND PALİTRASI — RUNTIME-DA DƏYİŞİLƏ BİLƏN.
+        //
+        // Çalarlar sabit hex DEYİL, CSS dəyişənlərinə bağlıdır. Faktiki dəyərlər
+        // `app/globals.css`-dəki `[data-brand="..."]` bloklarındadır, seçim isə
+        // `<html data-brand="...">` atributu ilə edilir → rəng dəyişmək üçün
+        // YENİDƏN BUILD LAZIM DEYİL.
+        //
+        // `rgb(var(--x) / <alpha-value>)` forması QƏSDƏN seçilib: layihədə
+        // `bg-tap/10`, `border-tap/20` kimi 30-dan çox alfa modifikatoru var və
+        // yalnız bu formatda Tailwind şəffaflığı yerləşdirə bilir. Dəyişənlər
+        // buna görə boşluqla ayrılmış RGB üçlüyüdür («224 43 49»), hex yox.
+        // ═══════════════════════════════════════════════════════════════════
         tap: {
-          DEFAULT: '#00AAFF',
-          50:  '#E6F7FF',
-          100: '#CCEFFF',
-          200: '#99DEFF',
-          300: '#66CEFF',
-          400: '#33BEFF',
-          500: '#00AAFF',
-          600: '#0090DD',
-          700: '#0076B8',
-          800: '#005C92',
-          900: '#003F66',
+          DEFAULT: 'rgb(var(--tap-500) / <alpha-value>)',
+          50:  'rgb(var(--tap-50) / <alpha-value>)',
+          100: 'rgb(var(--tap-100) / <alpha-value>)',
+          200: 'rgb(var(--tap-200) / <alpha-value>)',
+          300: 'rgb(var(--tap-300) / <alpha-value>)',
+          400: 'rgb(var(--tap-400) / <alpha-value>)',
+          500: 'rgb(var(--tap-500) / <alpha-value>)',
+          600: 'rgb(var(--tap-600) / <alpha-value>)',
+          700: 'rgb(var(--tap-700) / <alpha-value>)',
+          800: 'rgb(var(--tap-800) / <alpha-value>)',
+          900: 'rgb(var(--tap-900) / <alpha-value>)',
         },
         // Login/CTA dərin mavi
+        // `royal` — brendin tünd variantı (CTA/login). O da temadan qidalanır.
         royal: {
-          DEFAULT: '#0060F0',
-          50:  '#E6F0FE',
-          100: '#CCDFFE',
-          500: '#0060F0',
-          600: '#0050D0',
-          700: '#0040B0',
+          DEFAULT: 'rgb(var(--tap-600) / <alpha-value>)',
+          50:  'rgb(var(--tap-50) / <alpha-value>)',
+          100: 'rgb(var(--tap-100) / <alpha-value>)',
+          500: 'rgb(var(--tap-600) / <alpha-value>)',
+          600: 'rgb(var(--tap-700) / <alpha-value>)',
+          700: 'rgb(var(--tap-800) / <alpha-value>)',
         },
         // Search açıq mavi background
         sky: {
-          search: '#A5DDFE',
+          search: 'rgb(var(--tap-100) / <alpha-value>)',
         },
+        // Tünd akssent — «N elan göstər» kimi son-addım CTA-ları üçün.
+        // Brend rəngi ilə yarışmasın deyə neytral-tünd, bənövşəyiyə çalan.
+        onyx: { DEFAULT: '#1A1416', 600: '#2B2226' },
         // Status
         success: { DEFAULT: '#00C853', light: '#E6F7E6' },
         warning: { DEFAULT: '#FFAB00', light: '#FFF4E6' },

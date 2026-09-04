@@ -1,14 +1,24 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import {
+  Baby, Briefcase, Building2, Car, Cpu, Drill, Home, Layers, PawPrint, Shirt, Sofa,
+  Sparkles, Wrench, Bot, ImageIcon, Scale, Store,
+} from 'lucide-react';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import CategoryFilters, { type CatAttr } from '@/components/CategoryFilters';
+import FilterChips from '@/components/FilterChips';
 import InfiniteListings from '@/components/InfiniteListings';
+import MapView from '@/components/MapView';
 import SaveSearchButton from '@/components/SaveSearchButton';
 import ListingsSkeleton from './ListingsSkeleton';
 import { meiliSearch, type MeiliHit } from '@/lib/meili';
+import CategoryIcon from '@/components/CategoryIcon';
 import { serverGet } from '@/lib/server-fetch';
 import { buildMetadata } from '@/lib/seo';
+
+/** Header/ana səhifə ilə eyni işçi sahə — sütunlar səhifələr arasında sıçramasın. */
+const SHELL = 'mx-auto w-full max-w-[1360px] px-4 md:px-6';
 
 function mapMeiliHit(h: MeiliHit): Listing {
   return {
@@ -34,6 +44,7 @@ interface SP {
   priceMax?: string;
   sort?: string;
   page?: string;
+  view?: string;
   [key: string]: string | undefined; // a_* atribut filtrləri
 }
 
@@ -43,6 +54,15 @@ type NestListing = {
   views?: number; favoritesCount?: number; createdAt: string;
   regionName?: string | null; districtName?: string | null;
   images?: { url: string; sortOrder: number }[];
+};
+
+/** `/categories` ağacının bizə lazım olan hissəsi (vertikal landinq üçün). */
+type CatNode = {
+  id: string;
+  slug: string;
+  nameAz: string;
+  listingsCount?: number;
+  children?: CatNode[];
 };
 
 /**
@@ -101,14 +121,60 @@ const U_LABELS: Record<string, string> = {
   brand: '🏷️', color: '🎨', condition: '✨', priceMin: '≥', priceMax: '≤',
 };
 
-function qs(sp: SP, patch: Partial<SP>): string {
-  const merged = { ...sp, ...patch, page: undefined };
-  const p = new URLSearchParams();
-  Object.entries(merged).forEach(([k, v]) => {
-    if (v) p.set(k, String(v));
-  });
-  const s = p.toString();
-  return s ? `/elanlar?${s}` : '/elanlar';
+/**
+ * Vertikal landinqin şüarları — ÖZ mətnlərimizdir (hüquqi sərhəd: heç bir xarici
+ * platformanın sloqanı təkrarlanmır). Naməlum kateqoriya üçün generik fallback var.
+ */
+const CAT_SLOGAN: Record<string, string> = {
+  neqliyyat: 'Avtomobil, motosiklet və ehtiyat hissələri — yoxlanılmış satıcılardan',
+  'dasinmaz-emlak': 'Mənzil, həyət evi, ofis və torpaq — Azərbaycanın hər yerində',
+  'is-elanlari': 'Sənə uyğun vakansiya və namizədlər bir yerdə',
+  xidmetler: 'Ustadan tərcüməçiyə qədər — peşəkarlar bir kliklə',
+  elektronika: 'Telefon, noutbuk və texnika — yeni və işlənmiş',
+  'ev-ve-bag': 'Mebel, məişət texnikası və bağ üçün hər şey',
+  geyim: 'Geyim, ayaqqabı və aksesuarlar — hər büdcəyə',
+  usaq: 'Uşaq geyimi, oyuncaq və nəqliyyat vasitələri',
+  heyvanlar: 'Ev heyvanları və onlara qulluq üçün hər şey',
+  biznes: 'Hazır biznes, avadanlıq və kommersiya obyektləri',
+  hobby: 'Hobbi, idman və istirahət üçün elanlar',
+  ehtiyat: 'Ehtiyat hissələri və aksesuarlar — marka üzrə seç',
+};
+
+/** Plitə ikonları — alt kateqoriyalar valideynin ikonunu miras alır (§0: öz ikonlarımız). */
+const CAT_ICON: Record<string, typeof Car> = {
+  neqliyyat: Car,
+  'dasinmaz-emlak': Home,
+  'is-elanlari': Briefcase,
+  xidmetler: Wrench,
+  geyim: Shirt,
+  'ev-ve-bag': Sofa,
+  ehtiyat: Drill,
+  elektronika: Cpu,
+  usaq: Baby,
+  heyvanlar: PawPrint,
+  biznes: Building2,
+  hobby: Sparkles,
+};
+
+const SERVICES = [
+  { href: '/ai-elan', name: 'AI ilə elan yarat', Icon: Bot },
+  { href: '/sekille-axtar', name: 'Şəkillə axtar', Icon: ImageIcon },
+  { href: '/muqayise', name: 'Müqayisə', Icon: Scale },
+  { href: '/biznes', name: 'Biznes üçün', Icon: Store },
+];
+
+/** Ağacda kateqoriyanı və valideynini tap (seqment tabları sərhəd hallarında da işləsin). */
+function findCategory(
+  nodes: CatNode[],
+  slug: string,
+  parent: CatNode | null = null,
+): { node: CatNode; parent: CatNode | null } | null {
+  for (const n of nodes) {
+    if (n.slug === slug) return { node: n, parent };
+    const hit = findCategory(n.children ?? [], slug, n);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /**
@@ -190,6 +256,7 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
   let searchQuery = '';
   let catAttrs: CatAttr[] = [];
   let catName = ''; // backend meta-dan kateqoriya adı (h1)
+  let catTree: CatNode[] = []; // vertikal landinq: seqment tabları + plitələr
   let understanding: Understanding | null = null;
   let backendDown = false; // timeout/şəbəkə/5xx → "elan yoxdur"dan fərqli fallback
 
@@ -281,9 +348,10 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     baseQuery = params.toString(); // sonsuz scroll üçün (page/limit-siz)
     params.set('page', '1');
     params.set('limit', '50');
-    // Listings VƏ kateqoriya atributlarını PARALEL çək (waterfall yox — bir round trip qənaət).
-    // Hər ikisi timeout-ludur: backend asılı qalsa da render bir neçə saniyəyə tamamlanır.
-    const [listD, attrD] = await Promise.all([
+    // Listings, kateqoriya atributları VƏ kateqoriya ağacını PARALEL çək (waterfall yox).
+    // Hər üçü timeout-ludur: backend asılı qalsa da render bir neçə saniyəyə tamamlanır.
+    // Ağac yalnız vertikal landinqdə lazımdır (tablar/plitələr) — filtrsiz siyahıda yox.
+    const [listD, attrD, treeD] = await Promise.all([
       serverGet<NestListing[], { total: number; hasMore: boolean; categoryName?: string }>(
         `/listings?${params}`,
         { next: { revalidate: 30 } },
@@ -292,6 +360,9 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
         ? serverGet<CatAttr[]>(`/categories/${sp.category}/attributes`, {
             next: { revalidate: 600 },
           })
+        : Promise.resolve({ data: null, meta: null, unavailable: false }),
+      sp.category
+        ? serverGet<CatNode[]>('/categories', { next: { revalidate: 300 } })
         : Promise.resolve({ data: null, meta: null, unavailable: false }),
     ]);
     if (listD.data) {
@@ -302,137 +373,292 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     }
     if (listD.unavailable) backendDown = true;
     if (attrD.data) catAttrs = attrD.data;
+    if (treeD.data) catTree = treeD.data;
   }
 
   const uChips = understanding
     ? Object.entries(understanding).filter(([, v]) => v != null && v !== '')
     : [];
 
-  // Qeyd: catAttrs browse branch-də listings ilə PARALEL çəkilir (waterfall yox)
+  // ——— Vertikal landinq konteksti ———
+  const isVertical = Boolean(sp.category) && !sp.q;
+  const found = sp.category ? findCategory(catTree, sp.category) : null;
+  const heading = found?.node.nameAz || catName || (sp.category ?? '').replace(/-/g, ' ');
+  const regionName = sp.region
+    ? REGIONS.find((r) => r.slug === sp.region)?.name ?? sp.region
+    : '';
+  // Seqment tabları: alt kateqoriyalar; yarpaq kateqoriyadasınsa QARDAŞLAR göstərilir,
+  // yəni bir səviyyə aşağı düşəndə naviqasiya itmir (Avito vertikal modeli).
+  const segParent = (found?.node.children?.length ? found.node : found?.parent) ?? null;
+  const segments = segParent?.children ?? [];
+  const tiles = found?.node.children ?? [];
+  const tileIcon =
+    CAT_ICON[sp.category ?? ''] ?? CAT_ICON[found?.parent?.slug ?? ''] ?? Layers;
+  const slogan =
+    CAT_SLOGAN[sp.category ?? ''] ??
+    (heading ? `${heading} üzrə bütün elanlar — axtar, müqayisə et, əlaqə saxla` : '');
+
+  // Çiplər yalnız SİLİNƏ BİLƏN filtrlərdən ibarətdir: kateqoriya/axtarış səhifənin
+  // kimliyidir (H1 + tablarda görünür), `sort`/`view` isə görünüş parametridir.
+  const chipFilters: Record<string, string> = {};
+  for (const [k, v] of Object.entries(sp)) {
+    if (!v || k === 'q' || k === 'category' || k === 'vertical') continue;
+    if (k === 'region' || k === 'priceMin' || k === 'priceMax' || k.startsWith('a_')) {
+      chipFilters[k] = v;
+    }
+  }
+  const attrLabels = Object.fromEntries(catAttrs.map((a) => [a.key, a.labelAz]));
+  const regionLabels = Object.fromEntries(REGIONS.filter((r) => r.slug).map((r) => [r.slug, r.name]));
+
+  /** Seqment/tab keçidi: atribut filtrləri kateqoriyaya bağlıdır → yeni tabda sıfırlanır. */
+  const segHref = (slug: string): string => {
+    const p = new URLSearchParams();
+    if (slug) p.set('category', slug);
+    if (sp.region) p.set('region', sp.region);
+    if (sp.sort) p.set('sort', sp.sort);
+    if (sp.priceMin) p.set('priceMin', sp.priceMin);
+    if (sp.priceMax) p.set('priceMax', sp.priceMax);
+    const s = p.toString();
+    return s ? `/elanlar?${s}` : '/elanlar';
+  };
+
+  // `view=map` yalnız GÖRÜNÜŞ açarıdır — data eyni sorğudan gəlir, ona görə
+  // xəritəyə keçid heç bir əlavə fetch tələb etmir.
+  const isMap = sp.view === 'map' && !sp.q;
 
   return (
-    <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="min-h-screen bg-white dark:bg-ink-900">
+      <div className={`${SHELL} py-6 md:py-8`}>
         {sp.q ? (
           <>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white mb-1">
+            <h1 className="mb-1 text-2xl font-extrabold text-ink-900 dark:text-white md:text-[32px]">
               «{sp.q}»
             </h1>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 text-sm font-bold text-tap">
                 🤖 AI axtarışı
               </span>
               {uChips.map(([k, v]) => (
                 <span
                   key={k}
-                  className="px-2.5 py-1 rounded-full bg-tap-50 dark:bg-ink-800 text-xs font-medium text-ink-700 dark:text-ink-200 border border-tap/20"
+                  className="rounded-full border border-tap/20 bg-tap-50 px-2.5 py-1 text-xs font-medium text-ink-700 dark:bg-ink-800 dark:text-ink-200"
                 >
                   {U_LABELS[k] ?? ''} {String(v)}
                 </span>
               ))}
             </div>
-            <p className="text-ink-500 text-sm mb-5">{total} nəticə tapıldı</p>
+            <p className="mb-5 text-sm text-ink-500">{total} nəticə tapıldı</p>
           </>
-        ) : (
+        ) : isVertical ? (
           <>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white mb-1">
-              {sp.category ? (catName || sp.category.replace(/-/g, ' ')) : 'Bütün elanlar'}
-              {sp.region ? ` — ${REGIONS.find((r) => r.slug === sp.region)?.name ?? sp.region}` : ''}
-            </h1>
-            <p className="text-ink-500 text-sm mb-4">{total} elan tapıldı</p>
+            {/* ——— §8.1 mərkəzləşmiş böyük H1 + şüar ——— */}
+            <header className="mx-auto mb-6 max-w-3xl text-center md:mb-8">
+              <h1 className="text-[28px] font-extrabold leading-[1.1] tracking-tight text-ink-900 dark:text-white md:text-[44px]">
+                {heading}
+                {regionName && <span className="font-extrabold text-ink-400"> — {regionName}</span>}
+                {total > 0 && (
+                  <span className="ml-2.5 whitespace-nowrap font-extrabold text-ink-400">
+                    {total.toLocaleString('az-AZ')}
+                  </span>
+                )}
+              </h1>
+              {slogan && (
+                <p className="mt-3 text-sm text-ink-500 dark:text-ink-400 md:text-base">{slogan}</p>
+              )}
+            </header>
 
-            <div className="flex flex-wrap gap-2 mb-3">
-              {REGIONS.map((r) => (
-                <Link
-                  key={r.slug || 'all'}
-                  href={qs(sp, { region: r.slug || undefined })}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                    (sp.region ?? '') === r.slug
-                      ? 'bg-tap text-white'
-                      : 'bg-white dark:bg-ink-800 text-ink-700 dark:text-ink-200 hover:bg-ink-100'
-                  }`}
-                >
-                  {r.name}
-                </Link>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2 mb-6">
-              {SORTS.map((s) => (
-                <Link
-                  key={s.v}
-                  href={qs(sp, { sort: s.v })}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                    (sp.sort ?? 'new') === s.v
-                      ? 'bg-ink-900 dark:bg-white text-white dark:text-ink-900'
-                      : 'bg-white dark:bg-ink-800 text-ink-600 dark:text-ink-300 hover:bg-ink-100'
-                  }`}
-                >
-                  {s.name}
-                </Link>
-              ))}
-            </div>
-            <div className="mb-4">
-              <SaveSearchButton filters={sp as Record<string, string>} />
-            </div>
-            {catAttrs.length > 0 && <CategoryFilters attributes={catAttrs} />}
+            {/* ——— §8.2 seqment tabları (alt-vertikallar) ——— */}
+            {segments.length > 0 && segParent && (
+              <nav aria-label="Alt bölmələr" className="mb-5 flex md:justify-center">
+                <div className="flex max-w-full gap-1 overflow-x-auto rounded-full bg-ink-100 p-1 dark:bg-ink-800">
+                  <SegmentTab
+                    href={segHref(segParent.slug)}
+                    active={sp.category === segParent.slug}
+                    label="Hamısı"
+                  />
+                  {segments.map((c) => (
+                    <SegmentTab
+                      key={c.id}
+                      href={segHref(c.slug)}
+                      active={sp.category === c.slug}
+                      label={c.nameAz}
+                    />
+                  ))}
+                </div>
+              </nav>
+            )}
+          </>
+        ) : (
+          <header className="mb-5">
+            <h1 className="text-2xl font-extrabold text-ink-900 dark:text-white md:text-[32px]">
+              Bütün elanlar
+              {regionName && <span className="text-ink-400"> — {regionName}</span>}
+              {total > 0 && (
+                <span className="ml-2.5 font-extrabold text-ink-400">
+                  {total.toLocaleString('az-AZ')}
+                </span>
+              )}
+            </h1>
+          </header>
+        )}
+
+        {/* ——— §8.3 üfüqi filtr paneli + silinə bilən çiplər ——— */}
+        {!sp.q && (
+          <>
+            <CategoryFilters
+              attributes={catAttrs}
+              regions={REGIONS}
+              sorts={SORTS}
+              total={total}
+            />
+            <FilterChips
+              filters={chipFilters}
+              keyLabels={attrLabels}
+              valueLabels={{ region: regionLabels }}
+            />
           </>
         )}
 
-        {items.length === 0 && backendDown ? (
-          // Backend əlçatmazdır — bu, "nəticə yoxdur"dan fərqli haldır və
-          // istifadəçiyə düzgün mesaj + təkrar cəhd yolu göstərilməlidir.
-          <div className="card p-12 text-center">
-            <p className="text-ink-900 dark:text-white text-lg font-bold">
-              Elanlar müvəqqəti yüklənmir
-            </p>
-            <p className="text-ink-500 mt-2">
-              Xidmətdə qısamüddətli problem var. Bir neçə dəqiqədən sonra yenidən yoxlayın.
-            </p>
-            <Link href="/elanlar" className="btn-secondary inline-flex mt-4">
-              Yenidən cəhd et
-            </Link>
+        {/* ——— §8.4 kateqoriya plitələri + servislər ——— */}
+        {isVertical && tiles.length > 0 && (
+          <div className="mb-8 grid gap-4 lg:grid-cols-[1fr_300px]">
+            <section>
+              <h2 className="mb-3 text-[22px] font-bold text-ink-900 dark:text-white">
+                Kateqoriyalar
+              </h2>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                {tiles.map((c) => {
+                  return (
+                    <Link
+                      key={c.id}
+                      href={segHref(c.slug)}
+                      className="relative flex h-[120px] flex-col overflow-hidden rounded-2xl bg-ink-100 p-4 transition hover:bg-ink-200 dark:bg-ink-800 dark:hover:bg-ink-700"
+                    >
+                      <span className="relative z-10 line-clamp-2 pr-12 text-[15px] font-semibold leading-tight text-ink-900 dark:text-white">
+                        {c.nameAz}
+                      </span>
+                      {typeof c.listingsCount === 'number' && c.listingsCount > 0 && (
+                        <span className="relative z-10 mt-1 text-[13px] text-ink-400">
+                          {c.listingsCount.toLocaleString('az-AZ')}
+                        </span>
+                      )}
+                      {/* Vahid ikon sistemi — hər alt-kateqoriyanın ÖZ qlifi var.
+                          Əvvəl naməlum slug valideynin ikonuna düşürdü, ona görə
+                          «Su nəqliyyatı», «Təkərlər», «Ehtiyat hissələri» — hamısı
+                          eyni maşın ikonu göstərirdi. */}
+                      <span className="absolute bottom-3 right-3">
+                        <CategoryIcon slug={c.slug} name={c.nameAz} size="lg" />
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-[22px] font-bold text-ink-900 dark:text-white">Servislər</h2>
+              <div className="grid grid-cols-2 gap-2 rounded-2xl bg-tap-50 p-3 lg:grid-cols-1">
+                {SERVICES.map(({ href, name, Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="flex items-center gap-2.5 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-ink-800 transition hover:text-tap dark:text-ink-200"
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-tap" aria-hidden="true" />
+                    <span className="truncate">{name}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
           </div>
-        ) : items.length === 0 ? (
-          <div className="card p-12 text-center">
-            <p className="text-ink-500 text-lg">
-              {sp.q ? 'AI bu sorğuya uyğun elan tapmadı' : 'Bu filtrlə elan tapılmadı'}
-            </p>
-            <Link href="/elanlar" className="btn-secondary inline-flex mt-4">
-              Bütün elanlara bax
-            </Link>
-          </div>
-        ) : sp.q ? (
-          searchQuery ? (
-            // Axtarış nəticələri də səhifələnir: əvvəl bu budaq sadə grid idi və
-            // meta.total 64 olsa belə yalnız ilk batch görünürdü, "daha çox" yolu yox idi.
-            <InfiniteListings
-              key={searchQuery}
-              initialItems={items}
-              baseQuery={searchQuery}
-              initialHasMore={hasMore}
-              endpoint="/api/search"
-            />
-          ) : (
-            // Meili/AI cavabları səhifələnən mənbə deyil (ranking bir dəfəlikdir),
-            // ona görə onlar sadə grid kimi qalır — yanlış "daha çox" vədi verilmir.
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-              {items.map((l) => (
-                <ListingCard key={l.id} item={l} />
-              ))}
-            </div>
-          )
-        ) : (
-          // `key` = filtr imzası: filtr dəyişəndə komponent REMOUNT olunur, yəni
-          // `useState(initialItems)` yenidən oxunur (komponent daxilindəki sıfırlama
-          // effekti ilə birlikdə ikiqat zəmanət).
-          <InfiniteListings
-            key={baseQuery}
-            initialItems={items}
-            baseQuery={baseQuery}
-            initialHasMore={hasMore}
-          />
         )}
+
+        {/* ——— §8.5 «Ən yenilər» ——— */}
+        {!sp.q && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-[22px] font-bold text-ink-900 dark:text-white">
+              {isMap ? 'Xəritədə' : 'Ən yenilər'}
+            </h2>
+            <SaveSearchButton filters={sp as Record<string, string>} />
+          </div>
+        )}
+
+        <div id="netice" className="scroll-mt-24">
+          {items.length === 0 && backendDown ? (
+            // Backend əlçatmazdır — bu, "nəticə yoxdur"dan fərqli haldır və
+            // istifadəçiyə düzgün mesaj + təkrar cəhd yolu göstərilməlidir.
+            <div className="rounded-2xl bg-ink-100 p-12 text-center dark:bg-ink-800">
+              <p className="text-lg font-bold text-ink-900 dark:text-white">
+                Elanlar müvəqqəti yüklənmir
+              </p>
+              <p className="mt-2 text-ink-500">
+                Xidmətdə qısamüddətli problem var. Bir neçə dəqiqədən sonra yenidən yoxlayın.
+              </p>
+              <Link href="/elanlar" className="btn-secondary mt-4 inline-flex">
+                Yenidən cəhd et
+              </Link>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="rounded-2xl bg-ink-100 p-12 text-center dark:bg-ink-800">
+              <p className="text-lg text-ink-500">
+                {sp.q ? 'AI bu sorğuya uyğun elan tapmadı' : 'Bu filtrlə elan tapılmadı'}
+              </p>
+              <Link href="/elanlar" className="btn-secondary mt-4 inline-flex">
+                Bütün elanlara bax
+              </Link>
+            </div>
+          ) : isMap ? (
+            <MapView listings={items} />
+          ) : sp.q ? (
+            searchQuery ? (
+              // Axtarış nəticələri də səhifələnir: əvvəl bu budaq sadə grid idi və
+              // meta.total 64 olsa belə yalnız ilk batch görünürdü, "daha çox" yolu yox idi.
+              <InfiniteListings
+                key={searchQuery}
+                initialItems={items}
+                baseQuery={searchQuery}
+                initialHasMore={hasMore}
+                endpoint="/api/search"
+              />
+            ) : (
+              // Meili/AI cavabları səhifələnən mənbə deyil (ranking bir dəfəlikdir),
+              // ona görə onlar sadə grid kimi qalır — yanlış "daha çox" vədi verilmir.
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-5 lg:grid-cols-4 xl:grid-cols-5">
+                {items.map((l) => (
+                  <ListingCard key={l.id} item={l} />
+                ))}
+              </div>
+            )
+          ) : (
+            // `key` = filtr imzası: filtr dəyişəndə komponent REMOUNT olunur, yəni
+            // `useState(initialItems)` yenidən oxunur (komponent daxilindəki sıfırlama
+            // effekti ilə birlikdə ikiqat zəmanət).
+            <InfiniteListings
+              key={baseQuery}
+              initialItems={items}
+              baseQuery={baseQuery}
+              initialHasMore={hasMore}
+            />
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+/** Pill tab — aktiv olan ağ fonlu (§8.2). */
+function SegmentTab({ href, active, label }: { href: string; active: boolean; label: string }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${
+        active
+          ? 'border border-ink-200 bg-white text-ink-900 dark:border-ink-700 dark:text-white'
+          : 'text-ink-600 hover:text-ink-900 dark:text-ink-300 dark:hover:text-white'
+      }`}
+    >
+      {label}
+    </Link>
   );
 }

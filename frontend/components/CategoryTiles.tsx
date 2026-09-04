@@ -1,47 +1,76 @@
-'use client';
 import Link from 'next/link';
-import {
-  Car, Home, Briefcase, Wrench, Package, Sofa, Cpu, PawPrint, Building, Drill,
-  Heart, ShirtIcon, Plane, Sparkles, Layers, Drumstick,
-} from 'lucide-react';
+import CategoryIcon from './CategoryIcon';
 
-const ICONS: Record<string, { Icon: any; bg: string }> = {
-  neqliyyat:        { Icon: Car,        bg: 'bg-emerald-50' },
-  'dasinmaz-emlak': { Icon: Home,       bg: 'bg-blue-50' },
-  'is-elanlari':    { Icon: Briefcase,  bg: 'bg-amber-50' },
-  xidmetler:        { Icon: Wrench,     bg: 'bg-rose-50' },
-  geyim:            { Icon: ShirtIcon,  bg: 'bg-pink-50' },
-  'ev-ve-bag':      { Icon: Sofa,       bg: 'bg-orange-50' },
-  ehtiyat:          { Icon: Drill,      bg: 'bg-slate-100' },
-  elektronika:      { Icon: Cpu,        bg: 'bg-purple-50' },
-  'usaq':           { Icon: Heart,      bg: 'bg-red-50' },
-  heyvanlar:        { Icon: PawPrint,   bg: 'bg-yellow-50' },
-  biznes:           { Icon: Building,   bg: 'bg-teal-50' },
-  hobby:            { Icon: Sparkles,   bg: 'bg-indigo-50' },
-  'putesh':         { Icon: Plane,      bg: 'bg-sky-50' },
-  goyzel:           { Icon: Sparkles,   bg: 'bg-fuchsia-50' },
+/**
+ * SERVER KOMPONENT — qəsdən `'use client'` YOXDUR.
+ *
+ * Plitələr yalnız `<Link>`-dir, heç bir state/hadisə yoxdur. Client sərhədi
+ * silinməsi ana səhifənin ilk yükünə əlavə JS gətirmir (SSR performansı).
+ */
+
+/**
+ * Plitə səthi — NİYƏ CSS dəyişəni ilə, `bg-ink-*` tokeni ilə yox (§12):
+ * `globals.css` qaranlıq rejimdə `.dark .bg-ink-50/100/200` üçün `!important`
+ * override-lar saxlayır, ona görə həmin tokenlərdə `dark:` variantı heç vaxt tutmur.
+ * Üstəlik `layout.tsx`-dəki `main` fonu qaranlıqda məhz `--bg-section`-dir — plitə
+ * eyni dəyişəni işlətsəydi fonla birləşib itərdi, ona görə qaranlıqda `--bg-muted`.
+ */
+const TILE_SURFACE =
+  'bg-[var(--bg-section)] hover:bg-ink-200 dark:bg-[var(--bg-muted)] dark:hover:bg-ink-700';
+
+/**
+ * Prop kontraktı QƏSDƏN tolerantdır: komponent həm `name_az` (köhnə istifadə),
+ * həm də `nameAz` (NestJS `/categories` cavabı) qəbul edir — beləliklə ana səhifə
+ * API obyektini birbaşa ötürə bilir və mövcud çağırışlar sınmır.
+ */
+export type CategoryTile = {
+  id: string;
+  slug: string;
+  name_az?: string;
+  nameAz?: string;
+  icon?: string | null;
+  children?: unknown[];
 };
 
-type Cat = { id: string; slug: string; name_az: string; icon?: string; children?: any[] };
+export default function CategoryTiles({
+  categories,
+  limit = 10,
+}: {
+  categories: CategoryTile[];
+  /** Spesifikasiya §5.1 — lg-də 5 sütun × 2 sətir = 10 plitə. */
+  limit?: number;
+}) {
+  const items = limit > 0 ? categories.slice(0, limit) : categories;
 
-export default function CategoryTiles({ categories }: { categories: Cat[] }) {
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 md:gap-3">
-      {categories.map((c) => {
-        const def = ICONS[c.slug] ?? { Icon: Layers, bg: 'bg-slate-50' };
-        const Icon = def.Icon;
+    // `min-w-0`: grid elementinin susmaya görə `min-width:auto`-su uzun kateqoriya
+    // adını sütun eninə çevirir və 320px ekranda üfüqi sürüşmə yaradırdı (§11).
+    <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5">
+      {items.map((c) => {
+        const name = c.nameAz ?? c.name_az ?? c.slug;
         return (
           <Link
             key={c.id}
             href={`/elanlar?category=${c.slug}`}
-            className={`card-tile ${def.bg} p-3 md:p-4 text-center group`}
+            className={`group relative block h-[120px] min-w-0 overflow-hidden rounded-2xl p-4 transition-colors ${TILE_SURFACE}`}
           >
-            <div className="aspect-square flex items-center justify-center mb-2">
-              <Icon className="w-12 h-12 md:w-14 md:h-14 text-ink-700 group-hover:scale-110 transition-transform" strokeWidth={1.5} />
-            </div>
-            <div className="text-[11px] md:text-sm font-semibold text-ink-900 leading-tight">
-              {c.name_az}
-            </div>
+            {/*
+              Mətn sol-yuxarı (§5.1). Sağ paddinq ikon dairəsinin enidir —
+              uzun kateqoriya adı ikonun altına girməsin. Mobildə dairə 48px-dir:
+              2 sütunlu dar plitədə 56px ada demək olar ki, yer qoymurdu (§11).
+            */}
+            <span className="block pr-14 text-[15px] font-semibold leading-snug text-ink-900 line-clamp-2 md:pr-16">
+              {name}
+            </span>
+
+            {/*
+              İkon SAĞ-AŞAĞI küncdə (§5.1). Vahid `CategoryIcon` sistemi:
+              qradiyentli plitə + ağ qalın qlif. Əvvəlki «solğun dairə + nazik
+              xətt» forması kiçik ölçüdə demək olar görünmürdü.
+            */}
+            <span className="pointer-events-none absolute bottom-3 right-3 transition-transform duration-200 group-hover:scale-105">
+              <CategoryIcon slug={c.slug} name={name} size="lg" />
+            </span>
           </Link>
         );
       })}

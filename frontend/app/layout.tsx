@@ -5,6 +5,7 @@ import { ToastProvider } from '@/lib/toast';
 import { ModeProvider } from '@/lib/mode';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import BrandPicker from '@/components/BrandPicker';
 import CompareBar from '@/components/CompareBar';
 import FloatingVoiceFAB from '@/components/FloatingVoiceFAB';
 import BackToTop from '@/components/BackToTop';
@@ -76,7 +77,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#00AAFF',
+  themeColor: '#E02B31',
   width: 'device-width',
   initialScale: 1,
 };
@@ -91,9 +92,20 @@ const themeInitScript = `
     document.documentElement.classList.add(c);
     var m = localStorage.getItem('tap_mode') || 'lite';
     document.documentElement.dataset.mode = (m === 'pro' || m === 'lite') ? m : 'lite';
+
+    // BREND RƏNGİ — boyanmadan ƏVVƏL təyin olunur, əks halda səhifə əvvəl defolt
+    // rənglə görünüb sonra «sıçrayardı» (FOUC). ?brand= sorğu açarı localStorage-i
+    // üstələyir və dərhal yadda saxlanılır — linki paylaşmaqla temanı göstərmək üçün.
+    var ALLOWED = ['qirmizi','benovseyi','goy','zumrud','narinci','firuzeyi'];
+    var q = new URLSearchParams(location.search).get('brand');
+    var b = ALLOWED.indexOf(q) >= 0 ? q : localStorage.getItem('tap_brand');
+    if (ALLOWED.indexOf(b) < 0) b = 'qirmizi';
+    if (q && ALLOWED.indexOf(q) >= 0) localStorage.setItem('tap_brand', q);
+    document.documentElement.dataset.brand = b;
   } catch(e) {
     document.documentElement.classList.add('light');
     document.documentElement.dataset.mode = 'lite';
+    document.documentElement.dataset.brand = 'qirmizi';
   }
 })();
 // Faza 0 qeydi: burada hər brauzer xətasını /api/clientlog ünvanına göndərən blok var idi.
@@ -134,6 +146,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Header />
               <main className="bg-ink-50 min-h-screen">{children}</main>
               <Footer />
+              {/* Dizayn aləti — yalnız dev-də və ya ?brand-picker=1 ilə görünür. */}
+              <BrandPicker />
               <div data-pro-only="true"><CompareBar /></div>
               <BackToTop />
               <WhatsAppFloat />

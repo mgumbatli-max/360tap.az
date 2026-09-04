@@ -40,7 +40,7 @@ export default function ProfileDashboardPage() {
       <div className="space-y-5">
         {/* Welcome */}
         <div className="card p-5 sm:p-6 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between"
-             style={{ background: 'linear-gradient(135deg, #00AAFF, #0060F0)' }}>
+             style={{ background: 'linear-gradient(135deg, #E02B31, #A11A22)' }}>
           <div className="text-white">
             <h1 className="text-2xl font-extrabold">Salam, {user.full_name.split(' ')[0]} 👋</h1>
             <p className="text-white/85 mt-1">İstənilən ehtiyacınız üçün bir kliklik məsafədə</p>

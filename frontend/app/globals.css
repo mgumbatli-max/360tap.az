@@ -4,6 +4,59 @@
 @tailwind components;
 @tailwind utilities;
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BREND TEMALARI — `<html data-brand="...">` ilə seçilir.
+   Dəyərlər boşluqla ayrılmış RGB üçlükləridir (hex YOX), çünki Tailwind
+   `rgb(var(--tap-500) / <alpha-value>)` formasında yalnız belə oxuya bilir —
+   bu, `bg-tap/10` kimi şəffaflıq modifikatorlarını işlək saxlayır.
+   ⚠️ Siyahı `lib/brand-themes.ts` ilə sinxron olmalıdır.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Qırmızı — defolt. `:root`-da da təkrarlanır ki, `data-brand` verilməsə də işləsin. */
+:root,
+[data-brand='qirmizi'] {
+  --tap-50: 254 236 237;   --tap-100: 252 217 218; --tap-200: 248 179 182;
+  --tap-300: 242 140 144;  --tap-400: 234 91 96;   --tap-500: 224 43 49;
+  --tap-600: 196 33 42;    --tap-700: 161 26 34;   --tap-800: 125 20 27;
+  --tap-900: 86 13 18;
+}
+
+[data-brand='benovseyi'] {
+  --tap-50: 238 236 253;   --tap-100: 222 218 251; --tap-200: 195 188 248;
+  --tap-300: 167 155 244;  --tap-400: 133 116 236; --tap-500: 91 75 224;
+  --tap-600: 74 59 199;    --tap-700: 59 46 163;   --tap-800: 46 36 128;
+  --tap-900: 31 24 89;
+}
+
+[data-brand='goy'] {
+  --tap-50: 239 246 255;   --tap-100: 219 234 254; --tap-200: 191 219 254;
+  --tap-300: 147 197 253;  --tap-400: 96 165 250;  --tap-500: 37 99 235;
+  --tap-600: 29 78 216;    --tap-700: 30 64 175;   --tap-800: 30 58 138;
+  --tap-900: 23 37 84;
+}
+
+[data-brand='zumrud'] {
+  --tap-50: 236 253 245;   --tap-100: 209 250 229; --tap-200: 167 243 208;
+  --tap-300: 110 231 183;  --tap-400: 52 211 153;  --tap-500: 5 150 105;
+  --tap-600: 4 120 87;     --tap-700: 3 96 69;     --tap-800: 6 78 59;
+  --tap-900: 2 44 34;
+}
+
+[data-brand='narinci'] {
+  --tap-50: 255 247 237;   --tap-100: 255 237 213; --tap-200: 254 215 170;
+  --tap-300: 253 186 116;  --tap-400: 251 146 60;  --tap-500: 234 88 12;
+  --tap-600: 194 65 12;    --tap-700: 154 52 18;   --tap-800: 124 45 18;
+  --tap-900: 67 20 7;
+}
+
+[data-brand='firuzeyi'] {
+  --tap-50: 236 254 255;   --tap-100: 207 250 254; --tap-200: 165 243 252;
+  --tap-300: 103 232 249;  --tap-400: 34 211 238;  --tap-500: 8 145 178;
+  --tap-600: 14 116 144;   --tap-700: 21 94 117;   --tap-800: 22 78 99;
+  --tap-900: 8 51 68;
+}
+
 /* === İŞIQLI rejim — defolt === */
 :root, .light {
   --bg: #ffffff;          /* səhifənin əsas fonu */
@@ -17,11 +70,13 @@
   --fg-subtle: #9ca3af;   /* labels, captions */
   --border: #e5e7eb;
   --border-strong: #d1d5db;
-  --tap: #00AAFF;
-  --tap-dark: #0090dd;
-  --tap-bg: #E6F7FF;
-  --royal: #0060F0;
-  --search-bg: #A5DDFE;
+  /* Bu dördü artıq SABİT DEYİL — aktiv temanın şkalasından törəyir,
+     ona görə brend dəyişəndə avtomatik uyğunlaşır. */
+  --tap: rgb(var(--tap-500));
+  --tap-dark: rgb(var(--tap-600));
+  --tap-bg: rgb(var(--tap-50));
+  --royal: rgb(var(--tap-600));
+  --search-bg: rgb(var(--tap-100));
   --shadow: 0 1px 3px 0 rgba(0,0,0,0.04), 0 1px 2px 0 rgba(0,0,0,0.06);
   --shadow-card: 0 2px 8px 0 rgba(0,0,0,0.06);
   --shadow-menu: 0 8px 24px -4px rgba(0,0,0,0.12);
@@ -41,11 +96,13 @@
   --fg-subtle: #6e7681;
   --border: #30363d;      /* nəzərə çarpan amma kontrast deyil */
   --border-strong: #444c56;
-  --tap: #58c8ff;       /* dark-da daha parlaq — kontrast üçün */
-  --tap-dark: #79d4ff;
-  --tap-bg: rgba(88, 200, 255, 0.12);
-  --royal: #79b8ff;
-  --search-bg: #1c3344;
+  /* Qaranlıqda brend rəngi açıq çalardan götürülür (kontrast üçün) —
+     yenə də AKTİV temanın şkalasından, ona görə hər tema qaranlıqda da işləyir. */
+  --tap: rgb(var(--tap-300));
+  --tap-dark: rgb(var(--tap-200));
+  --tap-bg: rgb(var(--tap-300) / 0.14);
+  --royal: rgb(var(--tap-300));
+  --search-bg: rgb(var(--tap-800));
   --shadow: 0 1px 3px 0 rgba(0,0,0,0.4);
   --shadow-card: 0 2px 8px 0 rgba(0,0,0,0.5);
   --shadow-menu: 0 8px 24px -4px rgba(0,0,0,0.7);
@@ -825,7 +882,7 @@ h2 { letter-spacing: -0.025em; }
 
 /* ──── Gradient text (heroes) ──── */
 .text-gradient {
-  background: linear-gradient(135deg, #00AAFF 0%, #8b5cf6 50%, #ec4899 100%);
+  background: linear-gradient(135deg, rgb(var(--tap-500)) 0%, rgb(var(--tap-400)) 50%, rgb(var(--tap-200)) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

@@ -1,3 +1,4 @@
+import { safeImageUrl } from '@/lib/image-hosts';
 import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
@@ -16,54 +17,10 @@ type Props = { params: Promise<{ id: string }> };
  * bilirdi — o cümlədən daxili şəbəkəyə (`http://169.254.169.254/...` cloud metadata,
  * `http://localhost:5500/...` admin endpoint-ləri). Sübut: yad bir saytın sayğacı artırdı.
  *
- * HƏLL: host allowlist. Siyahı `next.config.ts` → `images.remotePatterns` ilə EYNİDİR —
- * yəni Next/Image-in onsuz da icazə verdiyi mənbələr. Yeni şəkil mənbəyi əlavə olunanda
- * HƏR İKİ yer birlikdə yenilənməlidir (paylaşılan modul yaradılmadı, çünki `next.config.ts`
- * edge runtime bundle-ına daxil edilə bilməz).
- *
- * `hostname`-dəki `*.` prefiksi Next-in semantikasını təkrarlayır: TƏK səviyyəli alt-domen.
+ * HƏLL: host allowlist. Siyahı və uyğunluq məntiqi `lib/image-hosts.ts`-dədir — eyni
+ * süzgəc `ListingCard`-da da işlədilir, çünki orada eyni pis URL `next/image`-i
+ * istisna atmağa məcbur edib bütün kart şəbəkəsini çökdürürdü.
  */
-type ImageSource = {
-  protocol: 'http:' | 'https:';
-  hostname: string;
-  port?: string;
-  pathPrefix?: string;
-};
-
-const ALLOWED_IMAGE_SOURCES: ImageSource[] = [
-  { protocol: 'http:', hostname: 'localhost', port: '5400', pathPrefix: '/uploads/' },
-  { protocol: 'http:', hostname: 'localhost', port: '5500', pathPrefix: '/uploads/' },
-  { protocol: 'https:', hostname: 'images.unsplash.com' },
-  { protocol: 'https:', hostname: 'picsum.photos' },
-  { protocol: 'https:', hostname: 'tap360-api.onrender.com' },
-  { protocol: 'https:', hostname: '*.onrender.com' },
-];
-
-function matchesHostname(actual: string, pattern: string): boolean {
-  if (!pattern.startsWith('*.')) return actual === pattern;
-  // Nöqtə ilə birlikdə yoxlanılır ki, `evil-onrender.com` uyğun gəlməsin; seqment sayı
-  // bərabər olmalıdır ki, `a.b.onrender.com` (çox səviyyəli) keçməsin.
-  const suffix = pattern.slice(1);
-  return actual.endsWith(suffix) && actual.split('.').length === pattern.split('.').length;
-}
-
-/** Allowlist-dən kənar, sınıq və ya nisbi URL üçün `undefined` → OG şəkli mətnlə render olunur. */
-function safeCoverUrl(raw: unknown): string | undefined {
-  if (typeof raw !== 'string' || raw === '') return undefined;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return undefined; // nisbi/sınıq ünvan — server ondan heç nə yükləməməlidir
-  }
-  const allowed = ALLOWED_IMAGE_SOURCES.some((src) => {
-    if (url.protocol !== src.protocol) return false;
-    if (url.port !== (src.port ?? '')) return false; // standart port = boş sətir
-    if (!matchesHostname(url.hostname, src.hostname)) return false;
-    return src.pathPrefix ? url.pathname.startsWith(src.pathPrefix) : true;
-  });
-  return allowed ? url.toString() : undefined;
-}
 
 export default async function OG({ params }: Props) {
   const { id } = await params;
@@ -91,7 +48,7 @@ export default async function OG({ params }: Props) {
     ? `${Number(listing.price).toLocaleString('az-AZ')} ${listing.currency || 'AZN'}`
     : 'Razılaşma';
   const city = listing?.regionName || 'Azərbaycan';
-  const cover = safeCoverUrl(listing?.images?.[0]?.url);
+  const cover = safeImageUrl(listing?.images?.[0]?.url);
 
   return new ImageResponse(
     (

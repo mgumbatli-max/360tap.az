@@ -49,27 +49,39 @@ export default function CityPicker({ compact = false }: { compact?: boolean }) {
 
   return (
     <>
+      {/* Header-in region seçicisi: sərhədsiz, yalnız ikon + mətn (Avito modeli) */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`flex items-center gap-1 ${compact ? 'text-xs' : 'text-sm'} text-ink-700 hover:text-tap whitespace-nowrap`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={`inline-flex items-center gap-1.5 max-w-[200px] rounded-lg px-2 py-1.5 ${
+          compact ? 'text-[13px]' : 'text-sm'
+        } font-medium text-ink-700 dark:text-ink-200 hover:text-tap hover:bg-ink-50 dark:hover:bg-ink-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-tap focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-ink-900`}
       >
-        <MapPin className="w-4 h-4 text-tap" />
-        {selected ? selected.name : 'Bütün regionlarda'}
+        <MapPin className="w-[18px] h-[18px] shrink-0 text-tap" aria-hidden="true" />
+        <span className="truncate">{selected ? selected.name : 'Bütün Azərbaycan'}</span>
       </button>
 
       {open && (
         <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal-content p-5" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-content p-5"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Region seçimi"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setOpen(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-ink-100 flex items-center justify-center"
+              aria-label="Bağla"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-ink-100 dark:hover:bg-ink-800 flex items-center justify-center text-ink-700 dark:text-ink-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-tap"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <h2 className="text-xl font-bold text-ink-900 mb-1">Şəhər seçin</h2>
-            <p className="text-sm text-ink-500 mb-4">Yalnız seçdiyiniz şəhərdəki elanlar göstəriləcək.</p>
+            <h2 className="text-xl font-bold text-ink-900 dark:text-white mb-1">Region seçin</h2>
+            <p className="text-sm text-ink-500 dark:text-ink-400 mb-4">Yalnız seçdiyiniz regiondakı elanlar göstəriləcək.</p>
 
             <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
@@ -85,11 +97,11 @@ export default function CityPicker({ compact = false }: { compact?: boolean }) {
             <div className="max-h-[400px] overflow-y-auto -mx-2 px-2">
               <button
                 onClick={() => onPick(null)}
-                className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-ink-50 ${
+                className={`w-full flex items-center justify-between p-3 rounded-lg text-ink-800 dark:text-ink-100 hover:bg-ink-50 dark:hover:bg-ink-800 ${
                   !selected ? 'bg-tap-50' : ''
                 }`}
               >
-                <span className="font-semibold">Bütün regionlarda</span>
+                <span className="font-semibold">Bütün Azərbaycan</span>
                 {!selected && <Check className="w-4 h-4 text-tap" />}
               </button>
 
@@ -97,7 +109,7 @@ export default function CityPicker({ compact = false }: { compact?: boolean }) {
                 <button
                   key={c.slug}
                   onClick={() => onPick(c)}
-                  className={`w-full flex items-center justify-between p-3 rounded-lg hover:bg-ink-50 ${
+                  className={`w-full flex items-center justify-between p-3 rounded-lg text-ink-800 dark:text-ink-100 hover:bg-ink-50 dark:hover:bg-ink-800 ${
                     selected?.slug === c.slug ? 'bg-tap-50' : ''
                   }`}
                 >
