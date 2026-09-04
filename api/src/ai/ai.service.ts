@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
 import type { AppConfig } from '../config/configuration';
@@ -84,10 +90,41 @@ export class AiService {
     }
   }
 
-  private async groqJSON(system: string, user: string): Promise<Record<string, unknown>> {
-    if (!this.enabled) {
-      throw new BadRequestException('AI konfiqurasiya olunmayıb (GROQ_API_KEY təyin edin)');
+  /**
+   * NİYƏ: əvvəl HƏR upstream nasazlığı (401 yanlış açar, 404 mövcud olmayan model id,
+   * 5xx, şəbəkə) istifadəçiyə 400 "Bad Request" kimi qayıdırdı — yəni "istifadəçi səhv etdi".
+   * Ona görə monitorinqdə və frontend-də xidmət deqradasiyası kimi görünmürdü və AI-nın
+   * canlıda tamamilə ölü olması aylarla fərq edilmədi. İndi statusu təqsirkar tərəf təyin edir.
+   */
+  private failUpstream(scope: string, model: string, status: number, body: string): never {
+    // 413 yeganə haldır ki, səbəb istifadəçinin göndərdiyi yükün özüdür — o, 4xx qalır.
+    if (status === 413) {
+      this.logger.warn(`Groq ${scope} 413 (model=${model}): yük çox böyükdür — ${body.slice(0, 300)}`);
+      throw new BadRequestException('Göndərilən şəkil/mətn AI üçün çox böyükdür');
     }
+    // Model id / açar / kvota upstream statusu ilə birlikdə loglanır ki, səbəb dərhal görünsün.
+    this.logger.error(`Groq ${scope} upstream ${status} (model=${model}): ${body.slice(0, 500)}`);
+    if (status >= 500) throw new BadGatewayException('AI xidməti cavab vermir (upstream xətası)');
+    throw new ServiceUnavailableException('AI xidməti müvəqqəti əlçatmazdır');
+  }
+
+  private failConnection(scope: string, model: string, err: unknown): never {
+    this.logger.error(
+      `Groq ${scope} şəbəkə xətası (model=${model}): ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw new ServiceUnavailableException('AI xidmətinə qoşulmaq alınmadı');
+  }
+
+  // Konfiqurasiya boşluğu istifadəçinin təqsiri deyil → 503 (başlanğıc loqu artıq xəbərdarlıq edir).
+  private assertEnabled(): void {
+    if (!this.enabled) {
+      this.logger.warn('GROQ_API_KEY yoxdur — AI sorğusu icra olunmadı');
+      throw new ServiceUnavailableException('AI xidməti konfiqurasiya olunmayıb (GROQ_API_KEY)');
+    }
+  }
+
+  private async groqJSON(system: string, user: string): Promise<Record<string, unknown>> {
+    this.assertEnabled();
     let res: Response;
     try {
       res = await fetch(GROQ_URL, {
@@ -105,21 +142,17 @@ export class AiService {
         }),
       });
     } catch (e) {
-      this.logger.warn(`Groq fetch alınmadı: ${String(e)}`);
-      throw new BadRequestException('AI xidmətinə qoşulmaq alınmadı');
+      this.failConnection('chat', this.model, e);
     }
     if (!res.ok) {
-      this.logger.warn(`Groq ${res.status}: ${await res.text().catch(() => '')}`);
-      throw new BadRequestException(`AI xətası (${res.status})`);
+      this.failUpstream('chat', this.model, res.status, await res.text().catch(() => ''));
     }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     return this.extractJSON(data.choices?.[0]?.message?.content ?? '{}');
   }
 
   private async groqVisionJSON(instruction: string, imageUrl: string): Promise<Record<string, unknown>> {
-    if (!this.enabled) {
-      throw new BadRequestException('AI konfiqurasiya olunmayıb (GROQ_API_KEY təyin edin)');
-    }
+    this.assertEnabled();
     let res: Response;
     try {
       res = await fetch(GROQ_URL, {
@@ -141,12 +174,10 @@ export class AiService {
         }),
       });
     } catch (e) {
-      this.logger.warn(`Groq vision fetch alınmadı: ${String(e)}`);
-      throw new BadRequestException('AI vision xidmətinə qoşulmaq alınmadı');
+      this.failConnection('vision', this.visionModel, e);
     }
     if (!res.ok) {
-      this.logger.warn(`Groq vision ${res.status}: ${await res.text().catch(() => '')}`);
-      throw new BadRequestException(`AI vision xətası (${res.status})`);
+      this.failUpstream('vision', this.visionModel, res.status, await res.text().catch(() => ''));
     }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     return this.extractJSON(data.choices?.[0]?.message?.content ?? '{}');

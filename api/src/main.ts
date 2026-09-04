@@ -5,7 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { resolve } from 'node:path';
 import 'reflect-metadata';
-import { AppModule } from './app.module';
+import { AppModule, TRUST_PROXY_HOPS } from './app.module';
 import type { AppConfig } from './config/configuration';
 
 const bootLogger = new Logger('Bootstrap');
@@ -46,8 +46,11 @@ async function bootstrap(): Promise<void> {
   const mediaDir = resolve(config.get('media', { infer: true }).dir);
   app.useStaticAssets(mediaDir, { prefix: '/uploads/' });
 
-  // Render/Vercel proxy arxasında — real IP (rate-limit + loglama üçün)
-  app.set('trust proxy', 1);
+  // Proxy etibarı artıq kor-koranə deyil: sabit `1` birbaşa qoşulan müştərini də
+  // "proxy" sayırdı, o da X-Forwarded-For yazaraq req.ip-i (deməli rate-limit açarını)
+  // saxtalaşdıra bilirdi. İndi hop sayı TRUST_PROXY ilə idarə olunur — prod-da 1
+  // (Render edge), lokalda 0. Mənbə: app.module.ts (throttle guard-la eyni dəyər).
+  app.set('trust proxy', TRUST_PROXY_HOPS);
 
   // Şəkillə axtarış (base64) üçün böyük JSON body
   app.useBodyParser('json', { limit: '8mb' });
@@ -61,12 +64,24 @@ async function bootstrap(): Promise<void> {
   });
 
   // Qlobal validation
+  //
+  // `enableImplicitConversion` QƏSDƏN AÇIQ DEYİL — TİP QARIŞDIRMA DELİYİ İDİ.
+  // O rejimdə class-transformer dəyəri validasiyadan ƏVVƏL DTO-nun elan olunmuş
+  // tipinə zorla çevirir. Nəticədə `{"title":{"a":1}}` sorğusu `String({a:1})` →
+  // `"[object Object]"` olurdu, `@IsString()` və `@Length(10,120)` yoxlamalarından
+  // TƏMİZ keçirdi və bazaya belə yazılırdı (canlı sübut: bazada `[object Object]`
+  // başlıqlı elan). Eyni delik BÜTÜN string sahələrə aid idi — massiv göndərmək də
+  // "a,b,c" sətrinə çevrilirdi.
+  //
+  // Çıxarılması təhlükəsizdir, çünki çevirmə tələb edən yeganə yer query/param
+  // sətirləridir və onlar ONSUZ DA açıq `@Type(() => Number)` işlədir
+  // (query-listings.dto.ts, search.controller.ts, chat.controller.ts).
+  // Gövdə DTO-ları isə JSON-dur — orada rəqəm/boolean artıq düzgün tiplə gəlir.
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-      transformOptions: { enableImplicitConversion: true },
       errorHttpStatusCode: 422,
     }),
   );
@@ -87,6 +102,7 @@ async function bootstrap(): Promise<void> {
       `REDIS_URL=${process.env.REDIS_URL ? 'set' : 'default(localhost)'} · ` +
       `MEILI_HOST=${meili.host ? (/localhost|127\.0\.0\.1/.test(meili.host) ? 'localhost(=yoxdur)' : 'set') : 'MISSING'} · ` +
       `GROQ_API_KEY=${groq.apiKey ? 'set' : 'MISSING(AI söndürülüb)'} · ` +
+      `TRUST_PROXY=${TRUST_PROXY_HOPS} hop · ` +
       `MEDIA_DIR=${mediaDir} · CORS=${cors.origins.length} origin`,
   );
 }

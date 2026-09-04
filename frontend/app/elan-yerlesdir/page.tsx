@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Upload, X, Sparkles, Check } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
-import { api } from '@/lib/api';
+import { api, uploadWithAuth } from '@/lib/api';
 
 type Cat = { id: string; slug: string; nameAz: string; children?: Cat[] };
 type Region = { slug: string; nameAz: string };
@@ -124,19 +124,14 @@ function ElanYerlesdirForm() {
     if (!files?.length) return;
     setUploading(true);
     setError('');
-    const token = localStorage.getItem('avito_token');
     try {
       for (const file of Array.from(files).slice(0, 8 - photos.length)) {
         const fd = new FormData();
         fd.append('file', file);
-        const res = await fetch('/api/media/upload', {
-          method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: fd,
-        });
-        const d = await res.json();
-        if (!res.ok) throw new Error(d.message || 'Şəkil yüklənmədi');
-        setPhotos((p) => [...p, d.data as Img]);
+        // `uploadWithAuth` — xam `fetch` + localStorage əvəzinə: o forma 401→refresh
+        // qatını bypass edirdi, yəni 15 dəqiqədən sonra şəkil yükləmə səssizcə sınırdı.
+        const d = await uploadWithAuth<{ data: Img }>('/media/upload', fd);
+        setPhotos((p) => [...p, d.data]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Şəkil yüklənmədi');

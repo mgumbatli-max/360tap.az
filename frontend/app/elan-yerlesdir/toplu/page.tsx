@@ -2,6 +2,7 @@
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import { getToken } from '@/lib/api';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, FileSpreadsheet, Download, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
@@ -21,7 +22,7 @@ export default function BulkUploadPage() {
   }, [loading, user, router]);
 
   const downloadTemplate = async () => {
-    const token = localStorage.getItem('avito_token');
+    const token = getToken();
     const res = await fetch('/api/import/template', {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -65,7 +66,7 @@ export default function BulkUploadPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const token = localStorage.getItem('avito_token');
+      const token = getToken();
       const res = await fetch(`/api/import/listings${dryRun ? '?dry_run=true' : ''}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },

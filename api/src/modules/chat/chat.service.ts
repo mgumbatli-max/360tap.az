@@ -80,7 +80,16 @@ export class ChatService {
     });
   }
 
-  async getMessages(userId: string, convId: string) {
+  // Mesajlar ƏN YENİDƏN köhnəyə doğru səhifələnir: əvvəl `orderBy asc + take 200` ilə
+  // ən KÖHNƏ 200 mesaj qaytarılırdı — 200-dən çox mesajı olan söhbətdə ən yeni mesajlar
+  // heç bir yolla görünmürdü və söhbətlər siyahısındakı lastMessage ilə ziddiyyət yaradırdı.
+  // Cavab UI üçün xronoloji sıraya çevrilir (köhnə → yeni), `meta.hasMore` isə köhnəyə
+  // doğru davam etmək üçün göstəricidir.
+  async getMessages(
+    userId: string,
+    convId: string,
+    opts: { limit?: number; before?: string } = {},
+  ) {
     const conv = await this.prisma.conversation.findUnique({
       where: { id: convId },
       select: { buyerId: true, sellerId: true },
@@ -89,11 +98,27 @@ export class ChatService {
     if (conv.buyerId !== userId && conv.sellerId !== userId) {
       throw new ForbiddenException('Bu söhbət sizə aid deyil');
     }
-    const messages = await this.prisma.message.findMany({
+    // Default 200 saxlanılır ki, mövcud frontend (səhifələmə düyməsi yoxdur) eyni həcmdə tarixçə görsün
+    const limit = Math.min(Math.max(opts.limit ?? 200, 1), 200);
+    if (opts.before) {
+      // Kursor mövcudluğu yoxlanılır: yad/silinmiş id-də Prisma cursor sorğusu gözlənilməz nəticə verir
+      const anchor = await this.prisma.message.findFirst({
+        where: { id: opts.before, conversationId: convId },
+        select: { id: true },
+      });
+      if (!anchor) {
+        throw new BadRequestException('Səhifələmə göstəricisi (before) bu söhbətə aid deyil');
+      }
+    }
+    const rows = await this.prisma.message.findMany({
       where: { conversationId: convId },
-      orderBy: { createdAt: 'asc' },
-      take: 200,
+      // id ikinci meyar kimi: eyni createdAt-lı mesajlarda sıra sabit qalsın (kursor sürüşməsin)
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1, // +1 — əlavə sətir yalnız "daha köhnəsi var" göstəricisidir
+      ...(opts.before ? { cursor: { id: opts.before }, skip: 1 } : {}),
     });
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
     // Qarşı tərəfin mesajlarını oxunmuş işarələ
     await this.prisma.message
       .updateMany({
@@ -101,13 +126,18 @@ export class ChatService {
         data: { readAt: new Date() },
       })
       .catch(() => undefined);
-    return messages.map((m) => ({
-      id: m.id,
-      content: m.content,
-      senderId: m.senderId,
-      mine: m.senderId === userId,
-      createdAt: m.createdAt,
-    }));
+    const chronological = [...page].reverse();
+    return {
+      data: chronological.map((m) => ({
+        id: m.id,
+        content: m.content,
+        senderId: m.senderId,
+        mine: m.senderId === userId,
+        createdAt: m.createdAt,
+      })),
+      // nextBefore = səhifədəki ən köhnə mesaj: növbəti sorğuda ?before= ilə göndərilir
+      meta: { limit, hasMore, nextBefore: chronological[0]?.id ?? null },
+    };
   }
 
   async sendMessage(userId: string, convId: string, content: string) {

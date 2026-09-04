@@ -8,6 +8,7 @@ import MessageSeller from '@/components/MessageSeller';
 import SellerReviews from '@/components/SellerReviews';
 import ReportButton from '@/components/ReportButton';
 import { serverGet } from '@/lib/server-fetch';
+import { buildMetadata, jsonLdScript } from '@/lib/seo';
 
 function mapSimilar(l: any): Listing {
   return {
@@ -37,15 +38,29 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const loc = [l.districtName, l.regionName].filter(Boolean).join(', ');
   const desc = (l.description ?? '').slice(0, 160).replace(/\s+/g, ' ');
   const cover = l.images?.[0]?.url;
-  return {
-    title: `${l.title} — ${price}${loc ? ' · ' + loc : ''} | 360tap.az`,
+
+  // SEO — SELF-REFERENCING CANONICAL.
+  // Əvvəl canonical yalnız root layout-da (mütləq `SITE.url`) təyin olunurdu və miras
+  // yolu ilə bura da düşürdü: hər elan özünü ana səhifənin dublikatı elan edirdi.
+  // Canonical URL-i `buildMetadata()` `path`-dan qurur (`SITE.url + path`), ona görə
+  // burada URL birləşdirmə məntiqi TƏKRARLANMIR — layihədə digər route-lar da (məs.
+  // `app/elanlar/page.tsx`) eyni köməkçidən istifadə edir.
+  // Başlıqda ' | 360tap.az' suffiksi ƏL İLƏ YAZILMAMALIDIR: root layout-da
+  // `title.template = '%s | 360tap.az'` var və Next onu string başlığa tətbiq edir,
+  // nəticədə suffiks İKİ dəfə düşürdü ('... | 360tap.az | 360tap.az').
+  const base = buildMetadata({
+    title: `${l.title} — ${price}${loc ? ' · ' + loc : ''}`,
     description: desc,
-    openGraph: {
-      title: l.title,
-      description: desc,
-      type: 'website',
-      ...(cover ? { images: [{ url: cover }] } : {}),
-    },
+    path: `/elanlar/${id}`,
+    ...(cover ? { image: cover } : {}),
+    type: 'product',
+  });
+
+  return {
+    ...base,
+    // og bloku əvvəlki davranışı saxlayır: sosial kartda başlıq qiymət/şəhər suffiksi
+    // olmadan daha oxunaqlıdır, ona görə köməkçinin uzun başlığı burada üzərinə yazılır.
+    openGraph: { ...base.openGraph, title: l.title },
   };
 }
 
@@ -150,7 +165,16 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="bg-ink-50 dark:bg-ink-900 min-h-screen">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {/*
+        TƏHLÜKƏSİZLİK: burada `JSON.stringify(jsonLd)` BİRBAŞA verilə bilməz.
+        Elan başlığı/təsviri istifadəçi mətnidir; içində `</script>` olsa, HTML parser-i
+        skript blokunu həmin yerdə bağlayır və ardınca gələn hər şeyi REAL DOM elementi
+        kimi icra edir (saxlanılan XSS — token localStorage-dədir, CSP yoxdur).
+        `jsonLdScript()` `<` simvolunu `<`-ə çevirir; JSON semantikası dəyişmir,
+        amma mətn heç bir halda HTML parser-ini tərk edə bilmir.
+        Eyni köməkçi layout.tsx və Breadcrumb.tsx-də artıq istifadə olunur.
+      */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdScript(jsonLd)} />
       <div className="max-w-5xl mx-auto px-4 py-6">
         <Link href="/elanlar" className="text-tap text-sm font-medium">
           ← Elanlara qayıt

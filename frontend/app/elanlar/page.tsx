@@ -45,6 +45,28 @@ type NestListing = {
   images?: { url: string; sortOrder: number }[];
 };
 
+/**
+ * `/search` zərfi `/listings`-dən FƏRQLİDİR: `images[]` yerinə tək `cover`,
+ * `createdAt` isə ISO string yox, epoch ms-dir. Ona görə ayrıca tip + mapper —
+ * `mapListing`-i təxminlə yenidən istifadə etmək səssiz sıfır-şəkil/NaN-tarix verərdi.
+ */
+type SearchHit = {
+  id: string; title: string; price: number | null; currency: string; priceType: string;
+  cover?: string | null; categoryName?: string | null; regionName?: string | null;
+  isVip?: boolean; createdAt: number;
+};
+
+function mapSearchHit(h: SearchHit): Listing {
+  return {
+    id: h.id, title: h.title, slug: '', price: h.price ?? null,
+    currency: h.currency ?? 'AZN', price_type: h.priceType ?? 'fixed',
+    is_vip: h.isVip, created_at: new Date(h.createdAt).toISOString(),
+    category_name: h.categoryName ?? undefined,
+    city_name: h.regionName ?? undefined,
+    media: h.cover ? [{ url: h.cover, sort_order: 0 }] : [],
+  };
+}
+
 type Understanding = {
   keywords?: string | null; region?: string | null; vertical?: string | null;
   category?: string | null; brand?: string | null; color?: string | null;
@@ -163,6 +185,9 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
   let total = 0;
   let hasMore = false;
   let baseQuery = ''; // client sonsuz scroll üçün API sorğusu (page/limit-siz)
+  // Axtarış budağında sonsuz scroll üçün sorğu — YALNIZ nəticələr səhifələnə bilən
+  // `/search` mənbəyindən gəldikdə dolur (Meili/AI cavabları səhifələnmir).
+  let searchQuery = '';
   let catAttrs: CatAttr[] = [];
   let catName = ''; // backend meta-dan kateqoriya adı (h1)
   let understanding: Understanding | null = null;
@@ -176,8 +201,11 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     const SEARCH_BUDGET_MS = 8_000;
     const deadline = Date.now() + SEARCH_BUDGET_MS;
     const left = (): number => Math.max(0, deadline - Date.now());
+    // İlk batch browse budağı ilə eyni ölçüdə (50) — əvvəl 24 idi və nəticə sayı
+    // ondan çox olanda qalanına heç bir yol qalmırdı.
+    const SEARCH_LIMIT = 50;
 
-    const hits = await meiliSearch(sp.q, 24, Math.min(4_000, left()));
+    const hits = await meiliSearch(sp.q, SEARCH_LIMIT, Math.min(4_000, left()));
     if (hits.length) {
       items = hits.map(mapMeiliHit);
       total = hits.length;
@@ -200,15 +228,26 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
         understanding = ai.meta?.understanding ?? null;
       }
     }
-    // Fallback: AI heç nə tapmadısa, ani DB keyword axtarışı
+    // Fallback: AI heç nə tapmadısa — `/search`.
+    //
+    // ƏVVƏL burada `/listings?q=` çağırılırdı, yəni XAM mətn uyğunluğu: "mashin",
+    // "menzil", "kiraye" kimi latın yazılışlar 0 nəticə verirdi, halbuki backend-də
+    // transliterasiya (search.service.ts → TRANSLIT + understand()) ARTIQ VAR — sadəcə
+    // frontend həmin endpoint-i heç vaxt çağırmırdı. `/search` sorğunu normallaşdırır
+    // (mashin→maşın) və səhifələnir, ona görə keyword fallback ora yönləndirildi.
     if (items.length === 0) {
-      const kw = await serverGet<NestListing[], { total: number }>(
-        `/listings?q=${encodeURIComponent(sp.q)}&limit=24`,
+      searchQuery = `q=${encodeURIComponent(sp.q)}`;
+      const kw = await serverGet<SearchHit[], { total: number; degraded?: boolean }>(
+        `/search?${searchQuery}&page=1&limit=${SEARCH_LIMIT}`,
         { cache: 'no-store', timeoutMs: Math.max(2_000, Math.min(4_000, left())) },
       );
       if (kw.data) {
-        items = kw.data.map(mapListing);
+        items = kw.data.map(mapSearchHit);
         total = kw.meta?.total ?? items.length;
+        // `/search` meta-da `hasMore` yoxdur → total-dan hesablanır.
+        // `meta.degraded` (Meili ölü, Postgres fallback) NORMAL cavabdır — nəticələr
+        // etibarlıdır, ona görə xəta/“tapılmadı” kimi qiymətləndirilmir.
+        hasMore = total > items.length;
       }
       if (kw.unavailable) backendDown = true;
     }
@@ -363,13 +402,35 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
             </Link>
           </div>
         ) : sp.q ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-            {items.map((l) => (
-              <ListingCard key={l.id} item={l} />
-            ))}
-          </div>
+          searchQuery ? (
+            // Axtarış nəticələri də səhifələnir: əvvəl bu budaq sadə grid idi və
+            // meta.total 64 olsa belə yalnız ilk batch görünürdü, "daha çox" yolu yox idi.
+            <InfiniteListings
+              key={searchQuery}
+              initialItems={items}
+              baseQuery={searchQuery}
+              initialHasMore={hasMore}
+              endpoint="/api/search"
+            />
+          ) : (
+            // Meili/AI cavabları səhifələnən mənbə deyil (ranking bir dəfəlikdir),
+            // ona görə onlar sadə grid kimi qalır — yanlış "daha çox" vədi verilmir.
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+              {items.map((l) => (
+                <ListingCard key={l.id} item={l} />
+              ))}
+            </div>
+          )
         ) : (
-          <InfiniteListings initialItems={items} baseQuery={baseQuery} initialHasMore={hasMore} />
+          // `key` = filtr imzası: filtr dəyişəndə komponent REMOUNT olunur, yəni
+          // `useState(initialItems)` yenidən oxunur (komponent daxilindəki sıfırlama
+          // effekti ilə birlikdə ikiqat zəmanət).
+          <InfiniteListings
+            key={baseQuery}
+            initialItems={items}
+            baseQuery={baseQuery}
+            initialHasMore={hasMore}
+          />
         )}
       </div>
     </div>

@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { CreateReviewDto } from './dto/create-review.dto';
@@ -13,6 +18,34 @@ export class ReviewsService {
   async create(reviewerId: string, dto: CreateReviewDto): Promise<{ id: string; rating: number }> {
     if (dto.reviewedId === reviewerId) {
       throw new BadRequestException('Özünüzə rəy yaza bilməzsiniz');
+    }
+    // Reytinq yalnız REAL əlaqədən sonra yazıla bilər: əvvəl yeganə yoxlama "özünə rəy yazma" idi,
+    // ona görə tanımadığı satıcının reytinqini bir nəfər 1 ulduzla aşağı sala bilirdi.
+    // Əlaqə sübutu = iki istifadəçi arasında mövcud söhbət (hər iki istiqamət: alıcı və ya satıcı rolunda).
+    const contact = await this.prisma.conversation.findFirst({
+      where: {
+        OR: [
+          { buyerId: reviewerId, sellerId: dto.reviewedId },
+          { buyerId: dto.reviewedId, sellerId: reviewerId },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!contact) {
+      throw new ForbiddenException(
+        'Rəy yazmaq üçün əvvəlcə bu istifadəçi ilə yazışmalısınız — əlaqəniz olmayan istifadəçiyə reytinq verilmir',
+      );
+    }
+    // listingId verilibsə, elanın sahibi rəy yazılan şəxs olmalıdır (yad elana bağlanmış rəy qarşısı alınır)
+    if (dto.listingId) {
+      const listing = await this.prisma.listing.findUnique({
+        where: { id: dto.listingId },
+        select: { ownerId: true },
+      });
+      if (!listing) throw new NotFoundException('Elan tapılmadı');
+      if (listing.ownerId !== dto.reviewedId) {
+        throw new BadRequestException('Elan rəy yazdığınız istifadəçiyə aid deyil');
+      }
     }
     // Bir istifadəçi başqasına yalnız bir rəy saxlayır (təkrar → yenilə, idempotent)
     const existing = await this.prisma.review.findFirst({

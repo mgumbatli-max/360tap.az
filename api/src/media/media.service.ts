@@ -20,6 +20,16 @@ export interface IncomingFile {
   mimetype: string;
 }
 
+/**
+ * Real telefon şəkli 50 MP-i keçmir. Limitsiz dekod "piksel bombası"na yol verirdi:
+ * 2.4 MB-lıq, lakin 98 MP-lik PNG tək sorğuda +520 MB RSS yaradıb 512 MB-lıq Render
+ * instansını OOM edirdi. Bayt limiti (controller-də 8 MB) bunu tutmur — piksel sayı ayrıca limitdir.
+ */
+const MAX_INPUT_PIXELS = 50_000_000;
+
+/** Saxlanan şəklin maksimum kənarı — vitrin üçün 2560 px kifayətdir, dekoddan sonrakı yaddaşı da sabitləyir. */
+const MAX_OUTPUT_EDGE = 2560;
+
 @Injectable()
 export class MediaService {
   private readonly dir: string;
@@ -31,9 +41,13 @@ export class MediaService {
     this.baseUrl = media.baseUrl;
   }
 
-  /** Şəkildən blurhash (placeholder) yaradır. */
+  /**
+   * Şəkildən blurhash (placeholder) yaradır.
+   * Piksel limiti burada da lazımdır: metod public-dir və xam istifadəçi buffer-i ilə çağırıla bilər —
+   * 32x32-yə resize dekodu ucuzlaşdırmır, PNG-də tam ölçülü dekod yenə də baş verir.
+   */
   async toBlurhash(buffer: Buffer): Promise<string> {
-    const { data, info } = await sharp(buffer)
+    const { data, info } = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS })
       .raw()
       .ensureAlpha()
       .resize(32, 32, { fit: 'inside' })
@@ -48,25 +62,40 @@ export class MediaService {
   async upload(file: IncomingFile): Promise<UploadedMedia> {
     let meta: sharp.Metadata;
     try {
-      meta = await sharp(file.buffer, { limitInputPixels: 100_000_000 }).metadata();
+      // metadata() yalnız başlığı oxuyur, piksel dekod etmir — ona görə burada limit yumşaqdır.
+      // Sərt piksel yoxlamasını aşağıda özümüz edirik ki, istifadəçi "oxunmadı" yerinə aydın səbəb görsün.
+      meta = await sharp(file.buffer, { limitInputPixels: false }).metadata();
     } catch {
       throw new BadRequestException('Şəkil oxunmadı');
     }
     if (!meta.format || meta.format === 'svg') {
       throw new BadRequestException('Bu şəkil formatı dəstəklənmir');
     }
+    // Dekoddan ƏVVƏL rədd et — dekod başlayandan sonra yaddaş artıq ayrılmış olur
+    if ((meta.width ?? 0) * (meta.height ?? 0) > MAX_INPUT_PIXELS) {
+      throw new BadRequestException('Şəkil ölçüsü çox böyükdür (maksimum 50 meqapiksel)');
+    }
 
-    const blurHash = await this.toBlurhash(file.buffer);
-    // Xam buffer-i yox, sharp ilə yenidən kodlaşdırılmış webp-i yaz (payload təmizliyi)
-    const output = await sharp(file.buffer).rotate().webp({ quality: 82 }).toBuffer();
+    // Xam buffer-i yox, sharp ilə yenidən kodlaşdırılmış webp-i yaz (payload təmizliyi).
+    // resize həm diskdəki ölçünü, həm də dekoddan sonrakı pik yaddaşı sabit saxlayır.
+    const output = await sharp(file.buffer, { limitInputPixels: MAX_INPUT_PIXELS })
+      .rotate()
+      .resize(MAX_OUTPUT_EDGE, MAX_OUTPUT_EDGE, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toBuffer({ resolveWithObject: true });
+
+    // Blurhash artıq kiçildilmiş webp-dən alınır ki, tam ölçülü dekod ikinci dəfə baş verməsin
+    const blurHash = await this.toBlurhash(output.data);
+
     const name = `${randomUUID()}.webp`;
     await fs.mkdir(this.dir, { recursive: true });
-    await fs.writeFile(join(this.dir, name), output);
+    await fs.writeFile(join(this.dir, name), output.data);
 
     return {
       url: `${this.baseUrl}/${name}`,
-      width: meta.width ?? 0,
-      height: meta.height ?? 0,
+      // Diskdəki faylın həqiqi ölçüsü — resize/rotate-dan sonrakı dəyər (meta orijinalı göstərirdi)
+      width: output.info.width,
+      height: output.info.height,
       blurHash,
     };
   }

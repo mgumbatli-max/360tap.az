@@ -29,8 +29,13 @@ export const metadata: Metadata = {
   creator: '360tap.az',
   publisher: '360tap.az',
   formatDetection: { email: false, address: false, telephone: false },
+  // SEO: BURADA MÜTLƏQ `canonical` OLMAMALIDIR.
+  // Root layout metadata-sı bütün alt seqmentlərə miras keçir, ona görə `canonical: SITE.url`
+  // hər səhifəni — elan detalı daxil — özünü ANA SƏHİFƏ elan etməyə məcbur edirdi
+  // (hər cavabda `<link rel="canonical" href="https://360tap.az"/>`). Nəticədə axtarış
+  // motorları üçün bütün sayt tək bir URL-ə yığılırdı: alt səhifələr indeksdən düşür.
+  // Canonical artıq hər səhifənin ÖZ metadata-sında qurulur (`buildMetadata({ path })`).
   alternates: {
-    canonical: SITE.url,
     languages: {
       'az-AZ': SITE.url,
       'ru-RU': `${SITE.url}/ru`,

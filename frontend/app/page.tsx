@@ -2,6 +2,22 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import { serverGet } from '@/lib/server-fetch';
+import { buildMetadata } from '@/lib/seo';
+
+/**
+ * SEO — ANA SƏHİFƏNİN ÖZ METADATA-SI.
+ *
+ * Root layout-dan mütləq `canonical` silindi (o, miras yolu ilə HƏR səhifəyə düşür və
+ * bütün elanları ana səhifənin dublikatı elan edirdi). Silinmə ana səhifəni də
+ * canonical-sız qoyurdu — indeksləşdirmədə ən vacib səhifə məhz budur, ona görə
+ * burada öz self-referencing canonical-ı ilə bərpa olunur.
+ */
+export const metadata = buildMetadata({
+  title: 'Azərbaycanda elanlar — avtomobil, ev, iş, xidmət',
+  description:
+    'Azərbaycanın bütün regionlarından elanlar: avtomobil, daşınmaz əmlak, elektronika, iş və xidmətlər. Pulsuz elan yerləşdir — 360tap.az',
+  path: '/',
+});
 
 type Cat = { id: string; slug: string; nameAz: string; icon?: string | null };
 

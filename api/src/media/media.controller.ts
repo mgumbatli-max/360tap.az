@@ -6,6 +6,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { MediaService, type IncomingFile, type UploadedMedia } from './media.service';
 
 @Controller('media')
@@ -14,6 +15,9 @@ export class MediaController {
 
   // Auth tələb olunur (qlobal JwtAuthGuard — @Public yoxdur)
   @Post('upload')
+  // Sharp dekodu bu endpoint-i CPU/yaddaş baxımından ən bahalı yerə çevirir —
+  // qlobal 300/dəq limiti burada çox yumşaqdır, ardıcıl yükləmələr instansı OOM-a apara bilər
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: 8 * 1024 * 1024, files: 1 },

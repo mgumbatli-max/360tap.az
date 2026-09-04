@@ -32,6 +32,9 @@ export interface ListingResponse {
   storeId: string | null;
   contactName: string | null;
   contactPhone: string | null;
+  // Create DTO-da qəbul olunub DB-yə yazılırdı, amma cavabda yox idi — frontend WhatsApp düyməsini
+  // bu sahəyə görə göstərir, ona görə kontrakt boşluğu düyməni bütün elanlarda gizlədirdi.
+  contactWhatsapp: boolean;
   address: string | null;
   lat: number | null;
   lng: number | null;
@@ -71,7 +74,10 @@ export function toListingResponse(listing: WithRelations): ListingResponse {
     slug: listing.slug,
     vertical: listing.vertical,
     description: listing.description,
-    price: listing.price ? Number(listing.price) : null,
+    // `? :` DEYİL, `!= null` — Decimal(0) falsy-dir, ona görə əvvəlki forma
+    // PULSUZ (0 AZN) elanın qiymətini `null`-a çevirirdi və UI onu "razılaşma yolu ilə"
+    // kimi göstərirdi. Sıralamada da 0 qiymətli elan qiymətsiz kimi davranırdı.
+    price: listing.price != null ? Number(listing.price) : null,
     currency: listing.currency,
     priceType: listing.priceType,
     condition: listing.condition,
@@ -84,10 +90,11 @@ export function toListingResponse(listing: WithRelations): ListingResponse {
     source: listing.source,
     inStock: listing.inStock,
     stockQty: listing.stockQty,
-    oldPrice: listing.oldPrice ? Number(listing.oldPrice) : null,
+    oldPrice: listing.oldPrice != null ? Number(listing.oldPrice) : null, // eyni səbəb: 0 falsy-dir
     storeId: listing.storeId,
     contactName: listing.contactName,
     contactPhone: listing.contactPhone,
+    contactWhatsapp: listing.contactWhatsapp,
     address: listing.address,
     lat: listing.lat,
     lng: listing.lng,

@@ -411,11 +411,15 @@ export class ListingsService {
       where.price = price;
     }
 
+    // price nullable-dır ("razılaşma yolu ilə" elanlarda NULL). Postgres-in default davranışı
+    // DESC üçün NULLS FIRST-dir — ona görə "Baha əvvəl" sıralaması qiymətsiz elanları başa atırdı.
+    // nulls: 'last' hər iki istiqamətdə qiymətsizləri sona salır (ASC-də də açıq yazılır ki,
+    // davranış DB default-undan asılı qalmasın). views/createdAt NOT NULL-dur — onlara lazım deyil.
     const orderBy: Prisma.ListingOrderByWithRelationInput =
       q.sort === 'price_asc'
-        ? { price: 'asc' }
+        ? { price: { sort: 'asc', nulls: 'last' } }
         : q.sort === 'price_desc'
-          ? { price: 'desc' }
+          ? { price: { sort: 'desc', nulls: 'last' } }
           : q.sort === 'popular'
             ? { views: 'desc' }
             : { createdAt: 'desc' };

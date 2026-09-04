@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { Phone, ArrowLeft, Loader2 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, setTokens } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 type Step = 'phone' | 'code';
@@ -97,8 +97,11 @@ export default function PhoneOtpForm({ onSuccess, onSwitchToEmail }: {
         method: 'POST',
         body: JSON.stringify({ phone, code: c, full_name: fullName || undefined }),
       });
-      // Auth state-i yenilə
-      localStorage.setItem('avito_token', r.token);
+      // Auth state-i yenilə — `setTokens()` ilə, xam localStorage ilə DEYİL:
+      // token açarı bir yerdə (lib/api.ts) idarə olunur və refresh qatı ilə uzlaşır.
+      // QEYD: `/auth/verify-otp` NestJS-ə hələ köçürülməyib (yalnız login/register/
+      // refresh/logout/me mövcuddur) — bu axın backend hazır olana qədər 404 alacaq.
+      setTokens({ accessToken: r.token });
       // Səhifəni yenilə (auth context push)
       window.location.reload();
       onSuccess();

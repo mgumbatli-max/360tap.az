@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef } from 'react';
 import { Camera, Loader2 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, uploadWithAuth } from '@/lib/api';
 import { useToast } from '@/lib/toast';
 
 export default function AvatarUploader({
@@ -36,16 +36,12 @@ export default function AvatarUploader({
     try {
       // 1) Yüklə
       const fd = new FormData();
-      fd.append('files', file);
-      const token = localStorage.getItem('avito_token');
-      const res = await fetch('/api/upload/images', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Yükləmə uğursuz');
-      const url = d.urls?.[0];
+      // Sahə adı `file` (`files` deyil) və endpoint `/media/upload` (`/upload/images` deyil):
+      // `/api/upload/images` köhnə Express route-u idi, NestJS-ə köçürülməyib — yəni avatar
+      // yükləmə canlıda 404 alırdı. Real route media modulundadır və `{ data: { url } }` qaytarır.
+      fd.append('file', file);
+      const d = await uploadWithAuth<{ data: { url: string } }>('/media/upload', fd);
+      const url = d.data?.url;
       if (!url) throw new Error('URL alınmadı');
 
       // 2) Profilə tətbiq et

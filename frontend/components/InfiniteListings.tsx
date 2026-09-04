@@ -4,22 +4,33 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 
+// İki endpoint eyni komponentə qidalanır və zərfləri BİR-BİRİNDƏN FƏRQLİDİR:
+//  · /listings → `images[]`, `createdAt` ISO string, meta.hasMore var
+//  · /search   → `cover` (tək URL), `createdAt` epoch ms, meta-da hasMore YOXDUR
+// Ona görə tip hər iki formanı qəbul edir, mapper isə normallaşdırır.
 type NestListing = {
-  id: string; title: string; slug: string; price: number | null; currency: string;
+  id: string; title: string; slug?: string; price: number | null; currency: string;
   priceType: string; isVip?: boolean; isPremium?: boolean; hasDelivery?: boolean;
-  views?: number; favoritesCount?: number; createdAt: string;
+  views?: number; favoritesCount?: number; createdAt: string | number;
   regionName?: string | null; districtName?: string | null;
   images?: { url: string; sortOrder: number }[];
+  cover?: string | null;
 };
 
 function mapListing(l: NestListing): Listing {
   return {
-    id: l.id, title: l.title, slug: l.slug, price: l.price ?? null,
+    id: l.id, title: l.title, slug: l.slug ?? '', price: l.price ?? null,
     currency: l.currency ?? 'AZN', price_type: l.priceType ?? 'fixed',
     is_vip: l.isVip, is_premium: l.isPremium, has_delivery: l.hasDelivery,
-    views: l.views, favorites_count: l.favoritesCount, created_at: l.createdAt,
+    views: l.views, favorites_count: l.favoritesCount,
+    created_at:
+      typeof l.createdAt === 'number' ? new Date(l.createdAt).toISOString() : l.createdAt,
     city_name: l.regionName ?? undefined, district: l.districtName ?? undefined,
-    media: (l.images ?? []).map((i) => ({ url: i.url, sort_order: i.sortOrder ?? 0 })),
+    media: l.images?.length
+      ? l.images.map((i) => ({ url: i.url, sort_order: i.sortOrder ?? 0 }))
+      : l.cover
+        ? [{ url: l.cover, sort_order: 0 }]
+        : [],
   };
 }
 
@@ -36,11 +47,14 @@ export default function InfiniteListings({
   baseQuery,
   initialHasMore,
   defaultPer = 'inf',
+  endpoint = '/api/listings',
 }: {
   initialItems: Listing[];
   baseQuery: string;
   initialHasMore: boolean;
   defaultPer?: string;
+  /** Davam etdirmə mənbəyi. Axtarış budağı /api/search işlədir (transliterasiya orada var). */
+  endpoint?: string;
 }) {
   const [items, setItems] = useState<Listing[]>(initialItems);
   const [per, setPer] = useState<string>(defaultPer);
@@ -51,6 +65,24 @@ export default function InfiniteListings({
   const seen = useRef<Set<string>>(new Set(initialItems.map((i) => i.id)));
   const busy = useRef(false);
 
+  // Filtr dəyişəndə (region/sıralama/atribut) səhifə eyni komponenti eyni mövqedə
+  // render edir → React onu REMOUNT ETMİR, `useState(initialItems)` isə yalnız ilk
+  // mount-da oxunur. Nəticədə başlıqdakı say yenilənir, kart siyahısı KÖHNƏ qalırdı.
+  // Ona görə prop dəyişəndə səhifələmə vəziyyətinin HAMISI sıfırlanır.
+  // `baseQuery` bütün filtrləri ehtiva etdiyi üçün tam sıfırlama siqnalıdır; ref ilə
+  // müqayisə isə eyni filtrdə təsadüfi prop-identiklik dəyişməsinin scroll ilə
+  // yüklənmiş kartları silməsinin qarşısını alır.
+  const lastReset = useRef(baseQuery);
+  useEffect(() => {
+    if (lastReset.current === baseQuery) return;
+    lastReset.current = baseQuery;
+    seen.current = new Set(initialItems.map((i) => i.id));
+    busy.current = false;
+    setItems(initialItems);
+    setPage(2);
+    setHasMore(initialHasMore);
+  }, [baseQuery, initialItems, initialHasMore]);
+
   const cap = per === 'inf' ? Infinity : Number(per);
   const pageLimit = per === 'inf' ? PAGE_SIZE : Math.min(PAGE_SIZE, Number(per));
 
@@ -60,11 +92,14 @@ export default function InfiniteListings({
       busy.current = true;
       setLoading(true);
       try {
-        const r = await fetch(`/api/listings?${baseQuery}&page=${p}&limit=${limit}`, {
+        const r = await fetch(`${endpoint}?${baseQuery}&page=${p}&limit=${limit}`, {
           cache: 'no-store',
         });
         if (r.ok) {
-          const d = (await r.json()) as { data?: NestListing[]; meta?: { hasMore?: boolean } };
+          const d = (await r.json()) as {
+            data?: NestListing[];
+            meta?: { hasMore?: boolean; total?: number };
+          };
           const mapped = (d.data ?? []).map(mapListing);
           if (replace) {
             seen.current = new Set(mapped.map((m) => m.id));
@@ -74,7 +109,15 @@ export default function InfiniteListings({
             fresh.forEach((m) => seen.current.add(m.id));
             if (fresh.length) setItems((prev) => [...prev, ...fresh]);
           }
-          setHasMore(d.meta?.hasMore ?? false);
+          // /listings meta.hasMore qaytarır; /search qaytarmır — orada davamı
+          // total-dan hesablayırıq, əks halda scroll birinci batch-də dayanardı.
+          setHasMore(
+            typeof d.meta?.hasMore === 'boolean'
+              ? d.meta.hasMore
+              : typeof d.meta?.total === 'number'
+                ? p * limit < d.meta.total
+                : false,
+          );
         }
       } catch {
         /* şəbəkə xətası — növbəti scroll-da təkrar cəhd */
@@ -83,7 +126,7 @@ export default function InfiniteListings({
         setLoading(false);
       }
     },
-    [baseQuery],
+    [baseQuery, endpoint],
   );
 
   // Say seçicisi dəyişəndə — 1-ci səhifədən təzədən yüklə

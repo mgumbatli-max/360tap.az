@@ -1,6 +1,6 @@
 'use client';
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { api } from './api';
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import { api, AUTH_EXPIRED_EVENT, clearTokens, getToken, setTokens } from './api';
 
 export type User = {
   id: string;
@@ -46,22 +46,29 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
-type AuthPayload = { user: Record<string, any>; tokens: { accessToken: string } };
+// Backend AuthResponse: `{ user, tokens: { accessToken, refreshToken, accessExpiresIn } }`.
+// refreshToken ƏVVƏL burada atılırdı — sessiya 15 dəqiqədən sonra sükutla ölürdü (bax: lib/api.ts).
+type AuthPayload = {
+  user: Record<string, any>;
+  tokens: { accessToken: string; refreshToken?: string };
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('avito_token');
+    const token = getToken();
     if (!token) {
       setLoading(false);
       return;
     }
     // NestJS: { ok, data: PublicUser }
+    // Access token bitibsə `api()` özü refresh edib təkrar cəhd edir; buraya
+    // yalnız refresh də mümkün olmayanda düşürük → hər iki tokeni təmizlə.
     api<{ data?: Record<string, any> }>('/auth/me')
       .then((d) => setUser(normalize(d.data ?? d)))
-      .catch(() => localStorage.removeItem('avito_token'))
+      .catch(() => clearTokens())
       .finally(() => setLoading(false));
   }, []);
 
@@ -71,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ identifier, password }),
     });
     const payload = (d.data ?? d) as unknown as AuthPayload;
-    localStorage.setItem('avito_token', payload.tokens.accessToken);
+    setTokens(payload.tokens);
     setUser(normalize(payload.user));
   };
 
@@ -87,15 +94,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify(body),
     });
     const payload = (d.data ?? d) as unknown as AuthPayload;
-    localStorage.setItem('avito_token', payload.tokens.accessToken);
+    setTokens(payload.tokens);
     setUser(normalize(payload.user));
   };
 
-  const logout = () => {
-    localStorage.removeItem('avito_token');
+  const logout = useCallback(() => {
+    clearTokens();
     setUser(null);
     location.href = '/';
-  };
+  }, []);
+
+  // `api()` refresh cəhdi uğursuz olanda (server refresh tokeni rədd etdi) bu hadisəni atır.
+  // Sessiya bərpa olunmur → istifadəçini boş səhifədə saxlamaq əvəzinə MÖVCUD logout axını işə düşür.
+  useEffect(() => {
+    window.addEventListener(AUTH_EXPIRED_EVENT, logout);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, logout);
+  }, [logout]);
 
   return (
     <Ctx.Provider value={{ user, loading, login, register, logout }}>{children}</Ctx.Provider>

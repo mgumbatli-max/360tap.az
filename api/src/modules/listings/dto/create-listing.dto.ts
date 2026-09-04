@@ -16,6 +16,7 @@ import {
   Length,
   Matches,
   Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Condition, PriceType } from '@prisma/client';
@@ -60,8 +61,12 @@ export class CreateListingDto {
   districtId?: string;
 
   // ----- Qiymət -----
+  // `@Min(0)` YOX İDİ: yuxarı hədd qoyulmuşdu, aşağı hədd qoyulmamışdı, ona görə
+  // mənfi qiymət qəbul olunurdu (bazada -777000 və -500000 kimi sətirlər var).
+  // Mənfi qiymət "ucuzdan bahaya" sıralamasının başına düşür və vitrini korlayır.
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0, { message: 'Qiymət mənfi ola bilməz' })
   @Max(99_999_999_999.99, { message: 'Qiymət çox yüksəkdir' })
   price?: number;
 
