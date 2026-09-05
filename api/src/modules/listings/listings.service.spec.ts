@@ -257,4 +257,33 @@ describe('ListingsService.findAll — sürətli filtrlər', () => {
     expect(captured.where?.hasDelivery).toBe(true);
     expect(captured.where?.images).toEqual({ some: {} });
   });
+
+  it('hasCredit=true → yalnız kreditlə satılanlar', async () => {
+    await service.findAll({ hasCredit: true });
+    expect(captured.where?.hasCredit).toBe(true);
+  });
+
+  it('hasBarter=true → yalnız barterə açıq olanlar', async () => {
+    await service.findAll({ hasBarter: true });
+    expect(captured.where?.hasBarter).toBe(true);
+  });
+
+  /**
+   * `onlyShops` və `verified` FƏRQLİ filtrlərdir və qarışdırılmamalıdır:
+   *  · onlyShops — elan hər hansı mağazaya bağlıdır (fərdi satıcı deyil)
+   *  · verified  — həmin mağaza TƏSDİQLƏNİB
+   * Ölçüldü: mağazadan olan 3 elan var, təsdiqli mağazadan isə 2 — yəni birini
+   * digərinin yerinə işlətmək nəticəni səssizcə dəyişərdi.
+   */
+  it('onlyShops=true → mağazaya bağlı elanlar (təsdiq şərti YOX)', async () => {
+    await service.findAll({ onlyShops: true });
+    expect(captured.where?.storeId).toEqual({ not: null });
+    expect(captured.where?.store).toBeUndefined();
+  });
+
+  it('verified=true → mağaza təsdiqi tələb olunur (onlyShops-dan fərqli)', async () => {
+    await service.findAll({ verified: true });
+    expect(captured.where?.store).toEqual({ isVerified: true });
+    expect(captured.where?.storeId).toBeUndefined();
+  });
 });

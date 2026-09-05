@@ -66,6 +66,16 @@ export class QueryListingsDto {
   @IsOptional() @Transform(toBool) @IsBoolean() hasDelivery?: boolean;
   @IsOptional() @Transform(toBool) @IsBoolean() withPhoto?: boolean;
   @IsOptional() @Transform(toBool) @IsBoolean() vip?: boolean;
+  @IsOptional() @Transform(toBool) @IsBoolean() hasCredit?: boolean;
+  @IsOptional() @Transform(toBool) @IsBoolean() hasBarter?: boolean;
+  /**
+   * `onlyShops` və `verified` FƏRQLİ filtrlərdir:
+   *  · onlyShops — elan hər hansı mağazaya bağlıdır (fərdi satıcı deyil)
+   *  · verified  — həmin mağaza TƏSDİQLƏNİB
+   * Ölçüldü: mağazadan 3 elan, təsdiqli mağazadan 2 — birini digərinin yerinə
+   * işlətmək nəticəni səssizcə dəyişər.
+   */
+  @IsOptional() @Transform(toBool) @IsBoolean() onlyShops?: boolean;
   @IsOptional() @Transform(toBool) @IsBoolean() verified?: boolean;
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;

@@ -796,6 +796,10 @@ export class ListingsService {
     // Təsdiqli satıcı = elanın bağlı olduğu MAĞAZA təsdiqlənib. Mağazasız elanlar
     // (fərdi satıcılar) bu filtrdə görünmür — «təsdiqli satıcı» nişanı məhz
     // mağaza yoxlamasından gəlir.
+    if (q.hasCredit === true) where.hasCredit = true;
+    if (q.hasBarter === true) where.hasBarter = true;
+    // «Mağazalardan» — istənilən mağazaya bağlı elan (təsdiq şərti YOXDUR).
+    if (q.onlyShops === true) where.storeId = { not: null };
     if (q.verified === true) where.store = { isVerified: true };
 
     if (q.priceMin != null || q.priceMax != null) {

@@ -297,7 +297,8 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     Boolean(
       sp.region || sp.category || sp.vertical || sp.priceMin || sp.priceMax || sp.sort ||
       sp.hasDelivery || sp.withPhoto || sp.vip || sp.verified ||
-      sp.has_delivery || sp.with_photo || sp.is_vip || sp.only_shops,
+      sp.has_delivery || sp.with_photo || sp.is_vip || sp.only_shops ||
+      sp.hasCredit || sp.hasBarter || sp.has_credit || sp.has_barter || sp.onlyShops,
     ) ||
     attrEntries.length > 0;
 
@@ -364,10 +365,20 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     const delivery = flag(sp.hasDelivery, sp.has_delivery);
     const photo = flag(sp.withPhoto, sp.with_photo);
     const vipOnly = flag(sp.vip, sp.is_vip);
-    const verifiedOnly = flag(sp.verified, sp.only_shops);
+    const credit = flag(sp.hasCredit, sp.has_credit);
+    const barter = flag(sp.hasBarter, sp.has_barter);
+    // DİQQƏT: `only_shops` («Mağazalardan») ilə `verified` («Təsdiqli satıcı») FƏRQLİ
+    // filtrlərdir — birincisi mağazaya bağlılığı, ikincisi mağazanın TƏSDİQİNİ tələb edir.
+    // Ölçüldü: mağazadan 3 elan, təsdiqli mağazadan 2. Onları eyniləşdirmək nəticəni
+    // səssizcə dəyişərdi, ona görə ayrı-ayrı ötürülür.
+    const shopsOnly = flag(sp.onlyShops, sp.only_shops);
+    const verifiedOnly = flag(sp.verified);
     if (delivery) params.set('hasDelivery', delivery);
     if (photo) params.set('withPhoto', photo);
     if (vipOnly) params.set('vip', vipOnly);
+    if (credit) params.set('hasCredit', credit);
+    if (barter) params.set('hasBarter', barter);
+    if (shopsOnly) params.set('onlyShops', shopsOnly);
     if (verifiedOnly) params.set('verified', verifiedOnly);
     // a_* atribut filtrləri → attrs JSON (scalar + range _min/_max)
     const attrsObj: Record<string, unknown> = {};
