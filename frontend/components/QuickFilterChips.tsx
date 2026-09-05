@@ -1,15 +1,28 @@
 'use client';
-import { Sparkles, Truck, Zap, Image, Crown, Award, Calendar, Tag } from 'lucide-react';
+import { Truck, Image, Crown, Award, Calendar } from 'lucide-react';
 
+/**
+ * SÜRƏTLİ FİLTRLƏR — hamısı REAL backend filtrinə bağlıdır.
+ *
+ * ƏVVƏL 8 çipdən 7-si backend-də MÖVCUD OLMAYAN parametrlər göndərirdi
+ * (`has_delivery=1`, `sort=price_dropped`, `with_photo=1`, `sort=vip`, `verified=1`,
+ * `sort=fast`, `ai=1`) və hər biri HTTP 422 alırdı — istifadəçi düyməyə basıb
+ * «elan tapılmadı» görürdü. Ölçüldü və backend-də real filtrlər quruldu
+ * (`query-listings.dto.ts`: hasDelivery / withPhoto / vip / verified).
+ *
+ * ÇIXARILAN ÜÇ ÇİP və səbəbi:
+ *  · «Endirimli» — `oldPrice > price` şərtinə uyğun elan sayı SIFIRDIR (ölçüldü);
+ *    satıcılar köhnə qiyməti doldurmur. Filtri qurub həmişə boş nəticə vermək
+ *    istifadəçini iki dəfə aldadardı. Data yarananda geri qaytarmaq bir sətirlikdir.
+ *  · «Sürətli satılır» — satılma sürətini proqnozlaşdıran heç bir data/model yoxdur.
+ *  · «AI tövsiyəsi» — şəxsiləşdirmə mühərriki yoxdur.
+ */
 const CHIPS = [
   { id: 'today',     icon: Calendar,  label: 'Bu gün',           param: 'sort=new' },
-  { id: 'delivery',  icon: Truck,     label: 'Çatdırılma var',   param: 'has_delivery=1' },
-  { id: 'discount',  icon: Tag,       label: 'Endirimli',         param: 'sort=price_dropped' },
-  { id: 'photo',     icon: Image,     label: 'Şəkilli',           param: 'with_photo=1' },
-  { id: 'vip',       icon: Crown,     label: 'VIP',               param: 'sort=vip' },
+  { id: 'delivery',  icon: Truck,     label: 'Çatdırılma var',   param: 'hasDelivery=1' },
+  { id: 'photo',     icon: Image,     label: 'Şəkilli',           param: 'withPhoto=1' },
+  { id: 'vip',       icon: Crown,     label: 'VIP',               param: 'vip=1' },
   { id: 'verified',  icon: Award,     label: 'Təsdiqli satıcı',   param: 'verified=1' },
-  { id: 'flash',     icon: Zap,       label: 'Sürətli satılır',   param: 'sort=fast' },
-  { id: 'ai',        icon: Sparkles,  label: 'AI tövsiyəsi',      param: 'ai=1' },
 ];
 
 export default function QuickFilterChips({ onApply }: { onApply: (param: string) => void }) {

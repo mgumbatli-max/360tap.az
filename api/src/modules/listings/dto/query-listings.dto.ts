@@ -1,6 +1,7 @@
 import { ListingSource } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -10,6 +11,18 @@ import {
   IsUUID,
   Min,
 } from 'class-validator';
+
+/**
+ * «1» / «true» → true. Query string-də hər şey mətndir, `@IsBoolean` isə xam
+ * `'1'`-i rədd edərdi (422). Sürətli filtr çipləri URL-ə məhz `?hasDelivery=1`
+ * yazır, ona görə çevrilmə burada edilir.
+ */
+const toBool = ({ value }: { value: unknown }): boolean | undefined => {
+  if (typeof value === 'boolean') return value;
+  if (value === '1' || value === 'true') return true;
+  if (value === '0' || value === 'false') return false;
+  return undefined;
+};
 
 export class QueryListingsDto {
   @IsOptional() @IsString() q?: string; // ani keyword axtarış (title/description)
@@ -33,6 +46,27 @@ export class QueryListingsDto {
   @IsOptional()
   @IsIn(['new', 'price_asc', 'price_desc', 'popular'])
   sort?: 'new' | 'price_asc' | 'price_desc' | 'popular';
+
+  /**
+   * SÜRƏTLİ FİLTRLƏR (ana səhifədəki çiplər).
+   *
+   * Əvvəl bu çiplər backend-də MÖVCUD OLMAYAN parametrlər göndərirdi
+   * (`has_delivery=1`, `sort=vip`, `with_photo=1`, `verified=1`) və hamısı 422
+   * verirdi — istifadəçi düyməyə basıb «elan tapılmadı» görürdü.
+   *
+   * NİYƏ `sort` DEYİL, FİLTR: «VIP» və «Çatdırılma var» sıralama deyil, SEÇİMDİR —
+   * istifadəçi yalnız o elanları görmək istəyir. Sıralama dəyəri kimi qurulsaydı
+   * nəticəyə uyğun olmayan elanlar da düşərdi.
+   *
+   * NİYƏ YALNIZ `true` TƏTBİQ OLUNUR: `false` «çatdırılması OLMAYANLAR» demək olardı,
+   * amma çip yalnız iki vəziyyət bilir — seçilib/seçilməyib. Seçilməyəndə parametr
+   * ümumiyyətlə göndərilmir; `false` gəlsə də filtr tətbiq edilmir ki, davranış
+   * gözləniləndən kənara çıxmasın.
+   */
+  @IsOptional() @Transform(toBool) @IsBoolean() hasDelivery?: boolean;
+  @IsOptional() @Transform(toBool) @IsBoolean() withPhoto?: boolean;
+  @IsOptional() @Transform(toBool) @IsBoolean() vip?: boolean;
+  @IsOptional() @Transform(toBool) @IsBoolean() verified?: boolean;
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   // limit > 50 rədd edilmir — service Math.min(limit, 50) ilə clamp edir (böyük səhifələmə qırılmasın)

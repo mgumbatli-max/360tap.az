@@ -180,3 +180,81 @@ describe('ListingsService.setStatus — sevimlilərə bildiriş', () => {
     expect(b.created).toHaveLength(0);
   });
 });
+
+/**
+ * SÜRƏTLİ FİLTRLƏR (QuickFilterChips).
+ *
+ * Ana səhifədəki 8 sürətli filtrdən 7-si backend-də MÖVCUD OLMAYAN parametrlər
+ * göndərirdi və hamısı HTTP 422 verirdi — istifadəçi düyməyə basıb «elan tapılmadı»
+ * görürdü (ölçüldü: has_delivery=1, sort=price_dropped, with_photo=1, sort=vip,
+ * verified=1, sort=fast, ai=1 — hamısı 422).
+ *
+ * Data mövcudluğu ölçülüb: çatdırılma 17, şəkilli 107, VIP 4, təsdiqli mağaza 2 elan.
+ * Real datası olmayan üçü (endirim/sürətli/AI) frontend-dən çıxarıldı — filtri
+ * «işləyən» etmək, sonra həmişə boş nəticə vermək istifadəçini iki dəfə aldadardı.
+ */
+describe('ListingsService.findAll — sürətli filtrlər', () => {
+  let captured: { where?: Record<string, unknown> } = {};
+  let service: ListingsService;
+
+  beforeEach(async () => {
+    captured = {};
+    const prismaMock = {
+      region: { findUnique: async () => ({ isActive: true, districts: [] }) },
+      category: { findUnique: async () => null },
+      listing: {
+        findMany: async (args: { where: Record<string, unknown> }) => {
+          captured = args;
+          return [];
+        },
+        count: async () => 0,
+      },
+      $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
+    };
+    const mod = await Test.createTestingModule({
+      providers: [
+        ListingsService,
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: CategoriesService, useValue: {} },
+        { provide: SearchService, useValue: searchMock },
+        { provide: ListingLimitService, useValue: limitMock },
+        { provide: NotificationsService, useValue: notificationsMock },
+      ],
+    }).compile();
+    service = mod.get(ListingsService);
+  });
+
+  it('hasDelivery=true → yalnız çatdırılması olanlar', async () => {
+    await service.findAll({ hasDelivery: true });
+    expect(captured.where?.hasDelivery).toBe(true);
+  });
+
+  it('withPhoto=true → yalnız ən azı bir şəkli olanlar', async () => {
+    await service.findAll({ withPhoto: true });
+    expect(captured.where?.images).toEqual({ some: {} });
+  });
+
+  it('vip=true → yalnız VIP elanlar', async () => {
+    await service.findAll({ vip: true });
+    expect(captured.where?.isVip).toBe(true);
+  });
+
+  it('verified=true → yalnız təsdiqlənmiş mağazanın elanları', async () => {
+    await service.findAll({ verified: true });
+    expect(captured.where?.store).toEqual({ isVerified: true });
+  });
+
+  it('bayraq FALSE olanda filtr TƏTBİQ EDİLMİR — «çatdırılması olmayanlar» ayrı sorğudur', async () => {
+    await service.findAll({ hasDelivery: false, withPhoto: false, vip: false, verified: false });
+    expect(captured.where?.hasDelivery).toBeUndefined();
+    expect(captured.where?.images).toBeUndefined();
+    expect(captured.where?.isVip).toBeUndefined();
+    expect(captured.where?.store).toBeUndefined();
+  });
+
+  it('bir neçə filtr birlikdə tətbiq olunur', async () => {
+    await service.findAll({ hasDelivery: true, withPhoto: true });
+    expect(captured.where?.hasDelivery).toBe(true);
+    expect(captured.where?.images).toEqual({ some: {} });
+  });
+});

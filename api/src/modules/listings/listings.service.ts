@@ -786,6 +786,18 @@ export class ListingsService {
       }
     }
 
+    // SÜRƏTLİ FİLTRLƏR — ana səhifədəki çiplər.
+    // Yalnız `true` tətbiq olunur: çip ya seçilib, ya yox. `false` üçün filtr
+    // qurmaq «çatdırılması OLMAYANLAR» kimi gözlənilməz nəticə verərdi.
+    if (q.hasDelivery === true) where.hasDelivery = true;
+    if (q.vip === true) where.isVip = true;
+    // `images: { some: {} }` — ən azı bir şəkli olan elanlar (əlaqə üzrə mövcudluq).
+    if (q.withPhoto === true) where.images = { some: {} };
+    // Təsdiqli satıcı = elanın bağlı olduğu MAĞAZA təsdiqlənib. Mağazasız elanlar
+    // (fərdi satıcılar) bu filtrdə görünmür — «təsdiqli satıcı» nişanı məhz
+    // mağaza yoxlamasından gəlir.
+    if (q.verified === true) where.store = { isVerified: true };
+
     if (q.priceMin != null || q.priceMax != null) {
       // Tərs aralıq (priceMin > priceMax) əvvəl səssizcə 0 nəticə verirdi. 422 ATMIRIQ:
       // saxlanmış axtarışlar və paylaşılmış linklər birdən xəta səhifəsinə düşərdi —

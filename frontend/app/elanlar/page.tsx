@@ -294,7 +294,11 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
    * Filtr YOXDURSA zəncir toxunulmaz qalır — typo dözümü və semantik axtarış itməsin.
    */
   const hasFilters =
-    Boolean(sp.region || sp.category || sp.vertical || sp.priceMin || sp.priceMax || sp.sort) ||
+    Boolean(
+      sp.region || sp.category || sp.vertical || sp.priceMin || sp.priceMax || sp.sort ||
+      sp.hasDelivery || sp.withPhoto || sp.vip || sp.verified ||
+      sp.has_delivery || sp.with_photo || sp.is_vip || sp.only_shops,
+    ) ||
     attrEntries.length > 0;
 
   // Köməkçi sorğular DƏRHAL başladılır (waterfall olmasın) və aşağıda `await` edilir.
@@ -345,6 +349,26 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     if (sp.priceMin) params.set('priceMin', sp.priceMin);
     if (sp.priceMax) params.set('priceMax', sp.priceMax);
     if (sp.sort) params.set('sort', sp.sort);
+    // SÜRƏTLİ/PANEL FİLTRLƏRİ — əvvəl backend-ə ÜMUMİYYƏTLƏ ötürülmürdü və
+    // istifadəçi düyməyə basıb «elan tapılmadı» görürdü (ölçüldü: 422).
+    //
+    // NİYƏ İKİ AD QƏBUL EDİLİR: URL-ə yazan komponentlər tarixən iki fərqli üslub
+    // işlədib — çiplər `hasDelivery`, panel/sidebar isə `has_delivery` (eyni şey
+    // `with_photo`/`withPhoto` üçün də). Yalnız birini dəstəkləmək digər qrupu
+    // sınıq saxlayardı; üstəlik istifadəçilərin paylaşdığı köhnə linklər də
+    // `has_delivery` daşıyır. Backend TƏK ad bilir (camelCase), tərcümə burada olur.
+    const flag = (a?: string, b?: string): string | undefined => {
+      const v = a ?? b;
+      return v && v !== '0' && v !== 'false' ? '1' : undefined;
+    };
+    const delivery = flag(sp.hasDelivery, sp.has_delivery);
+    const photo = flag(sp.withPhoto, sp.with_photo);
+    const vipOnly = flag(sp.vip, sp.is_vip);
+    const verifiedOnly = flag(sp.verified, sp.only_shops);
+    if (delivery) params.set('hasDelivery', delivery);
+    if (photo) params.set('withPhoto', photo);
+    if (vipOnly) params.set('vip', vipOnly);
+    if (verifiedOnly) params.set('verified', verifiedOnly);
     // a_* atribut filtrləri → attrs JSON (scalar + range _min/_max)
     const attrsObj: Record<string, unknown> = {};
     for (const [k, v] of attrEntries) {

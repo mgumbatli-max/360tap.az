@@ -154,6 +154,40 @@ E2E **224/225** (qalan 1 sınıq yükdən asılı flaky, düzəlişlə bağlı d
 
 ---
 
+
+## 0-C. SÜRƏTLİ FİLTRLƏR DÜZƏLDİLDİ (2026-09-06)
+
+Ana səhifə/elanlar səhifəsindəki 8 sürətli filtr çipindən **7-si sınıq idi** — hamısı
+backend-də mövcud olmayan parametrlər göndərirdi və HTTP **422** alırdı. İstifadəçi
+düyməyə basıb «elan tapılmadı» görürdü.
+
+Ölçmə (əvvəl → sonra):
+| Filtr | Əvvəl | İndi |
+|---|---|---|
+| Çatdırılma var | 422 | 17 elan |
+| Şəkilli | 422 | 107 elan |
+| VIP | 422 | 4 elan |
+| Təsdiqli satıcı | 422 | 2 elan |
+| Bu gün (`sort=new`) | ✅ işləyirdi | ✅ |
+
+Backend: `query-listings.dto.ts`-ə 4 boolean filtr (`hasDelivery`, `withPhoto`, `vip`,
+`verified`) + `listings.service.ts`-də where şərtləri. 6 unit test.
+
+⚠️ **İKİ AD ÜSLUBU**: URL-ə yazan komponentlər tarixən iki fərqli üslub işlədib —
+çiplər `hasDelivery`, panel/sidebar isə `has_delivery` (`FilterSidebar`,
+`UniversalTopBar`, `UniversalFullFilter`, `FilterChips`). Yalnız birini dəstəkləmək
+digər qrupu sınıq saxlayardı, üstəlik paylaşılmış köhnə linklər də snake_case daşıyır.
+`app/elanlar/page.tsx` HƏR İKİSİNİ qəbul edir, backend isə tək ad bilir.
+Ölçüldü: `hasDelivery=1` = `has_delivery=1` = 17 elan (hər cütlük üçün eyni).
+
+**ÇIXARILAN ÜÇ ÇİP** (real data yoxdur, saxlamaq yalan vəd olardı):
+`Endirimli` (oldPrice > price şərtinə uyğun elan sayı SIFIR), `Sürətli satılır`
+(proqnoz modeli yoxdur), `AI tövsiyəsi` (şəxsiləşdirmə yoxdur).
+
+Yoxlama: api unit **82/82** · tsc təmiz · filtrlərin uçdan-uca ölçməsi yuxarıda.
+
+---
+
 ## 1. İŞ MÜHİTİNİ QALDIRMAQ (açan kimi ilk bunlar)
 
 ```bash
