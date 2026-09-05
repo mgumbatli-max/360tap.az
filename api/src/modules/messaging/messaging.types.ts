@@ -90,3 +90,43 @@ export function normalizePhone(raw: string): string | null {
 export function normalizeEmail(raw: string): string {
   return (raw ?? '').trim().toLowerCase();
 }
+
+/**
+ * HTTP BAŞLIĞINA GEDƏN KREDENSİALIN TƏMİZLƏNMƏSİ VƏ YOXLANMASI.
+ *
+ * NİYƏ LAZIM OLDU (real hadisə): API açarı dashboard-a yapışdırılarkən içinə
+ * `←` (U+2190) simvolu düşmüşdü. `fetch` başlıq dəyərini ByteString-ə çevirdiyi
+ * üçün HƏR göndərişdə belə xəta atılırdı:
+ *   «Cannot convert argument to a ByteString because the character at index 15
+ *    has a value of 8592 which is greater than 255»
+ * Xəta yalnız GÖNDƏRİŞ anında görünürdü — startup isə «Mail provayderi: resend»
+ * yazıb hər şeyin qaydasında olduğunu bildirirdi. Yəni nasazlıq gizli qalırdı.
+ *
+ * İNDİ: dəyər startup-da yoxlanılır. Kənar boşluq/sətir sonu avtomatik silinir
+ * (ən çox rast gəlinən paste səhvi), Latın-1-dən kənar simvol varsa kredensial
+ * ETİBARSIZ sayılır və adapter `configured=false` qaytarır → sistem konsola düşür
+ * və loqda AÇIQ səbəb yazılır.
+ */
+export type CredentialCheck =
+  | { ok: true; value: string }
+  | { ok: false; reason: string };
+
+export function sanitizeCredential(raw: string | undefined | null, label: string): CredentialCheck {
+  const value = (raw ?? '').trim();
+  if (!value) return { ok: false, reason: `${label} boşdur` };
+
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code > 255) {
+      // Dəyərin ÖZÜ loga yazılmır (sirrdir) — yalnız mövqe və kod göstərilir.
+      return {
+        ok: false,
+        reason: `${label} içində ASCII-dən kənar simvol var (mövqe ${i}, kod ${code}) — dəyəri yenidən yapışdırın`,
+      };
+    }
+    if (code < 32 || code === 127) {
+      return { ok: false, reason: `${label} içində idarəedici simvol var (mövqe ${i})` };
+    }
+  }
+  return { ok: true, value };
+}

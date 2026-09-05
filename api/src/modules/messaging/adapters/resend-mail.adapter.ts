@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import type { DeliveryResult, MailMessage, MailTransport } from '../messaging.types';
+import { sanitizeCredential, type DeliveryResult, type MailMessage, type MailTransport } from '../messaging.types';
 import { REQUEST_TIMEOUT_MS, describeError, maskEmail, readBody } from './adapter.util';
 
 const RESEND_URL = 'https://api.resend.com/emails';
@@ -16,14 +16,22 @@ const RESEND_URL = 'https://api.resend.com/emails';
 export class ResendMailAdapter implements MailTransport {
   readonly name = 'resend';
   readonly configured: boolean;
+  /** `configured=false` olduqda səbəb — modul onu startup loqunda çap edir. */
+  readonly reason: string | null;
 
   private readonly logger = new Logger('ResendMail');
+  private readonly apiKey: string;
+  private readonly from: string;
 
-  constructor(
-    private readonly apiKey: string,
-    private readonly from: string,
-  ) {
-    this.configured = !!apiKey && !!from;
+  constructor(apiKey: string, from: string) {
+    // Açar HTTP başlığına düşür → ASCII-dən kənar simvol `fetch`-i sındırır.
+    // Yoxlama startup-da edilir ki, nasazlıq hər göndərişdə gizli təkrarlanmasın.
+    const key = sanitizeCredential(apiKey, 'MAIL_API_KEY');
+    const sender = sanitizeCredential(from, 'MAIL_FROM');
+    this.apiKey = key.ok ? key.value : '';
+    this.from = sender.ok ? sender.value : '';
+    this.configured = key.ok && sender.ok;
+    this.reason = key.ok ? (sender.ok ? null : sender.reason) : key.reason;
   }
 
   async send(msg: MailMessage): Promise<DeliveryResult> {

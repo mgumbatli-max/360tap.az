@@ -36,7 +36,10 @@ function selectMailTransport(config: ConfigService<AppConfig, true>): MailTransp
       logger.log(`Mail provayderi: resend (from=${mail.from})`);
       return adapter;
     }
-    logger.warn('MAIL_PROVIDER=resend, lakin MAIL_API_KEY/MAIL_FROM natamamdır → console');
+    // Səbəb KONKRET yazılır: «natamamdır» kimi ümumi mesaj real hadisədə
+    // vaxt itkisinə səbəb oldu — açarın içindəki yad simvol yalnız göndəriş
+    // anında, anlaşılmaz ByteString xətası kimi üzə çıxırdı.
+    logger.error(`MAIL_PROVIDER=resend, LAKİN İSTİFADƏ EDİLƏ BİLMİR → console. Səbəb: ${adapter.reason}`);
   } else if (provider) {
     logger.warn(`Naməlum MAIL_PROVIDER="${provider}" → console`);
   } else {
