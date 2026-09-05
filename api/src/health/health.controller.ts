@@ -1,6 +1,13 @@
-import { Controller, Get, Inject, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { Controller, Get, Inject, Optional, Req, ServiceUnavailableException } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { Public } from '../common/decorators/public.decorator';
+import {
+  clientIp,
+  forwardedChain,
+  TRUST_PROXY_HOPS,
+  type ProxyAwareRequest,
+} from '../common/client-ip';
 import { PrismaService } from '../prisma/prisma.service';
 import { REDIS } from '../redis/redis.module';
 import { SearchService } from '../search/search.service';
@@ -82,5 +89,44 @@ export class HealthController {
       throw new ServiceUnavailableException(body);
     }
     return body;
+  }
+
+  /**
+   * RATE LIMIT AÇARININ DİAQNOSTİKASI — «bucket kimə aiddir?» sualına cavab.
+   *
+   * NİYƏ LAZIM OLDU: canlıda ölçüldü ki, `https://360tap.az/api/auth/login`-ə ardıcıl
+   * 14 sorğu 429 alır, halbuki eyni anda birbaşa Render ünvanına gedən sorğu keçir.
+   * Yəni proxy arxasından gələn BÜTÜN ziyarətçilər eyni səbəti paylaşır: rate limit
+   * istifadəçini yox, infrastrukturu ölçür. Bir nəfər saytın girişini hamıya bağlaya bilər.
+   *
+   * Kök səbəb XFF zəncirinin neçənci elementinə etibar etdiyimizdədir (TRUST_PROXY).
+   * Düzgün dəyəri TAPMAQ üçün canlıda faktiki zəncirin uzunluğunu görmək lazımdır —
+   * bu endpoint məhz onu göstərir.
+   *
+   * NİYƏ TƏHLÜKƏSİZDİR: xam IP-lər QAYTARILMIR. Yalnız (a) zəncirin uzunluğu,
+   * (b) hər elementin qısa hash-i, (c) seçilmiş açarın hash-i verilir. Bu, iki fərqli
+   * şəbəkədən eyni açarın çıxıb-çıxmadığını müqayisə etməyə kifayətdir, amma heç kimin
+   * IP-sini ifşa etmir.
+   */
+  @Public()
+  @Get('net')
+  net(@Req() req: ProxyAwareRequest): {
+    trustProxyHops: number;
+    chainLength: number;
+    chain: string[];
+    socket: string;
+    selectedKey: string;
+    note: string;
+  } {
+    const short = (v: string): string => createHash('sha256').update(v).digest('hex').slice(0, 10);
+    const chain = forwardedChain(req);
+    return {
+      trustProxyHops: TRUST_PROXY_HOPS,
+      chainLength: chain.length,
+      chain: chain.map(short),
+      socket: short(req.socket?.remoteAddress ?? 'unknown'),
+      selectedKey: short(clientIp(req)),
+      note: 'Fərqli şəbəkələrdən eyni selectedKey gəlirsə, rate limit bucket-i paylaşılır.',
+    };
   }
 }

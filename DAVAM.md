@@ -1,7 +1,59 @@
-# DAVAM NÖQTƏSİ — production sabitləşdirmə (2026-09-05)
+# DAVAM NÖQTƏSİ — production sabitləşdirmə (2026-09-05, ikinci sessiya)
 
 > Bu fayl kompüter söndürüləndən sonra işi **eyni yerdən** davam etdirmək üçündür.
-> Son commit: `6c071bd` — bütün kod dəyişiklikləri commit olunub, işçi ağac təmizdir.
+
+---
+
+## 0. SON SESSİYADA NƏ OLDU (2026-09-05, axşam)
+
+### E2E ARTIQ TAM YAŞILDIR: **225/225** (əvvəl 218/225)
+
+Sınıqların kök səbəbi tapıldı və düzəldildi — testlərin özündə deyil, **rate limit**-də idi:
+`POST /auth/register` üzərində `@Throttle({limit:5, ttl:60_000})` var, E2E isə 12 qeydiyyat
+göndərir. Bütün Playwright worker-ləri eyni soketdən gəlir (`ip:::1`), ona görə worker sayını
+azaltmaq kömək etmirdi. Sübut (ardıcıl, `--workers=1` icra):
+
+```
+1-5  ✓          ← limit dolur
+6    ✘  31s     ← 429
+7    ✘  31s     ← 429
+8-9  ✓          ← 6+7-nin 62s gözləməsi TTL pəncərəsini sıfırladı
+```
+
+### CANLIDA TAPILAN İKİ CİDDİ DEFEKT (ölçülüb, hələ TAM həll olunmayıb)
+
+**(1) Rate limit bucket-i bütün istifadəçilər arasında PAYLAŞILIR.**
+Ölçmə: `https://360tap.az/api/auth/login`-ə ardıcıl 14 sorğu → 14-cü **429**. Eyni anda
+birbaşa `tap360-api.onrender.com`-a gedən sorğu keçirdi. Səbəb: `clientIp()` XFF zəncirinin
+son elementini götürür (`TRUST_PROXY=1`), proxy arxasında bu Vercel-in çıxış IP-sidir.
+**Nəticə: bir nəfər ~14 sorğu ilə bütün saytın girişini 60 saniyəlik bağlaya bilər.**
+→ Diaqnostika əlavə olundu: `GET /api/health/net` (IP-lər hash-lənir, xam IP verilmir).
+→ **NÖVBƏTİ ADDIM:** deploy-dan sonra canlıda `curl https://360tap.az/api/health/net` işlət,
+   `chainLength`-ə bax və `TRUST_PROXY`-ni render.yaml-da düzgün hop sayına bağla.
+
+**(2) Canlıda Redis QOPUQDUR** — `/api/health/ready` → `redis: "reconnecting"`.
+Throttler səssizcə yaddaş fallback-ində işləyir (restartda sayğac sıfırlanır).
+→ Render Key Value bağlantısı (`REDIS_URL`, `rediss://`, `family=0`) yoxlanmalıdır.
+
+### Bu sessiyada tətbiq olunan düzəlişlər
+
+| Düzəliş | Fayl | Sübut |
+|---|---|---|
+| 429 artıq sərt 404-ə çevrilmir (SEO deindeksləmə riski) | `frontend/lib/server-fetch.ts` | ölçüldü: HTTP 404 → 200 |
+| Mağaza metadata-sı 429-da `noindex` qoymur | `frontend/app/magaza/[slug]/page.tsx` | kod |
+| 429 mesajı azərbaycancadır + saniyə göstərir | `api/src/app.module.ts` | `«Çox sayda cəhd oldu. 60 saniyə sonra yenidən yoxlayın.»` |
+| Hesab bloklanmasında `Retry-After` başlığı qoyulur | `api/src/app.module.ts` | kod |
+| E2E throttle keçidi (yalnız qeyri-production, gizli açar) | `api/src/app.module.ts`, `frontend/e2e/fixtures.ts` | açarsız 429 · açarla 7/7 · yanlış açarla 429 · `NODE_ENV=production`-da 429 |
+| `clientIp` ayrıca modula çıxarıldı (dövri asılılıq) | `api/src/common/client-ip.ts` | tsc təmiz |
+| Diaqnostik `GET /health/net` | `api/src/health/health.controller.ts` | lokalda işləyir |
+
+⚠️ **E2E-ni işə salarkən açar lazımdır** (yoxsa yenə 7 test sınacaq):
+```bash
+cd frontend
+E2E_ALLOW_WRITE=1 E2E_THROTTLE_BYPASS=$(grep E2E_THROTTLE_BYPASS ../api/.env | cut -d= -f2) \
+  npx playwright test
+```
+Açar `api/.env`-dədir (git-ə düşmür); `api/.env.example`-da sənədləşib.
 
 ---
 
@@ -58,41 +110,8 @@ q=menzil → 5   q=mənzil → 5   q=__ → 0   q=iP_one → 0
 
 ## 3. QALDIĞIM DƏQİQ YER
 
-Son E2E icrası **141 sınıq** göstərdi, LAKİN bu, §1-dəki `.next` tələsidir —
-API və data sağlamdır (yoxlanıb: `q=menzil` → 5 nəticə, `/health` → 200).
-
-**NÖVBƏTİ ADDIM:** təmiz build + E2E-ni yenidən işə sal:
-```bash
-cd frontend && rm -rf .next && npm run build && npm run start &
-sleep 15
-E2E_ALLOW_WRITE=1 npx playwright test --reporter=json > /tmp/local-full.json 2>/dev/null
-node /tmp/e2e-summary.mjs /tmp/local-full.json   # skript üçün aşağıya bax
-```
-
-Son **təmiz** icranın nəticəsi: **218 keçdi / 7 sındı** (225 test · 3 viewport).
-O 7 sınığın 4-ü artıq düzəldilib (region filtri, viewport-a görə çıxış düyməsi,
-`timeAgo` hidratasiyası) — təkrar icrada **~222–225 keçməlidir**.
-
-### E2E xülasə skripti (yenidən yaratmaq lazımdırsa)
-`frontend/e2e/` qovluğu commit olunub. Xülasə skriptini bərpa et:
-```js
-// /tmp/e2e-summary.mjs
-import fs from 'node:fs';
-const j = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const rows = [];
-const walk = (s) => { (s.suites||[]).forEach(walk); (s.specs||[]).forEach(sp => {
-  for (const t of sp.tests || []) { if (t.status === 'expected') continue;
-    const r = (t.results||[]).slice(-1)[0]||{};
-    rows.push({ p: t.projectName, t: sp.title, m: ((r.error&&r.error.message)||'').split('\n')[0].slice(0,120) }); } }); };
-(j.suites||[]).forEach(walk);
-const by = new Map();
-for (const r of rows) { const k = r.t + ' :: ' + r.m;
-  if (!by.has(k)) by.set(k, { ...r, projects: [] }); by.get(k).projects.push(r.p); }
-console.log('SINAN (unikal): ' + by.size + ' / cəmi: ' + rows.length);
-let i = 1; for (const v of by.values()) { console.log(`${i++}. [${v.projects.join(',')}] ${v.t}`); console.log(`   → ${v.m}`); }
-```
-
----
+E2E **225/225 keçir** (§0-a bax). tsc (api+frontend) təmiz, unit 27/27.
+Qalan iş: yuxarıdakı iki canlı defekt (TRUST_PROXY ölçməsi + Redis) və §4-dəki bəndlər.
 
 ## 4. QALAN İŞLƏR (prioritet sırası ilə)
 

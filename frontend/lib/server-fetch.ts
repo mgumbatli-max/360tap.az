@@ -68,6 +68,9 @@ export interface Envelope<T, M = Record<string, unknown>> {
   meta?: M;
 }
 
+/** Müvəqqəti uğursuzluqlar — məzmun problemi yox, «indi cavab verə bilmirəm» halı. */
+const TRANSIENT_STATUSES = new Set([408, 425, 429]);
+
 /**
  * Zərfli GET — `data` və `meta`-nı birbaşa qaytarır.
  * `unavailable` true olduqda səhifə "backend əlçatmazdır" fallback-i göstərməlidir
@@ -79,6 +82,15 @@ export interface Envelope<T, M = Record<string, unknown>> {
  * (soft-404). Çağıran tərəf indi `status === 404` olduqda `notFound()` çağıra bilər.
  * ALTERNATİV RƏDD EDİLDİ: `unavailable`-ı 4xx-ə də şamil etmək — o zaman backend düşəndə və
  * məzmun tapılmayanda eyni fallback çıxardı, Faza 0-dakı qəsdli ayrım pozulardı.
+ *
+ * İSTİSNA — MÜVƏQQƏTİ 4xx-lər (429/408/425) `unavailable` sayılır.
+ * NİYƏ: 429 «bu məzmun yoxdur» demir, «indi cavab verə bilmirəm» deyir. Onu ümumi 4xx
+ * kimi ötürmək çağıranı `notFound()`-a aparırdı və rate limit dolan anda MÖVCUD elan
+ * səhifəsi sərt HTTP 404 qaytarırdı. Ölçüldü: backend 429 → /elanlar/<slug> = 404
+ * «Səhifə tapılmadı». Bu, iki dəfə zərərlidir — istifadəçi mövcud elanı itirir, və
+ * axtarış motoru real səhifəni «silinmiş» sayıb indeksdən çıxarır.
+ * 408 (request timeout) və 425 (too early) eyni məntiqlə: hər ikisi təkrar cəhdlə keçir.
+ * 404/403/401/400 İSƏ OLDUĞU KİMİ QALIR — onlar həqiqətən məzmun/icazə problemidir.
  */
 export async function serverGet<T, M = Record<string, unknown>>(
   path: string,
@@ -86,11 +98,12 @@ export async function serverGet<T, M = Record<string, unknown>>(
 ): Promise<{ data: T | null; meta: M | null; unavailable: boolean; status: number | null }> {
   const res = await serverFetch<Envelope<T, M>>(path, init);
   if (!res.ok || !res.body) {
-    // 4xx = məzmun problemi (məs. tapılmadı), 5xx/timeout/network = servis problemi
+    // 4xx = məzmun problemi (məs. tapılmadı), 5xx/timeout/network = servis problemi,
+    // müvəqqəti 4xx (429/408/425) = servis problemi (bax yuxarıdakı şərh).
     const unavailable =
       res.outcome === 'timeout' ||
       res.outcome === 'network' ||
-      (res.status !== null && res.status >= 500);
+      (res.status !== null && (res.status >= 500 || TRANSIENT_STATUSES.has(res.status)));
     return { data: null, meta: null, unavailable, status: res.status };
   }
   return {

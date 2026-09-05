@@ -1,4 +1,10 @@
-import { Injectable, Logger, Module, type OnApplicationShutdown } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Module,
+  type ExecutionContext,
+  type OnApplicationShutdown,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import {
@@ -40,52 +46,7 @@ import { SavedSearchesModule } from './modules/saved-searches/saved-searches.mod
 import { ReportsModule } from './modules/reports/reports.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
-
-/**
- * Etibar edilən proxy hop sayı. NİYƏ sabit `1` deyil: sabit dəyər BİRBAŞA qoşulan
- * istənilən müştərini də "proxy" sayırdı — müştəri X-Forwarded-For yazaraq req.ip-i,
- * deməli rate-limit açarını, hər sorğuda dəyişə bilirdi (limit faktiki olaraq yox idi).
- * Render edge tək hop-dur, ona görə prod default 1; lokal/birbaşa işləmədə proxy yoxdur (0).
- */
-function resolveTrustProxyHops(): number {
-  const raw = (process.env.TRUST_PROXY ?? '').trim().toLowerCase();
-  if (raw === 'true') return 1;
-  if (raw === 'false') return 0;
-  if (raw !== '') {
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isInteger(parsed) && parsed >= 0) return parsed;
-  }
-  return process.env.NODE_ENV === 'production' ? 1 : 0;
-}
-
-export const TRUST_PROXY_HOPS = resolveTrustProxyHops();
-
-interface ProxyAwareRequest {
-  socket?: { remoteAddress?: string };
-  headers?: Record<string, string | string[] | undefined>;
-  body?: unknown;
-}
-
-/**
- * Saxtalaşdırıla bilməyən müştəri IP-si.
- * NİYƏ "birinci XFF elementi" YANLIŞDIR: zəncirin əvvəlini müştərinin özü yazır.
- * Uydurula bilməyən yeganə element bizim etibar etdiyimiz proxy-nin ƏLAVƏ ETDİYİDİR —
- * yəni sondan TRUST_PROXY_HOPS-uncu. Zəncir gözləniləndən qısadırsa (sorğu proxy-dən
- * keçməyib) tək həqiqət soket IP-sidir.
- */
-function clientIp(req: ProxyAwareRequest): string {
-  const socketIp = req.socket?.remoteAddress ?? 'unknown';
-  if (TRUST_PROXY_HOPS <= 0) return socketIp;
-
-  const header = req.headers?.['x-forwarded-for'];
-  const chain = (Array.isArray(header) ? header.join(',') : (header ?? ''))
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-
-  const index = chain.length - TRUST_PROXY_HOPS;
-  return index >= 0 ? chain[index] : socketIp;
-}
+import { clientIp, type ProxyAwareRequest } from './common/client-ip';
 
 /**
  * Kredensial göndərən sorğular üçün hesab identifikatoru.
@@ -110,6 +71,29 @@ function accountTracker(req: ProxyAwareRequest): string | null {
   return null;
 }
 
+/**
+ * E2E QOŞQUSU ÜÇÜN KEÇİD AÇARI — YALNIZ QEYRİ-PRODUCTION.
+ *
+ * NİYƏ LAZIMDIR: E2E dəsti tam paralel icrada `POST /auth/register`-ə 12 sorğu göndərir
+ * (03-auth × 3 viewport + 04-account × 3 test × 3 viewport), limit isə 5/60s-dir.
+ * Bütün Playwright worker-ləri eyni soketdən gəldiyi üçün tracker də eynidir (`ip:::1`) —
+ * yəni worker sayını azaltmaq problemi HƏLL ETMİR, sadəcə gizlədir. Ölçüldü: ardıcıl
+ * (--workers=1) icrada belə 6-cı qeydiyyat 429 alır, 7-ci də, sonra 60s TTL sıfırlanır.
+ *
+ * NİYƏ BELƏ: `NODE_ENV === 'production'` olduqda bu funksiya HƏMİŞƏ false qaytarır —
+ * yəni canlıda açar mövcud olsa belə keçid yoxdur. Env dəyişəni təyin olunmayıbsa da
+ * keçid yoxdur (default bağlı). Beləliklə istehsal davranışı dəyişmir.
+ *
+ * NƏ ÜÇÜN LİMİTİ SADƏCƏ ARTIRMADIQ: limit rəqəmi məhsul qərarıdır; onu test rahatlığı
+ * üçün dəyişmək canlı qorumanı zəiflədərdi.
+ */
+function e2eBypassEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
+  return (process.env.E2E_THROTTLE_BYPASS ?? '').trim().length > 0;
+}
+
+const E2E_BYPASS_HEADER = 'x-e2e-throttle-bypass';
+
 @Injectable()
 export class SecureThrottlerGuard extends ThrottlerGuard {
   // Tracker açarı artıq başlıqdan yox, etibarlı mənbədən gəlir (yuxarıdakı clientIp).
@@ -117,11 +101,26 @@ export class SecureThrottlerGuard extends ThrottlerGuard {
     return `ip:${clientIp(req)}`;
   }
 
+  /**
+   * DİQQƏT: `shouldSkip` true qaytardıqda `handleRequest` ÜMUMİYYƏTLƏ çağırılmır —
+   * yəni aşağıdakı hesab ölçüsündəki brute-force sayğacı da işləmir. Məhz buna görə
+   * keçid production-da bağlıdır və yalnız düzgün gizli açarla açılır.
+   */
+  protected async shouldSkip(context: ExecutionContext): Promise<boolean> {
+    if (e2eBypassEnabled()) {
+      const { req } = this.getRequestResponse(context);
+      const header = (req as ProxyAwareRequest).headers?.[E2E_BYPASS_HEADER];
+      const value = Array.isArray(header) ? header[0] : header;
+      if (value && value === process.env.E2E_THROTTLE_BYPASS) return true;
+    }
+    return super.shouldSkip(context);
+  }
+
   protected async handleRequest(props: ThrottlerRequest): Promise<boolean> {
     const allowed = await super.handleRequest(props);
 
     const { context, limit, ttl, throttler, blockDuration, generateKey } = props;
-    const { req } = this.getRequestResponse(context);
+    const { req, res } = this.getRequestResponse(context);
     const account = accountTracker(req);
     if (!account) return allowed;
 
@@ -131,6 +130,12 @@ export class SecureThrottlerGuard extends ThrottlerGuard {
     const key = generateKey(context, tracker, name);
     const record = await this.storageService.increment(key, ttl, limit, blockDuration, name);
     if (record.isBlocked) {
+      // `Retry-After` başlığını paketin özü yalnız IP ölçüsündə qoyur (super.handleRequest
+      // daxilində). Hesab ölçüsündə blok olanda başlıq itirdi — nəticədə eyni 429 bəzən
+      // başlıqlı, bəzən başlıqsız gəlirdi və müştəri nə qədər gözləyəcəyini bilmirdi.
+      if (typeof res?.header === 'function') {
+        res.header('Retry-After', String(Math.ceil(record.timeToBlockExpire)));
+      }
       await this.throwThrottlingException(context, { limit, ttl, key, tracker, ...record });
     }
     return allowed;
@@ -257,6 +262,14 @@ class RedisThrottlerStorage implements ThrottlerStorage, OnApplicationShutdown {
           },
         ],
         storage: new RedisThrottlerStorage(redis),
+        // Paketin default mesajı «ThrottlerException: Too Many Requests»-dir və o,
+        // birbaşa istifadəçiyə çatırdı: ingiliscə, texniki və nə qədər gözləməli
+        // olduğunu demir. Sayt azərbaycandilli olduğu üçün mesaj da azərbaycancadır
+        // və gözləmə müddətini saniyə ilə göstərir (Retry-After başlığı ilə eyni dəyər).
+        errorMessage: (_ctx, detail): string => {
+          const sec = Math.max(1, Math.ceil((detail?.timeToBlockExpire ?? 60) || 60));
+          return `Çox sayda cəhd oldu. ${sec} saniyə sonra yenidən yoxlayın.`;
+        },
       }),
     }),
     PrismaModule,

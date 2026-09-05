@@ -5,7 +5,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { resolve } from 'node:path';
 import 'reflect-metadata';
-import { AppModule, TRUST_PROXY_HOPS } from './app.module';
+import { AppModule } from './app.module';
+import { TRUST_PROXY_HOPS } from './common/client-ip';
 import type { AppConfig } from './config/configuration';
 
 const bootLogger = new Logger('Bootstrap');

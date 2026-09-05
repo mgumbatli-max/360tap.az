@@ -83,7 +83,43 @@ function attachHealth(page: Page): PageHealth {
   return health;
 }
 
+/**
+ * THROTTLE KEÇİDİ — YALNIZ ÖZ ORIGIN-İMİZƏ.
+ *
+ * NİYƏ LAZIMDIR: dəst tam paralel icrada `POST /auth/register`-ə 12 sorğu göndərir
+ * (03-auth × 3 viewport + 04-account × 3 test × 3 viewport), backend limiti isə 5/60s-dir.
+ * Bütün worker-lər eyni soketdən gəldiyi üçün tracker də eynidir (`ip:::1`) — yəni worker
+ * sayını azaltmaq problemi gizlədir, həll etmir (ölçüldü: `--workers=1` ilə də 6-cı
+ * qeydiyyat 429 alır, 7-ci də, sonra 60s TTL sıfırlanır və növbətilər keçir).
+ *
+ * NİYƏ `use.extraHTTPHeaders` DEYİL: o, başlığı İSTİSNASIZ hər sorğuya qoyur, o cümlədən
+ * `fonts.gstatic.com`-a — və brauzer preflight-da onu rədd edir
+ * («Request header field x-e2e-throttle-bypass is not allowed by
+ * Access-Control-Allow-Headers»). Ölçüldü: 121 yalançı «konsol xətası» sınığı.
+ * Ona görə başlıq YALNIZ test hədəfimizin origin-inə əlavə olunur.
+ *
+ * Backend bu başlığı yalnız `NODE_ENV !== 'production'` VƏ açar uyğun gələndə qəbul edir,
+ * ona görə canlıya qarşı icrada (`E2E_BASE_URL=https://360tap.az`) təsiri yoxdur.
+ */
+const BYPASS_KEY = process.env.E2E_THROTTLE_BYPASS;
+const TARGET_ORIGIN = new URL(process.env.E2E_BASE_URL || 'http://localhost:5401').origin;
+
 export const test = base.extend<{ health: PageHealth }>({
+  page: async ({ page }, use) => {
+    if (BYPASS_KEY) {
+      await page.route('**/*', async (route) => {
+        const url = route.request().url();
+        if (url.startsWith(TARGET_ORIGIN)) {
+          await route.continue({
+            headers: { ...route.request().headers(), 'x-e2e-throttle-bypass': BYPASS_KEY },
+          });
+          return;
+        }
+        await route.continue();
+      });
+    }
+    await use(page);
+  },
   health: async ({ page }, use) => {
     const health = attachHealth(page);
     await use(health);

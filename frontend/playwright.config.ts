@@ -31,6 +31,12 @@ export default defineConfig({
   ],
   use: {
     baseURL: BASE,
+    // QEYD: throttle keçidi başlığı BURADA (`extraHTTPHeaders`) qoyulmur — o, başlığı
+    // İSTİSNASIZ hər sorğuya, o cümlədən `fonts.gstatic.com`-a əlavə edir və şrift
+    // yüklənməsini CORS preflight-da sındırır («Request header field
+    // x-e2e-throttle-bypass is not allowed by Access-Control-Allow-Headers» — ölçüldü:
+    // 121 yalançı konsol xətası). Başlıq yalnız öz origin-imizə, `fixtures.ts`-dəki
+    // `page` fixture-unda route interception ilə əlavə olunur.
     // Uğursuz testin səbəbi hesabatda görünsün deyə iz və ekran görüntüsü saxlanılır.
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

@@ -53,7 +53,14 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const { data: store } = await getStore(slug);
+  const { data: store, unavailable } = await getStore(slug);
+
+  // Backend əlçatmaz olanda (5xx/timeout/429) `noindex` QOYMURUQ: mağaza mövcuddur,
+  // sadəcə indi oxuya bilmirik. Müvəqqəti nasazlıqda vitrini indeksdən çıxarmaq
+  // bərpadan sonra da davam edən real SEO zərəridir.
+  if (unavailable) {
+    return buildMetadata({ title: 'Mağaza', path: `/magaza/${slug}` });
+  }
 
   if (!store || store.status !== 'active') {
     return buildMetadata({ title: 'Mağaza tapılmadı', path: `/magaza/${slug}`, noindex: true });
