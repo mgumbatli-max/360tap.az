@@ -188,6 +188,84 @@ Yoxlama: api unit **82/82** · tsc təmiz · filtrlərin uçdan-uca ölçməsi y
 
 ---
 
+
+## 0-D. DAVAM NÖQTƏSİ — 2026-09-06, gecə (Redis + filtr auditi)
+
+> **AÇAN KİMİ BURADAN BAŞLA.** Bütün kod commit + push olunub (`ed24338`), işçi ağac təmizdir.
+
+### QALAN YEGANƏ İŞ: tam E2E regressiyası
+Sürətli filtr testləri (`e2e/06-filters.spec.ts`) **33/33 keçir**, lakin TAM dəst
+(225 + 33 test) yenidən icra OLUNMAYIB — maşında **başqa layihə** (`360tools.az`)
+E2E işlədirdi, yük 14-18 load average idi. Bu şəraitdə nəticə etibarsızdır.
+
+```bash
+# 1) Mühit
+brew services start postgresql@16
+cd api      && npm run build && node dist/main &
+cd frontend && rm -rf .next && npm run build && npm run start &
+
+# 2) YÜKÜ YOXLA (kritik — 8 core maşın)
+uptime            # load average 5-dən aşağı olmalıdır
+pgrep -f 360tools.az   # başqa layihənin testi işləməməlidir
+
+# 3) Tam E2E
+cd frontend
+E2E_ALLOW_WRITE=1 E2E_THROTTLE_BYPASS=$(grep -E "^E2E_THROTTLE_BYPASS=" ../api/.env | cut -d= -f2) \
+  npx playwright test --reporter=json > /tmp/e2e.json
+node <xülasə skripti> /tmp/e2e.json      # skript §3-dədir
+
+# 4) Production E2E
+E2E_BASE_URL=https://360tap.az npx playwright test --project=desktop 01-public 02-search 06-filters
+```
+
+### BU SESSİYADA BİTMİŞ İŞLƏR
+| Yoxlama | Nəticə |
+|---|---|
+| Backend + frontend build | ✅ PASS |
+| Typecheck (api + frontend) | ✅ PASS |
+| ESLint | ✅ 0 error (əvvəl 2) · 308 warning (köhnə borc) |
+| Unit testlər | ✅ **86/86** (sessiya başında 47) |
+| Production API smoke | ✅ **12/12** |
+| Filtr E2E (yeni) | ✅ **33/33** |
+| Tam E2E regressiya | ⏳ QALIB (yuxarıdakı əmr) |
+
+### REDIS — HÖKM: kod PASS, infrastruktur FAIL ⚠️
+`family: 0` düzəlişi edildi (`api/src/redis/redis-family.ts` — tək mənbə, həm
+RedisModule, həm BullMQ işlədir). Lokalda təsdiqləndi: `Redis qoşuldu (family=0)`.
+
+**LAKİN canlıda səbəb BAŞQADIR.** `/api/health/ready` diaqnostikası:
+```
+error:     connect ECONNREFUSED 10.14.113.104:6379
+family:    0
+target:    redis://red-d8kseajtqb8s73agob20:6379  (TLS: false)
+effective: eyni  ·  raw: 37 simvol, "redis://"
+```
+DNS həll olunur, URL düzgündür, ioredis ilə bizim oxunuşumuz eynidir — bağlantı
+**port səviyyəsində rədd edilir**. Yəni Render Key Value servisi cavab vermir.
+Kodla həll oluna bilməz.
+
+➡️ **İSTİFADƏÇİDƏN:** Render dashboard → `tap360-redis` statusu. Ehtimallar:
+(a) pulsuz Key Value müddəti bitib silinib (DNS qeydi qalıb), (b) API-dən fərqli
+regiondadır — `render.yaml`-da region ÜMUMİYYƏTLƏ təyin olunmayıb.
+
+### TAPILAN VƏ DÜZƏLDİLƏN BUGLAR (bu sessiya, cəmi 6)
+1. **HIGH** 7 sürətli filtr 422 verirdi → 4-ü real edildi, 3-ü çıxarıldı (data yoxdur)
+2. **HIGH** `has_credit`/`has_barter` SƏSSİZCƏ tətbiq olunmurdu (50 elan qaytarırdı) → düzəldi
+3. **HIGH** `only_shops` ≠ `verified` semantik səhv (öz əvvəlki düzəlişimdə) → ayrıldı
+4. **MEDIUM** ESLint 2 error (Playwright `use()` React hook sanılırdı) → `e2e/` üçün söndürüldü
+5. **MEDIUM** Redis `family` (lokalda təsdiqləndi, canlıda əsas səbəb başqadır)
+6. **LOW** `FilterSidebar` + `ListingsClient` ölü kod → qeyd edildi, toxunulmadı
+
+### ⚠️ AŞKARLANAN, TOXUNULMAYAN (qərar istəyir)
+**`ListingsClient.tsx` HEÇ YERDƏ İŞLƏDİLMİR** (ölü kod). Nəticədə `QuickFilterChips`,
+`UniversalTopBar`, `UniversalFullFilter` istifadəçiyə **görünmür** — ölçüldü: `/elanlar`
+HTML-ində çip mətnlərinin heç biri yoxdur. Backend filtrləri işləyir və URL ilə
+əlçatandır, amma onları işə salan çiplər UI-da yoxdur.
+`/elanlar`-ın canlı filtr UI-si: `CategoryFilters` + `FilterChips`.
+➡️ Qərar lazımdır: ölü komponentləri canlandırmaq (yeni UI işi) yoxsa silmək?
+
+---
+
 ## 1. İŞ MÜHİTİNİ QALDIRMAQ (açan kimi ilk bunlar)
 
 ```bash
