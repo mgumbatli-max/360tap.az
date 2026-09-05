@@ -14,6 +14,7 @@ import { toListingResponse, type ListingResponse } from './dto/listing-response.
 import type { QueryListingsDto } from './dto/query-listings.dto';
 import { uniqueSlug } from './utils/slug.util';
 import { SearchService } from '../../search/search.service';
+import { ListingLimitService } from '../billing/listing-limit.service';
 
 const LISTING_TTL_DAYS = 30;
 
@@ -216,6 +217,7 @@ export class ListingsService {
     private readonly prisma: PrismaService,
     private readonly categories: CategoriesService,
     private readonly search: SearchService,
+    private readonly listingLimits: ListingLimitService,
   ) {}
 
   /**
@@ -226,6 +228,24 @@ export class ListingsService {
   async create(ownerId: string, dto: CreateListingDto): Promise<ListingResponse> {
     // 1. Kateqoriya doğrulaması (vertical-ı da qaytarır)
     const category = await this.categories.assertExists(dto.categoryId);
+
+    // 1b. PULSUZ ELAN LİMİTİ — rəqiblərin əsas monetizasiya leveri
+    // (tap.az: Maşınlar 1/ay · turbo.az: diler üçün limit yox, hər elan 30 AZN ·
+    // Avito: kommersiya kateqoriyalarında 0).
+    //
+    // Mühərrik rəqəmi HƏMİŞƏ hesablayır, lakin `blocked` yalnız üç açar birlikdə
+    // qalxdıqda `true` olur: `monetization.enabled` + `listing_limits.enabled` +
+    // kateqoriyanın öz `enabled`-i. Platformada hazırda trafik yoxdur, ona görə
+    // bayraqlar sönülüdür və bu yoxlama HEÇ KİMİ bloklamır — amma astana keçiləndə
+    // admin panelindən bir düymə ilə işə düşür, deploy tələb etmir.
+    const limit = await this.listingLimits.check(ownerId, dto.categoryId);
+    if (limit.blocked) {
+      throw new ForbiddenException(
+        limit.limit != null
+          ? `Bu kateqoriyada aylıq pulsuz elan limiti dolub (${limit.used}/${limit.limit}). Paket alaraq davam edə bilərsiniz.`
+          : 'Bu kateqoriyada elan yerləşdirmək üçün aktiv paket tələb olunur.',
+      );
+    }
 
     // 2. Atributları kateqoriya sxeminə görə təmizlə.
     // Atributlar göndərilməsə də çağırılır — məcburi sahələrin çatışmazlığı
@@ -241,15 +261,23 @@ export class ListingsService {
       if (!district) throw new BadRequestException('Rayon tapılmadı');
     }
 
-    // 4. Slug yarat
+    // 4. Mağaza bağlantısı — QIRIQ HALQA: `storeId` heç vaxt doldurulmurdu,
+    // ona görə mağaza səhifəsi (`GET /stores/:slug/listings`) elan yerləşdirilsə
+    // də ƏBƏDİ BOŞ qalırdı. Bağlantı sorğu gövdəsindən YOX, sahibin öz
+    // mağazasından çıxarılır — beləliklə istifadəçi elanını başqasının mağazasına
+    // yapışdıra bilmir.
+    const storeId = await this.resolveOwnerStoreId(ownerId);
+
+    // 5. Slug yarat
     const slug = uniqueSlug(dto.title);
     const expiresAt = new Date(Date.now() + LISTING_TTL_DAYS * 24 * 60 * 60 * 1000);
 
-    // 5. Tranzaksiya: elan + şəkillər
+    // 6. Tranzaksiya: elan + şəkillər
     const created = await this.prisma.$transaction(async (tx) => {
       const listing = await tx.listing.create({
         data: {
           ownerId,
+          storeId,
           categoryId: dto.categoryId,
           vertical: category.vertical,
           districtId: dto.districtId ?? null,
@@ -301,6 +329,21 @@ export class ListingsService {
 
     void this.search.indexListing(created.id); // best-effort, axını qırmır
     return toListingResponse(created);
+  }
+
+  /**
+   * Sahibin AKTİV mağazasının id-si (yoxdursa `null`).
+   *
+   * NİYƏ yalnız `active`: `pending` mağaza hələ təsdiqlənməyib, `suspended` isə
+   * dayandırılıb — hər iki halda mağaza vitrini ictimaiyyətə bağlıdır, elanı ora
+   * bağlamaq onu görünməz edərdi. Elan bu halda sadə şəxsi elan kimi yaşayır.
+   */
+  private async resolveOwnerStoreId(ownerId: string): Promise<string | null> {
+    const store = await this.prisma.store.findUnique({
+      where: { ownerId },
+      select: { id: true, status: true },
+    });
+    return store && store.status === 'active' ? store.id : null;
   }
 
   /**
@@ -394,12 +437,23 @@ export class ListingsService {
       where: { id },
       // categoryId lazımdır: atributlar dəyişəndə hansı sxemə görə təmizlənəcəyini
       // kateqoriya təyin edir, DTO-da isə kateqoriya göndərilməyə də bilər.
-      select: { ownerId: true, categoryId: true },
+      // storeId lazımdır: yaratma anında mağazası olmayan (və ya mağazası hələ
+      // təsdiqlənməmiş) istifadəçinin köhnə elanları redaktədə mağazaya qoşulur —
+      // əks halda davranış yaratma və redaktə arasında ziddiyyətli qalırdı.
+      select: { ownerId: true, categoryId: true, storeId: true },
     });
     if (!listing) throw new NotFoundException('Elan tapılmadı');
     if (listing.ownerId !== ownerId) throw new ForbiddenException('Bu elan sizə aid deyil');
 
     const data: Prisma.ListingUncheckedUpdateInput = {};
+
+    // Yalnız BOŞ bağlantı doldurulur, mövcud bağlantı heç vaxt qırılmır:
+    // mağaza müvəqqəti dayandırılanda elanın mənşəyini itirmək olmaz — vitrinin
+    // gizlədilməsi onsuz da mağaza statusuna görə baş verir.
+    if (listing.storeId === null) {
+      const storeId = await this.resolveOwnerStoreId(ownerId);
+      if (storeId) data.storeId = storeId;
+    }
     if (dto.title !== undefined) data.title = dto.title;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.price !== undefined) data.price = dto.price ?? null;

@@ -8,6 +8,7 @@ import { toggleFavorite, getLocalFavorites, setLocalFavorite } from '@/lib/favor
 import { addCompare, isInCompare, removeCompare } from '@/lib/compare';
 import { useAuth } from '@/lib/auth';
 import { safeImageUrl } from '@/lib/image-hosts';
+import StoreBadge from '@/components/StoreBadge';
 
 export type Listing = {
   id: string;
@@ -33,6 +34,13 @@ export type Listing = {
   owner_name?: string;
   owner_rating?: number;
   owner_is_verified?: boolean;
+  // Mağaza konteksti — YALNIZ ƏLAVƏ olunan sahələr (mövcud sahələr toxunulmayıb,
+  // bu tipi 6-dan çox səhifə import edir). Backend elan cavabında mağaza adını/slug-ını
+  // verməyə başlayanda nişan avtomatik görünür; olmayanda kart əvvəlki kimi render olunur.
+  store_id?: string | null;
+  store_slug?: string | null;
+  store_name?: string | null;
+  store_is_verified?: boolean;
   media: { url: string; sort_order: number }[];
 };
 
@@ -250,6 +258,18 @@ export default function ListingCard({ item }: { item: Listing }) {
             <span className="ml-1 text-xs font-normal text-ink-400 dark:text-ink-400">razılaşma</span>
           )}
         </div>
+
+        {/* Mağaza nişanı — `relative z-10`, çünki başlıq linkinin ::after örtüyü
+            bütün kartı əhatə edir; onsuz mağaza keçidi kliklənə bilməzdi. */}
+        {item.store_name && (
+          <div className="relative z-10 mt-1 flex">
+            <StoreBadge
+              name={item.store_name}
+              slug={item.store_slug}
+              isVerified={item.store_is_verified}
+            />
+          </div>
+        )}
 
         {location && (
           <div className="mt-1 flex items-center gap-1 text-[13px] text-ink-500 dark:text-ink-400">

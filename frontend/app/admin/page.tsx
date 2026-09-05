@@ -1,102 +1,152 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth';
-import { useRouter } from 'next/navigation';
-import { api, unwrapMeta } from '@/lib/api';
 import {
-  Users, ListOrdered, Wallet, ShieldAlert, TrendingUp, Crown, Eye, Tag,
+  BarChart3,
+  FolderTree,
+  Layers,
+  LockKeyhole,
+  Settings2,
+  Store,
+  Users,
+  Wallet,
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
+import CategoryLimitsSection from './CategoryLimitsSection';
+import FlagsSection from './FlagsSection';
+import OverviewSection from './OverviewSection';
+import PackagesSection from './PackagesSection';
+import StoresSection from './StoresSection';
+import SubscriptionsSection from './SubscriptionsSection';
+import UsersSection from './UsersSection';
 
-export default function AdminDashboard() {
+/**
+ * ADMİN PANELİ.
+ *
+ * NİYƏ TƏK SƏHİFƏ + BÖLMƏLƏR: köhnə panel 8 alt-route-a link verirdi
+ * (`/admin/users`, `/admin/payments` …), amma HEÇ BİRİ mövcud deyildi — hər klik
+ * 404 idi. Burada yalnız backend-i olan bölmələr var və hər biri elə bu səhifədə
+ * açılır, yəni «işləməyən link» strukturca mümkün deyil.
+ *
+ * NİYƏ İCAZƏ EKRANI YÖNLƏNDİRMƏ DEYİL: köhnə panel admin olmayanı səssizcə ana
+ * səhifəyə atırdı — istifadəçi nə baş verdiyini bilmirdi. İndi səbəb yazılır.
+ */
+
+type SectionId =
+  | 'overview'
+  | 'stores'
+  | 'users'
+  | 'packages'
+  | 'subscriptions'
+  | 'limits'
+  | 'settings';
+
+const SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'overview', label: 'Xülasə', icon: BarChart3 },
+  { id: 'stores', label: 'Mağazalar', icon: Store },
+  { id: 'users', label: 'İstifadəçilər', icon: Users },
+  { id: 'packages', label: 'Paketlər', icon: Layers },
+  { id: 'subscriptions', label: 'Abunələr', icon: Wallet },
+  { id: 'limits', label: 'Kateqoriya limitləri', icon: FolderTree },
+  { id: 'settings', label: 'Ayarlar', icon: Settings2 },
+];
+
+const ADMIN_ROLES = ['admin', 'super_admin'];
+
+export default function AdminPage() {
   const { user, loading } = useAuth();
-  const router = useRouter();
-  const [stats, setStats] = useState<any>(null);
+  const [section, setSection] = useState<SectionId>('overview');
 
-  useEffect(() => {
-    if (!loading && (!user || (user.role !== 'admin' && user.role !== 'super_admin'))) {
-      router.push('/');
-    }
-  }, [user, loading, router]);
-
-  useEffect(() => {
-    // Çox sadə KPI — listings count, users count
-    // Faza 0: say `meta.total`-dadır, kök `total`-da deyil → KPI həmişə "..." göstərirdi.
-    Promise.all([
-      api<any>('/listings'),
-    ]).then(([l]) => setStats({
-      listings: unwrapMeta(l).total ?? '—',
-      users: '—',
-      revenue: '—',
-      complaints: '—',
-    })).catch(() => {});
-  }, []);
-
-  if (loading || !user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-    return <div className="p-12 text-center text-ink-500">Giriş yoxlanır...</div>;
+  if (loading) {
+    return <div className="p-12 text-center text-ink-500 dark:text-ink-400">Giriş yoxlanır...</div>;
   }
 
-  const KPI = [
-    { label: 'Aktiv elanlar', value: stats?.listings ?? '...', icon: ListOrdered, color: 'bg-blue-500' },
-    { label: 'İstifadəçilər',  value: stats?.users ?? '...',    icon: Users,        color: 'bg-emerald-500' },
-    { label: 'Aylıq gəlir',    value: stats?.revenue ?? '—',    icon: Wallet,       color: 'bg-amber-500' },
-    { label: 'Şikayətlər',     value: stats?.complaints ?? '—', icon: ShieldAlert,  color: 'bg-red-500' },
-  ];
-
-  const NAV = [
-    { href: '/admin/users',     label: 'İstifadəçilər', icon: Users,       count: '—' },
-    { href: '/admin/listings',  label: 'Elanlar',       icon: ListOrdered, count: stats?.listings ?? '—' },
-    { href: '/admin/moderation',label: 'Moderasiya',    icon: Crown,       count: '—' },
-    { href: '/admin/complaints',label: 'Şikayətlər',    icon: ShieldAlert, count: '—' },
-    { href: '/admin/categories',label: 'Kateqoriyalar', icon: Tag,         count: '—' },
-    { href: '/admin/payments',  label: 'Ödənişlər',     icon: Wallet,      count: '—' },
-    { href: '/admin/analytics', label: 'Analitika',     icon: TrendingUp,  count: '—' },
-    { href: '/admin/audit',     label: 'Audit log',     icon: Eye,         count: '—' },
-  ];
+  if (!user || !ADMIN_ROLES.includes(user.role)) {
+    return <NoAccess signedIn={!!user} />;
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="text-xs font-bold uppercase text-tap mb-1">Admin Panel</div>
-          <h1 className="text-3xl font-extrabold text-ink-900">Salam, {user.full_name}</h1>
-          <p className="text-ink-500 mt-1">360tap.az idarəetmə paneli</p>
-        </div>
-        <span className="badge badge-trusted">Admin</span>
-      </div>
-
-      {/* KPI */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {KPI.map((k) => (
-          <div key={k.label} className="card p-5">
-            <div className={`w-10 h-10 rounded-xl ${k.color} text-white flex items-center justify-center mb-3`}>
-              <k.icon className="w-5 h-5" />
-            </div>
-            <div className="text-3xl font-extrabold text-ink-900">{k.value}</div>
-            <div className="text-xs text-ink-500 mt-1">{k.label}</div>
+      <header className="mb-5">
+        <div className="text-xs font-bold uppercase text-tap mb-1">Admin panel</div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-ink-900 dark:text-white">
+              360tap.az idarəetməsi
+            </h1>
+            <p className="text-sm text-ink-500 dark:text-ink-400 mt-1">
+              Salam, {user.full_name || 'admin'}. Bütün dəyişikliklər audit jurnalına yazılır.
+            </p>
           </div>
-        ))}
-      </div>
+          <span className="badge badge-trusted">
+            {user.role === 'super_admin' ? 'Super admin' : 'Admin'}
+          </span>
+        </div>
+      </header>
 
-      {/* Modullar */}
-      <h2 className="text-xl font-bold text-ink-900 mb-3">Modullar</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {NAV.map((n) => (
-          <Link key={n.href} href={n.href} className="card p-5 hover:border-tap transition group">
-            <n.icon className="w-7 h-7 text-tap mb-3" />
-            <div className="font-semibold text-ink-900 group-hover:text-tap">{n.label}</div>
-            <div className="text-xs text-ink-400 mt-1">{n.count}</div>
+      {/* Bölmə seçimi — mobil ekranda üfüqi sürüşən lent (səhifə sürüşmür). */}
+      <nav aria-label="Admin bölmələri" className="mb-5 overflow-x-auto -mx-4 px-4">
+        <div className="flex gap-2 min-w-max">
+          {SECTIONS.map(({ id, label, icon: Icon }) => {
+            const active = section === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSection(id)}
+                aria-current={active ? 'page' : undefined}
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold whitespace-nowrap border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-tap ${
+                  active
+                    ? 'bg-tap-50 dark:bg-ink-800 border-tap text-tap'
+                    : 'border-ink-200 dark:border-ink-700 text-ink-700 dark:text-ink-300 hover:border-tap'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {section === 'overview' && <OverviewSection />}
+      {section === 'stores' && <StoresSection />}
+      {section === 'users' && <UsersSection currentUserId={user.id} />}
+      {section === 'packages' && <PackagesSection />}
+      {section === 'subscriptions' && <SubscriptionsSection />}
+      {section === 'limits' && <CategoryLimitsSection />}
+      {section === 'settings' && <FlagsSection />}
+    </div>
+  );
+}
+
+function NoAccess({ signedIn }: { signedIn: boolean }) {
+  return (
+    <div className="max-w-md mx-auto px-4 py-20 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-ink-100 dark:bg-ink-800 flex items-center justify-center mx-auto mb-4">
+        <LockKeyhole className="w-6 h-6 text-ink-500 dark:text-ink-400" />
+      </div>
+      <h1 className="text-xl font-extrabold text-ink-900 dark:text-white">İcazəniz yoxdur</h1>
+      <p className="text-sm text-ink-600 dark:text-ink-300 mt-2">
+        {signedIn
+          ? 'Bu səhifə yalnız admin hesabları üçündür. Səhv hesabla girmisinizsə, çıxış edib admin hesabı ilə daxil olun.'
+          : 'Bu səhifəni görmək üçün admin hesabı ilə daxil olmalısınız.'}
+      </p>
+      <div className="flex flex-wrap gap-2 justify-center mt-5">
+        {!signedIn && (
+          <Link
+            href="/login"
+            className="btn-tap text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-tap"
+          >
+            Daxil ol
           </Link>
-        ))}
-      </div>
-
-      <div className="mt-8 p-5 rounded-xl bg-amber-50 border border-amber-200">
-        <h3 className="font-bold text-amber-900 mb-1">⚠ Bu səhifə inkişaf altındadır</h3>
-        <p className="text-sm text-amber-800">
-          Bu admin panel skeleti yalnız əsas KPI və naviqasiyanı göstərir.
-          Tam moderasiya queue, istifadəçi idarəsi, gəlir hesabatı növbəti versiyalarda əlavə olunacaq.
-          API endpoint-lər artıq hazırdır.
-        </p>
+        )}
+        <Link
+          href="/"
+          className="btn-secondary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-tap"
+        >
+          Ana səhifə
+        </Link>
       </div>
     </div>
   );

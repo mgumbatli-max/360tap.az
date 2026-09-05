@@ -1,6 +1,10 @@
 import { IsOptional, IsString, Length, Matches } from 'class-validator';
 
-const PHONE_RE = /^\+?\d{9,15}$/;
+/**
+ * Ortaq telefon şablonu — mağaza profilinin həm yaradılmasında, həm redaktəsində,
+ * həm də filial nömrəsində eyni qayda işləməlidir (ixrac edilir ki, kopyalanmasın).
+ */
+export const PHONE_RE = /^\+?\d{9,15}$/;
 
 export class CreateStoreDto {
   @IsString()

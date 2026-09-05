@@ -176,6 +176,7 @@ model Category {
 
   attributes     CategoryAttribute[]
   listings       Listing[]
+  limit           CategoryLimit?
 
   @@index([parentId])
   @@index([vertical])
@@ -671,6 +672,24 @@ model Package {
   limits       Json
   features     Json
 
+  /// Rəqiblərin modeli (tap.az/bina.az) «burn-down» paketdir, abunə deyil:
+  /// ödəniş → xidmət balansı + elan kvotası + endirim faizi, hamısı müddət
+  /// bitəndə sıfırlanır. Bu sahələr həmin mexanikanı açıq şəkildə saxlayır.
+  durationDays    Int     @default(30) @map("duration_days")
+  /// Paketlə birlikdə verilən xidmət balansı (AZN) — irəli çəkmə/VIP üçün.
+  serviceBalance  Decimal @default(0) @map("service_balance") @db.Decimal(10, 2)
+  /// Paketə daxil olan elan sayı.
+  listingQuota    Int     @default(0) @map("listing_quota")
+  /// Ödənişli xidmətlərə endirim (0-100).
+  discountPercent Int     @default(0) @map("discount_percent")
+  description     String?
+  /// `false` — paket admin panelində görünür, amma satışda deyil.
+  isActive        Boolean @default(false) @map("is_active")
+  sortOrder       Int     @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  subscriptions Subscription[]
+
   @@map("packages")
 }
 
@@ -678,11 +697,24 @@ model Subscription {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   packageId String   @map("package_id") @db.Uuid
+  package   Package  @relation(fields: [packageId], references: [id])
   status    String   @default("active")
   startsAt  DateTime @map("starts_at")
   endsAt    DateTime @map("ends_at")
 
+  /// Paketin ANLIQ vəziyyəti. Paket şərtləri sonradan dəyişsə belə, artıq
+  /// satılmış abunə öz şərtləri ilə qalmalıdır — ona görə dəyərlər burada
+  /// köçürülür, Package-dan JOIN ilə oxunmur.
+  balanceLeft     Decimal @default(0) @map("balance_left") @db.Decimal(10, 2)
+  quotaLeft       Int     @default(0) @map("quota_left")
+  discountPercent Int     @default(0) @map("discount_percent")
+  /// Admin tərəfindən əl ilə verilibsə (ödənişsiz) — audit üçün.
+  grantedBy       String?  @map("granted_by") @db.Uuid
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
   @@index([userId])
+  @@index([status, endsAt])
   @@map("subscriptions")
 }
 
@@ -896,4 +928,55 @@ model VerificationCode {
   @@index([target, createdAt])
   @@index([userId])
   @@map("verification_codes")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PLATFORMA AYARLARI — MONETİZASİYANIN AÇARI ADMİNDƏDİR.
+//
+// NİYƏ AYRICA CƏDVƏL (env dəyişəni deyil): qiymət/limit siyasəti biznes
+// qərarıdır və onu dəyişmək üçün deploy gözləmək olmaz. Operator admin
+// panelindən açır/bağlayır, dəyişiklik dərhal qüvvəyə minir.
+//
+// BAŞLANĞIC VƏZİYYƏTİ: bütün monetizasiya bayraqları SÖNÜLÜDÜR. Səbəb —
+// platformada hələ trafik yoxdur; boş marketpleysə giriş üçün pul tələb etmək
+// tədarükü öldürür (Taobao/eBay China, Vinted nümunələri). Təməl hazır dayanır,
+// astana keçiləndə bir düymə ilə işə düşür.
+// ═══════════════════════════════════════════════════════════════════════════
+model PlatformSetting {
+  /// Nöqtə ilə ayrılmış açar: `monetization.enabled`, `listing_limits.enabled`…
+  key       String   @id @db.VarChar(80)
+  value     Json
+  /// İnsan üçün izah — admin panelində açarın yanında göstərilir.
+  label     String?  @db.VarChar(200)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  @@map("platform_settings")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KATEQORİYA ÜZRƏ PULSUZ ELAN LİMİTİ.
+//
+// Rəqiblərin ƏSL monetizasiya leveri budur (mağaza səhifəsi deyil):
+// tap.az — Maşınlar 1/ay, Telefonlar 2, Mənzillər 2, Vakansiyalar 1;
+// turbo.az — diler üçün pulsuz limit yoxdur, hər elan 30 AZN;
+// Avito — kommersiya kateqoriyalarında 0.
+//
+// Bizdə `enabled=false` ilə yaradılır: limit HESABLANIR və admin panelində
+// görünür, amma HEÇ KİMİ bloklamır. Beləliklə astana keçiləndə real rəqəmlərə
+// baxaraq qərar vermək mümkün olur — kor-koranə deyil.
+// ═══════════════════════════════════════════════════════════════════════════
+model CategoryLimit {
+  categoryId   String   @id @map("category_id") @db.Uuid
+  category     Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  /// 30 gün ərzində pulsuz dərc edilə bilən elan sayı (fərdi satıcı).
+  freePerMonth Int      @default(0) @map("free_per_month")
+  /// Mağaza hesabı üçün ayrıca limit; null = fərdi limitlə eyni.
+  storeFreePerMonth Int? @map("store_free_per_month")
+  /// Limit aşılanda tək elanın qiyməti (AZN). 0 = satış bağlıdır.
+  extraListingPrice Decimal @default(0) @map("extra_listing_price") @db.Decimal(10, 2)
+  enabled      Boolean  @default(false)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("category_limits")
 }

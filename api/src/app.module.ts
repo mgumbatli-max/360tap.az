@@ -23,6 +23,7 @@ import { HealthModule } from './health/health.module';
 import { MediaModule } from './media/media.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { SearchModule } from './search/search.module';
 import { AiModule } from './ai/ai.module';
@@ -37,6 +38,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SavedSearchesModule } from './modules/saved-searches/saved-searches.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 /**
  * Etibar edilən proxy hop sayı. NİYƏ sabit `1` deyil: sabit dəyər BİRBAŞA qoşulan
@@ -264,6 +267,7 @@ class RedisThrottlerStorage implements ThrottlerStorage, OnApplicationShutdown {
     SearchModule,
     AiModule,
     MessagingModule, // @Global — MailService/SmsService bütün modullara açılır
+    SettingsModule, // @Global — monetizasiya bayraqları (admin panelindən idarə olunur)
     VerificationModule,
     AuthModule,
     GeoModule,
@@ -277,6 +281,8 @@ class RedisThrottlerStorage implements ThrottlerStorage, OnApplicationShutdown {
     ReviewsModule,
     SavedSearchesModule,
     ReportsModule,
+    AdminModule, // /api/v1/admin/* — hamısı @Roles('admin','super_admin') ilə qorunur
+    BillingModule, // paketlər/abunələr/limit mühərriki — bayraqlar bağlı olduğu üçün passiv dayanır
   ],
   providers: [
     { provide: APP_GUARD, useClass: SecureThrottlerGuard },
