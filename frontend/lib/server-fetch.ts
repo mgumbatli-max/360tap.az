@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 /**
  * Server-side (SSR/ISR) API çağırışları üçün ortaq helper — Faza 0.
  *
@@ -15,6 +17,63 @@ export const SERVER_API = process.env.API_ORIGIN
 
 /** Standart SSR timeout — istifadəçi heç bir halda bundan çox gözləməməlidir. */
 export const DEFAULT_TIMEOUT_MS = 5_000;
+
+/**
+ * E2E İCRASINDA THROTTLE KEÇİDİ — YALNIZ LOKAL.
+ *
+ * NİYƏ BURADA DA LAZIMDIR: Playwright-ın `page.route()` yalnız BRAUZER sorğularını tutur.
+ * Səhifə render-i zamanı buradan gedən SSR sorğuları Next.js serverindən çıxır, brauzerdən
+ * yox — yəni onlar keçid başlığını almırdı və rate limit-ə düşürdü. Diaqnostika ilə ölçüldü:
+ * bir E2E icrasında `18 × HTTP 429 /api/v1/listings/<id>`. Limit route başına ayrı sayıldığı
+ * üçün `/listings` normal cavab verirdi, `/listings/:id` isə dolmuşdu — problem buna görə
+ * uzun müddət yanlış yerdə axtarıldı.
+ *
+ * NİYƏ TƏHLÜKƏSİZDİR: dəyişən yalnız lokal `.env.local`-dadır (Vercel-də təyin olunmur),
+ * üstəlik backend başlığı `NODE_ENV === 'production'` olduqda ONSUZ DA rədd edir —
+ * yəni canlıda heç bir şəraitdə keçid vermir.
+ */
+const E2E_HEADERS: Record<string, string> = process.env.E2E_THROTTLE_BYPASS
+  ? { 'x-e2e-throttle-bypass': process.env.E2E_THROTTLE_BYPASS }
+  : {};
+
+/**
+ * SSR SORĞUSUNUN İMZASI — «bu, öz serverimizdir».
+ *
+ * NİYƏ LAZIMDIR: buradan gedən sorğu brauzerdən gəlmir, ona görə `middleware.ts`-in
+ * imzaladığı istifadəçi IP-sini daşımır. Nəticədə BÜTÜN səhifə render-ləri backend-də
+ * tək rate-limit bucket-inə düşür. Ölçüldü (diaqnostik log, bir E2E icrası):
+ * `18 × HTTP 429 /api/v1/listings/<id>` — mövcud elan səhifələri «Elan müvəqqəti
+ * yüklənmir» ekranına düşdü. Canlıda eyni mexanizm populyar səhifələri sıradan çıxarardı.
+ *
+ * NİYƏ İSTİFADƏÇİNİN IP-Sİ İLƏ İMZALAMIRIQ: onu almaq üçün `headers()` çağırmaq lazımdır,
+ * bu isə səhifəni DİNAMİK edir və bütün statik/ISR render-lərini söndürür. Ödəniləcək qiymət
+ * problemin özündən böyükdür.
+ *
+ * TƏHLÜKƏSİZLİK: backend bu imzanı yalnız GET sorğularında qəbul edir — yazma və auth
+ * limitləri toxunulmaz qalır. Sirr olmadan başlıq ümumiyyətlə göndərilmir.
+ *
+ * NİYƏ KEŞLƏNİR: hər sorğuda yeni imza hesablamaq render yoluna əlavə iş qoyur.
+ * Backend imzanı 5 dəqiqəyə qədər qəbul etdiyi üçün 30 saniyəlik keş həm tamamilə
+ * təhlükəsizdir, həm də bu yolu sinxron saxlayır.
+ */
+let ssrHeaderCache: { at: number; headers: Record<string, string> } | null = null;
+
+function ssrSignature(): Record<string, string> {
+  const secret = process.env.INTERNAL_IP_SECRET;
+  if (!secret) return {};
+
+  const now = Date.now();
+  if (ssrHeaderCache && now - ssrHeaderCache.at < 30_000) return ssrHeaderCache.headers;
+
+  const ts = String(now);
+  const headers = {
+    'x-internal-ssr': '1',
+    'x-internal-ssr-ts': ts,
+    'x-internal-ssr-sig': createHmac('sha256', secret).update(`ssr.${ts}`).digest('hex'),
+  };
+  ssrHeaderCache = { at: now, headers };
+  return headers;
+}
 
 export type FetchOutcome = 'ok' | 'timeout' | 'network' | 'http';
 
@@ -44,9 +103,20 @@ export async function serverFetch<T>(
   try {
     const res = await fetch(url, {
       ...rest,
+      headers: {
+        ...(rest.headers as Record<string, string> | undefined),
+        ...ssrSignature(),
+        ...E2E_HEADERS,
+      },
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
+      // 404 gözlənilən haldır (məzmun yoxdur) — onu loglamaq səs-küy yaradır.
+      // Qalan HTTP xətaları isə səhifədə fallback ekranına çevrilir, ona görə
+      // səbəbi görünməlidir.
+      if (res.status !== 404) {
+        console.warn(`[serverFetch] HTTP ${res.status} ${url}`);
+      }
       return { ok: false, outcome: 'http', status: res.status, body: null };
     }
     const body = (await res.json()) as T;
@@ -54,9 +124,11 @@ export async function serverFetch<T>(
   } catch (e) {
     const isTimeout =
       e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn(`[serverFetch] ${isTimeout ? 'TIMEOUT' : 'XƏTA'} ${url}`);
-    }
+    // PRODUCTION-DA DA LOGLANIR. Əvvəl bu log yalnız dev-də çıxırdı və nəticədə
+    // «Elan müvəqqəti yüklənmir» ekranının SƏBƏBİ (timeout? şəbəkə? 429?) heç yerdə
+    // görünmürdü — canlıda da, E2E-də də yalnız simptom qalırdı. Səbəbsiz simptom
+    // saatlarla yanlış istiqamətdə axtarışa səbəb olur.
+    console.warn(`[serverFetch] ${isTimeout ? 'TIMEOUT' : 'ŞƏBƏKƏ XƏTASI'} ${url}`);
     return { ok: false, outcome: isTimeout ? 'timeout' : 'network', status: null, body: null };
   }
 }

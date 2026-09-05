@@ -46,7 +46,7 @@ import { SavedSearchesModule } from './modules/saved-searches/saved-searches.mod
 import { ReportsModule } from './modules/reports/reports.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
-import { clientIp, type ProxyAwareRequest } from './common/client-ip';
+import { clientIp, isInternalSsrRequest, type ProxyAwareRequest } from './common/client-ip';
 
 /**
  * Kredensial göndərən sorğular üçün hesab identifikatoru.
@@ -107,12 +107,31 @@ export class SecureThrottlerGuard extends ThrottlerGuard {
    * keçid production-da bağlıdır və yalnız düzgün gizli açarla açılır.
    */
   protected async shouldSkip(context: ExecutionContext): Promise<boolean> {
+    const { req } = this.getRequestResponse(context);
+
     if (e2eBypassEnabled()) {
-      const { req } = this.getRequestResponse(context);
-      const header = (req as ProxyAwareRequest).headers?.[E2E_BYPASS_HEADER];
-      const value = Array.isArray(header) ? header[0] : header;
+      const raw = (req as ProxyAwareRequest).headers?.[E2E_BYPASS_HEADER];
+      const value = Array.isArray(raw) ? raw[0] : raw;
       if (value && value === process.env.E2E_THROTTLE_BYPASS) return true;
     }
+
+    // ÖZ SSR RENDERİMİZ — istifadəçi limitindən ayrılır.
+    //
+    // NİYƏ: səhifə render-i zamanı Next.js serveri backend-ə sorğu atır. Bu sorğu
+    // brauzerdən gəlmir, ona görə nə middleware-in imzaladığı IP-ni, nə də istifadəçinin
+    // öz açarını daşıyır — bütün SSR trafiki TƏK bucket-ə düşür. Ölçüldü (E2E, diaqnostik
+    // log): bir icrada `18 × HTTP 429 /api/v1/listings/<id>`, nəticədə MÖVCUD elan
+    // səhifələri «Elan müvəqqəti yüklənmir» ekranına düşdü. Canlıda eyni mexanizm
+    // populyar səhifələri sıradan çıxarardı.
+    //
+    // NİYƏ TƏHLÜKƏSİZDİR:
+    //  · İmza tələb olunur (`INTERNAL_IP_SECRET`) — kənar şəxs bu yolu aça bilmir.
+    //  · YALNIZ GET. Yazma və auth əməliyyatları SSR-dən getmir, ona görə brute-force
+    //    və qeydiyyat limitləri toxunulmaz qalır.
+    //  · İstifadəçi səviyyəsində qoruma itmir: brauzerdən gələn hər sorğu middleware-in
+    //    imzaladığı real IP ilə ölçülməyə davam edir.
+    if (isInternalSsrRequest(req as ProxyAwareRequest)) return true;
+
     return super.shouldSkip(context);
   }
 

@@ -35,6 +35,61 @@ son elementini götürür (`TRUST_PROXY=1`), proxy arxasında bu Vercel-in çıx
 Throttler səssizcə yaddaş fallback-ində işləyir (restartda sayğac sıfırlanır).
 → Render Key Value bağlantısı (`REDIS_URL`, `rediss://`, `family=0`) yoxlanmalıdır.
 
+
+### İKİNCİ MƏRHƏLƏ — rate limit açarı DÜZƏLDİLDİ (middleware + imzalı IP)
+
+Canlı ölçmə (`GET /api/health/net`) göstərdi ki, seçilən açar hər iki yolda EYNİ idi
+(`605cb15cb0` = Render-in daxili proxy-si), yəni rate limit heç kimi ayırd etmirdi.
+Zəncirin uzunluğu isə yola görə dəyişir (proxy 4 element, birbaşa 3) — ona görə sadəcə
+`TRUST_PROXY` hop sayını düzəltmək işləmirdi.
+
+**Həll (3 qat):**
+1. `frontend/middleware.ts` — Vercel edge-də istifadəçinin real IP-sini oxuyur və
+   `INTERNAL_IP_SECRET` ilə HMAC imzalayıb `/api/*` sorğularına qoşur.
+2. `api/src/common/client-ip.ts` — imzanı yoxlayır (timing-safe, 5 dəqiqəlik yaş limiti).
+   Prioritet: imzalı IP → `cf-connecting-ip` → köhnə XFF hop məntiqi.
+3. 11 unit test (`client-ip.spec.ts`) — saxta imza, başqa sirr, imzasız başlıq, köhnə/gələcək
+   timestamp, sirr yoxdur — hamısı RƏDD edilir.
+
+Lokal uçdan-uca ölçmə:
+| Sınaq | Nəticə |
+|---|---|
+| Frontend üzərindən XFF | `selectedKey` ≠ `socket` → imza qəbul edildi ✅ |
+| Birbaşa XFF (imzasız) | `selectedKey` = `socket` → rədd ✅ |
+| Saxta `x-client-ip` | `selectedKey` = `socket` → rədd ✅ |
+
+⚠️ **QALAN ADDIM — SİRRİ PLATFORMALARDA QUR (yoxsa düzəliş İŞLƏMİR):**
+`INTERNAL_IP_SECRET` dəyəri `api/.env`-dədir. EYNİ dəyər hər iki yerdə olmalıdır:
+  · **Vercel** → Project Settings → Environment Variables → `INTERNAL_IP_SECRET`
+  · **Render** (tap360-api) → Environment → `INTERNAL_IP_SECRET`
+Sirr yoxdursa kod fail-safe davranır: imza yoxlanmır, köhnə (zəif) məntiqə düşür — yəni
+heç nə sınmır, sadəcə düzəliş aktivləşmir.
+
+### SSR diaqnostikası əlavə olundu
+`lib/server-fetch.ts` artıq production-da da uğursuzluğun SƏBƏBİNİ loglayır
+(`TIMEOUT` / `ŞƏBƏKƏ XƏTASI` / `HTTP <status>`). Əvvəl «Elan müvəqqəti yüklənmir»
+ekranının səbəbi heç yerdə görünmürdü. İlk icrada dərhal iki şey üzə çıxdı:
+`17 × HTTP 503 /ai/search` (lokalda `GROQ_API_KEY` yoxdur — canlıda var) və
+`1 × TIMEOUT /search`.
+
+
+### SSR trafiki də ayrıldı (ikinci boşluq bağlandı)
+Middleware yalnız BRAUZER `/api/*` sorğularını imzalayır. Səhifə render-i zamanı
+`lib/server-fetch.ts`-dən gedən sorğular isə Next.js serverindən çıxır — nə middleware-dən
+keçir, nə də istifadəçinin açarını daşıyır. Diaqnostik log bunu dərhal göstərdi:
+`18 × HTTP 429 /api/v1/listings/<id>` (limit route başına ayrı sayıldığı üçün `/listings`
+normal işləyirdi, `/listings/:id` dolmuşdu — problem buna görə uzun müddət yanlış yerdə
+axtarıldı). İndi SSR sorğuları `x-internal-ssr` + HMAC imzası daşıyır; backend onu
+YALNIZ GET üçün qəbul edir (auth/yazma limitləri toxunulmaz). 20 unit test bunu qoruyur.
+
+### E2E-nin son vəziyyəti: 223–225 / 225
+`E2E_THROTTLE_BYPASS` düzgün ötürüləndə SSR 429 tamamilə yox oldu (log: 0).
+Qalan 0–2 sınıq `02-search-filters.spec.ts:104` və `01-public.spec.ts:74` —
+`waitForURL` timeout-ları. Bunlar İLK icrada da (düzəlişlərdən əvvəl) sınmışdı,
+yəni yeni regressiya deyil. Maşın yükü 40+ load average-ə çatanda təkrarlanır.
+⚠️ ÖLÇMƏ QAYDASI: E2E-ni yüklü maşında qiymətləndirmə — `uptime` load average
+10-dan aşağı olmalıdır, əks halda brauzer klikləri gecikir və nəticə yalançı olur.
+
 ### Bu sessiyada tətbiq olunan düzəlişlər
 
 | Düzəliş | Fayl | Sübut |

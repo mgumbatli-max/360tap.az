@@ -107,6 +107,17 @@ services:
       - key: SMS_HTTP_TOKEN
         sync: false
 
+      # --- Rate limit açarı (müştəri IP-si) ---
+      # Vercel middleware hər /api/* sorğusuna istifadəçinin real IP-sini bu sirrlə
+      # imzalayıb göndərir; backend imzanı yoxlayır (bax api/src/common/client-ip.ts).
+      # DƏYƏR VERCEL-DƏKİ INTERNAL_IP_SECRET İLƏ EYNİ OLMALIDIR — fərqli olsa imza
+      # yoxlanmır və rate limit yenidən bütün ziyarətçilər üçün eyni açara düşür.
+      # NİYƏ LAZIM OLDU: canlıda ölçüldü ki, XFF hop məntiqi proxy arxasında
+      # Render-in daxili sabit IP-sini seçir — 14 sorğu ilə saytın girişini hamıya
+      # bağlamaq mümkün idi (bax /api/health/net diaqnostikası).
+      - key: INTERNAL_IP_SECRET
+        sync: false
+
       # --- Saytın ictimai ünvanı ---
       # Mektublardakı linklər (e-poçt təsdiqi, parol sıfırlama) bundan qurulur.
       - key: PUBLIC_URL
