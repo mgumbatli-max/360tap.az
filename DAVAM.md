@@ -112,6 +112,48 @@ Açar `api/.env`-dədir (git-ə düşmür); `api/.env.example`-da sənədləşib
 
 ---
 
+
+## 0-B. BİLDİRİŞ TETİKLƏYİCİLƏRİ QURULDU (2026-09-06)
+
+Audit (82 agent, 77 tapıntı) göstərdi ki, bildirişin ÇATDIRILMA borusu tam işlək idi
+(model, 4 endpoint, Header-də zəng, bildirişlər səhifəsi), lakin bildirişi YARADAN
+mənbə yalnız iki yerdə vardı: `chat.service.ts:171` və `reviews.service.ts:101`.
+`NotificationType` enum-unda `price_drop` və `saved_search` dəyərləri var idi, amma
+onları bir sətir kod belə yaratmırdı.
+
+### Əlavə olunan üç bildiriş
+| Bildiriş | Mexanizm | Sübut |
+|---|---|---|
+| Saxlanmış axtarışa uyğun yeni elan | cron, hər 15 dəq (`alerts/saved-search.service.ts`) | real icra: `saved_search=1` bildiriş yarandı (əvvəl 0 idi), təkrar icrada 0 |
+| Elanın müddəti bitir | cron, gündə 1 dəfə (`alerts/expiry.service.ts`) | real icra: «iPhone 15 Pro Max 512GB elanının müddəti 2 gün sonra bitir», təkrar icrada 0 (7 günlük cooldown) |
+| Sevimli elan satıldı/arxivləndi | `listings.service.ts setStatus()` çəngəli | 5 unit test |
+
+Cron mexanizmi: `@nestjs/schedule@4` (NestJS 10 ilə uyğun versiya — v12 NestJS 11 tələb edir).
+**Redis TƏLƏB ETMİR** — canlıda Redis hələ `reconnecting` vəziyyətindədir.
+
+### Tələ: saxlanmış axtarışın formatı
+`SavedSearch.query` frontend URL formatındadır (`a_brand=BMW`), backend isə `attrs` JSON
+gözləyir. Tərcümə olmasa matcher atribut filtrlərini SƏSSİZCƏ itirər və istifadəçi
+«BMW» axtarışına görə bütün avtomobillər üçün bildiriş alardı. `alerts/query-translate.ts`
+bunu həll edir, 10 unit test qoruyur.
+
+### Saxta UI-lar SÖNDÜRÜLDÜ
+Canlıda istifadəçiyə yalan vəd verən 7 komponent render olunduqları yerdən çıxarıldı
+(fayllar saxlanıldı, şərhlə izah edildi): `PriceDropAlert`, `PriceHistory` (Math.random!),
+`FollowButton`, `PushSubscribe`, `TelegramBotConnect`, `EmailDigest`, `SavedMatches` (404).
+
+### ⚠️ AŞKARLANAN, HƏLƏ DÜZƏLDİLMƏYƏN DEFEKT
+**«Endirimli» sürətli filtri sınıqdır.** `QuickFilterChips.tsx:7` `sort=price_dropped`
+göndərir, backend isə yalnız `new|price_asc|price_desc|popular` qəbul edir
+(`query-listings.dto.ts:34`). Ölçüldü: backend **422**, istifadəçi «elan tapılmadı» görür.
+Düzəliş üçün backend-ə endirim filtri (`oldPrice > price`) əlavə olunmalıdır — ayrı iş.
+
+### Yoxlama
+api unit **76/76** (əvvəl 47) · tsc (api+frontend) təmiz · `next build` keçir ·
+E2E **224/225** (qalan 1 sınıq yükdən asılı flaky, düzəlişlə bağlı deyil).
+
+---
+
 ## 1. İŞ MÜHİTİNİ QALDIRMAQ (açan kimi ilk bunlar)
 
 ```bash

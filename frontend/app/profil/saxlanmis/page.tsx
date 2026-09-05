@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import ProfileLayout from '@/components/ProfileLayout';
 import { api, timeAgo } from '@/lib/api';
-import { Bookmark, Trash2, Search } from 'lucide-react';
+import { Bookmark, Trash2, Search, Bell, BellOff } from 'lucide-react';
 
 type Saved = {
   id: string;
@@ -33,6 +33,28 @@ export default function SavedSearchesPage() {
     if (!confirm('Bu saxlanmış axtarışı silmək istəyirsiniz?')) return;
     await api(`/saved-searches/${id}`, { method: 'DELETE' }).catch(() => {});
     setItems((p) => p.filter((x) => x.id !== id));
+  };
+
+  /**
+   * Bildiriş açarı. Backend endpointi (`PATCH /saved-searches/:id`) ilk gündən
+   * hazır idi, lakin UI-dan heç vaxt çağırılmırdı — istifadəçi bildirişi söndürə
+   * bilmirdi. Uyğunlaşdırıcı (backend: alerts/saved-search.service.ts) məhz bu
+   * bayrağa baxır: `notify=false` olan axtarış üçün bildiriş yaradılmır.
+   *
+   * Vəziyyət DƏRHAL yenilənir (optimistik), sorğu sınsa geri qaytarılır — şəbəkə
+   * gecikməsində açarın "ilişməsi" istifadəçiyə sınıq təsiri bağışlayır.
+   */
+  const toggleNotify = async (s: Saved) => {
+    const next = !s.notify;
+    setItems((p) => p.map((x) => (x.id === s.id ? { ...x, notify: next } : x)));
+    try {
+      await api(`/saved-searches/${s.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ notify: next }),
+      });
+    } catch {
+      setItems((p) => p.map((x) => (x.id === s.id ? { ...x, notify: !next } : x)));
+    }
   };
 
   const buildUrl = (s: Saved): string => {
@@ -84,6 +106,22 @@ export default function SavedSearchesPage() {
                 </div>
                 <div className="text-xs text-ink-400 mt-1.5" suppressHydrationWarning>Yaradılıb: {timeAgo(s.createdAt)}</div>
               </div>
+              <button
+                onClick={() => toggleNotify(s)}
+                className={`p-2 rounded shrink-0 ${
+                  s.notify
+                    ? 'text-tap hover:bg-tap-50 dark:hover:bg-ink-800'
+                    : 'text-ink-400 hover:bg-ink-50 dark:hover:bg-ink-800'
+                }`}
+                aria-label={s.notify ? 'Bildirişi söndür' : 'Bildirişi aç'}
+                title={
+                  s.notify
+                    ? 'Yeni uyğun elan çıxanda bildiriş alırsınız'
+                    : 'Bu axtarış üçün bildiriş söndürülüb'
+                }
+              >
+                {s.notify ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+              </button>
               <button
                 onClick={() => remove(s.id)}
                 className="p-2 rounded text-red-500 hover:bg-red-50 dark:hover:bg-ink-800 shrink-0"

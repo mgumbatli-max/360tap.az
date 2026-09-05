@@ -15,9 +15,16 @@ import { useAuth } from '@/lib/auth';
 import AISummary from '@/components/AISummary';
 import AITranslate from '@/components/AITranslate';
 import AISimilar from '@/components/AISimilar';
-import PriceDropAlert from '@/components/PriceDropAlert';
+// SAXTA KOMPONENTLƏR SÖNDÜRÜLDÜ (bildiriş işi, 2026-09-06).
+// Aşağıdakı komponentlər istifadəçiyə REAL VƏD verirdi, amma heç nə etmirdi:
+// serverə bir sorğu belə atmır, yalnız `localStorage`-a yazır və ya sadəcə toast
+// göstərirdilər. Yəni istifadəçi xəbərdarlıq qurub brauzerini bağlayır və heç vaxt
+// heç nə almırdı — bu, işləməyən düymədən daha pisdir, çünki gözlənti yaradır.
+// Fayllar SİLİNMƏDİ: real endpoint hazır olanda import və render bir sətirlə qaytarılır.
+// PriceHistory: qrafiki `Math.random()` ilə uydururdu. PriceDropAlert: yalnız localStorage.
+// import PriceDropAlert from '@/components/PriceDropAlert';
 import LiveViewerStats from '@/components/LiveViewerStats';
-import PriceHistory from '@/components/PriceHistory';
+// import PriceHistory from '@/components/PriceHistory';
 import SellerReviews from '@/components/SellerReviews';
 import SimilarSearches from '@/components/SimilarSearches';
 import QRCodeShare from '@/components/QRCodeShare';
@@ -238,7 +245,7 @@ export default function ListingDetailPage() {
           </div>
 
           {/* Price history */}
-          {listing.price > 0 && <PriceHistory currentPrice={Number(listing.price)} />}
+          
 
           {/* Group buy */}
           {listing.price > 0 && <GroupBuy price={Number(listing.price)} />}
@@ -267,7 +274,7 @@ export default function ListingDetailPage() {
             <MapMiniPreview city={listing.city_name} district={listing.district} />
             <div className="grid grid-cols-2 gap-2">
               <QRCodeShare url={`/elanlar/${listing.id}`} title={listing.title} />
-              <PriceDropAlert listingId={listing.id} currentPrice={Number(listing.price) || 0} />
+              
             </div>
             {listing.price > 0 && <AINegotiator price={Number(listing.price)} listingId={listing.id} />}
           </div>

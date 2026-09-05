@@ -6,6 +6,7 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import {
   ThrottlerGuard,
@@ -46,6 +47,7 @@ import { SavedSearchesModule } from './modules/saved-searches/saved-searches.mod
 import { ReportsModule } from './modules/reports/reports.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
 import { clientIp, isInternalSsrRequest, type ProxyAwareRequest } from './common/client-ip';
 
 /**
@@ -291,6 +293,10 @@ class RedisThrottlerStorage implements ThrottlerStorage, OnApplicationShutdown {
         },
       }),
     }),
+    // Periodik bildiriş tetikləyiciləri üçün (alerts modulu). Redis TƏLƏB ETMİR —
+    // canlıda Redis qopuq olduğu üçün BullMQ əvəzinə in-process cron seçilib.
+    // Render pulsuz planında tək instans işlədiyi üçün cron təkrarlanma riski yoxdur.
+    ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
     QueueModule,
@@ -314,6 +320,8 @@ class RedisThrottlerStorage implements ThrottlerStorage, OnApplicationShutdown {
     SavedSearchesModule,
     ReportsModule,
     AdminModule, // /api/v1/admin/* — hamısı @Roles('admin','super_admin') ilə qorunur
+    // Bildiriş tetikləyiciləri (cron) — bax modules/alerts/alerts.module.ts
+    AlertsModule,
     BillingModule, // paketlər/abunələr/limit mühərriki — bayraqlar bağlı olduğu üçün passiv dayanır
   ],
   providers: [

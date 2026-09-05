@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ProfileLayout from '@/components/ProfileLayout';
 import { api, timeAgo } from '@/lib/api';
-import { Bell, Check, MessageCircle, Star, AlertTriangle } from 'lucide-react';
+import { Bell, Check, MessageCircle, Star, AlertTriangle, Clock, PackageX } from 'lucide-react';
 
 type Notif = {
   id: string;
@@ -21,6 +21,10 @@ const ICON: Record<string, { icon: typeof Bell; color: string }> = {
   system: { icon: Star, color: 'text-amber-500' },
   moderation: { icon: AlertTriangle, color: 'text-red-500' },
   price_drop: { icon: AlertTriangle, color: 'text-emerald-500' },
+  // Elanın müddəti bitmək üzrədir — sahibinə xatırlatma (backend: alerts/expiry.service.ts).
+  listing_expiring: { icon: Clock, color: 'text-amber-600' },
+  // Sevimlilərdəki elanın statusu dəyişdi (satıldı/arxivləndi).
+  listing_status: { icon: PackageX, color: 'text-ink-500' },
 };
 
 export default function NotificationsPage() {

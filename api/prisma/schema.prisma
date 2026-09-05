@@ -539,6 +539,10 @@ model Favorite {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@id([userId, listingId])
+  // Tərs axtarış üçün: «bu elanı kim sevimliyə salıb?». Kompozit birincil açar
+  // yalnız userId ilə başlayan sorğulara kömək edir, ona görə elan üzrə axtarış
+  // seq scan olurdu. Status dəyişikliyi bildirişi məhz bu istiqamətdə sorğu atır.
+  @@index([listingId])
   @@map("favorites")
 }
 
@@ -628,6 +632,11 @@ enum NotificationType {
   moderation
   erp_sync_error
   system
+  // Elanın müddəti bitmək üzrədir — sahibinə xatırlatma (alerts/expiry.service.ts).
+  listing_expiring
+  // Sevimlilərə salınmış elanın statusu dəyişdi (satıldı/arxivləndi) —
+  // maraqlanan istifadəçilərə xəbər (listings.service.ts setStatus çəngəli).
+  listing_status
 }
 
 model Notification {

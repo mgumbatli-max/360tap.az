@@ -52,9 +52,10 @@ export default function SaveSearchButton({ filters }: { filters: Record<string, 
         method: 'POST',
         body: JSON.stringify({ name: name.trim(), query, notify: true }),
       });
-      // Bildiriş mexanizmi hələ qurulmayıb (nə cron, nə matcher) — ona görə
-      // «xəbər tutacaqsınız» vədi verilmir; yerinə real olan deyilir.
-      toast.success('Axtarış saxlanıldı — profilinizdən izləyə bilərsiniz.');
+      // Bildiriş mexanizmi ARTIQ QURULUB (backend: modules/alerts/saved-search.service.ts —
+      // hər 15 dəqiqədən bir uyğun yeni elanları yoxlayır), ona görə vəd geri qaytarıldı.
+      // Bildirişi söndürmək «Saxlanmış axtarışlar» səhifəsindəki zəng düyməsi ilə mümkündür.
+      toast.success('Axtarış saxlanıldı — uyğun yeni elan çıxanda bildiriş alacaqsınız.');
       setSaved(true);
       setOpen(false);
       setName('');

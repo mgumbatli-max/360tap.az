@@ -17,6 +17,7 @@ import type { QueryListingsDto } from './dto/query-listings.dto';
 import { uniqueSlug } from './utils/slug.util';
 import { SearchService } from '../../search/search.service';
 import { ListingLimitService } from '../billing/listing-limit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const LISTING_TTL_DAYS = 30;
 
@@ -246,6 +247,7 @@ export class ListingsService {
     private readonly categories: CategoriesService,
     private readonly search: SearchService,
     private readonly listingLimits: ListingLimitService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -500,7 +502,62 @@ export class ListingsService {
       include: { images: { orderBy: { sortOrder: 'asc' } }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
     });
     void this.search.indexListing(updated.id); // status dəyişdi → index yenilə/sil
+
+    // Elan `active`-dən çıxdı → onu sevimlilərə salanlara xəbər ver.
+    // NİYƏ BURADA: köhnə status (`listing.status`) bu metodda ONSUZ DA oxunub,
+    // yəni əlavə sorğu yoxdur və dəyişiklik məhz burada bilinir.
+    // NİYƏ `void`: bildiriş göndərilməsi statusun dəyişməsini GECİKDİRMƏMƏLİDİR
+    // və uğursuzluğu onu poza bilməz — `notifyFavoritesOfStatusChange` özü heç vaxt
+    // throw etmir.
+    if (listing.status === 'active' && status !== 'active') {
+      await this.notifyFavoritesOfStatusChange(id, ownerId, updated.title, status);
+    }
+
     return toListingResponse(updated);
+  }
+
+  /**
+   * Sevimlilərə salınmış elanın statusu dəyişdi — maraqlananlara bildiriş.
+   *
+   * NİYƏ YALNIZ `active` → başqa status: istifadəçi üçün dəyərli xəbər elanın
+   * ƏLÇATMAZ olmasıdır (satıldı/arxivləndi). Əks istiqamət (yenidən aktivləşmə)
+   * ilk baxışdan faydalı görünsə də, satıcının hər aktivləşdirməsi kütləvi
+   * bildirişə çevrilərdi — bu, spam olardı.
+   *
+   * NİYƏ SAHİB İSTİSNA OLUNUR: elanı arxivləyən şəxsin özünə «elan arxivləndi»
+   * bildirişi göndərmək mənasızdır.
+   *
+   * HEÇ VAXT THROW ETMİR: status dəyişikliyi baş verib, bildiriş isə ikinci
+   * dərəcəlidir. `favorites` cədvəlinə `@@index([listingId])` əlavə olunub —
+   * əks halda bu tərs axtarış seq scan olardı.
+   */
+  private async notifyFavoritesOfStatusChange(
+    listingId: string,
+    ownerId: string,
+    title: string,
+    status: ListingStatus,
+  ): Promise<void> {
+    try {
+      const rows = await this.prisma.favorite.findMany({
+        where: { listingId },
+        select: { userId: true },
+        take: 500,
+      });
+
+      const label = status === 'sold' ? 'satıldı' : 'artıq aktiv deyil';
+      for (const row of rows) {
+        if (row.userId === ownerId) continue;
+        await this.notifications.create(
+          row.userId,
+          'listing_status',
+          `Sevimlilərinizdəki «${title}» ${label}`,
+          'Oxşar elanlara baxmaq üçün toxunun.',
+          { listingId, status },
+        );
+      }
+    } catch {
+      // Bildiriş ikinci dərəcəlidir — status dəyişikliyi onsuz da yazılıb.
+    }
   }
 
   // Elanı redaktə et (sahiblik yoxlaması ilə) — mətn/qiymət/kateqoriya/atribut

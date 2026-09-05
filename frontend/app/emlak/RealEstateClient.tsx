@@ -11,7 +11,14 @@ import PriceHeatmap from '@/components/PriceHeatmap';
 import NeighborhoodScore from '@/components/NeighborhoodScore';
 import MortgagePreapproval from '@/components/MortgagePreapproval';
 import PropertyCompare from '@/components/PropertyCompare';
-import SavedMatches from '@/components/SavedMatches';
+// SAXTA KOMPONENTLƏR SÖNDÜRÜLDÜ (bildiriş işi, 2026-09-06).
+// Aşağıdakı komponentlər istifadəçiyə REAL VƏD verirdi, amma heç nə etmirdi:
+// serverə bir sorğu belə atmır, yalnız `localStorage`-a yazır və ya sadəcə toast
+// göstərirdilər. Yəni istifadəçi xəbərdarlıq qurub brauzerini bağlayır və heç vaxt
+// heç nə almırdı — bu, işləməyən düymədən daha pisdir, çünki gözlənti yaradır.
+// Fayllar SİLİNMƏDİ: real endpoint hazır olanda import və render bir sətirlə qaytarılır.
+// SavedMatches: mövcud olmayan `/realestate/match-saved-searches` endpointinə sorğu atırdı (404).
+// import SavedMatches from '@/components/SavedMatches';
 import { api } from '@/lib/api';
 import { Home, LayoutGrid, List, Map, TrendingDown, Sparkles, Calculator } from 'lucide-react';
 import { azNumber } from '@/lib/format';
@@ -148,7 +155,7 @@ export default function RealEstateClient() {
         </div>
       )}
 
-      <SavedMatches />
+      
 
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">

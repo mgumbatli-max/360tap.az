@@ -1,10 +1,19 @@
 'use client';
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import ProfileLayout from '@/components/ProfileLayout';
 import { Bell, Globe, Eye, Moon, Sun, Monitor, Keyboard, Sliders, LayoutGrid, Rows3 } from 'lucide-react';
-import PushSubscribe from '@/components/PushSubscribe';
-import TelegramBotConnect from '@/components/TelegramBotConnect';
-import EmailDigest from '@/components/EmailDigest';
+// SAXTA KOMPONENTLƏR SÖNDÜRÜLDÜ (bildiriş işi, 2026-09-06).
+// Aşağıdakı komponentlər istifadəçiyə REAL VƏD verirdi, amma heç nə etmirdi:
+// serverə bir sorğu belə atmır, yalnız `localStorage`-a yazır və ya sadəcə toast
+// göstərirdilər. Yəni istifadəçi xəbərdarlıq qurub brauzerini bağlayır və heç vaxt
+// heç nə almırdı — bu, işləməyən düymədən daha pisdir, çünki gözlənti yaradır.
+// Fayllar SİLİNMƏDİ: real endpoint hazır olanda import və render bir sətirlə qaytarılır.
+// PushSubscribe: abunəni serverə göndərmirdi. TelegramBotConnect: yalnız useState.
+// EmailDigest: yalnız uğur toast-u — abunə heç yerdə saxlanılmırdı.
+// import PushSubscribe from '@/components/PushSubscribe';
+// import TelegramBotConnect from '@/components/TelegramBotConnect';
+// import EmailDigest from '@/components/EmailDigest';
 import AutoReplyBot from '@/components/AutoReplyBot';
 import SellerVerification from '@/components/SellerVerification';
 
@@ -82,21 +91,35 @@ export default function SettingsPage() {
           </Row>
         </Section>
 
-        {/* Bildirişlər və məxfilik — server tərəfli tənzimləmə hələ mövcud deyil.
-            İşləməyən açarları göstərmək əvəzinə vəziyyət açıq yazılır. */}
+        {/* Bildirişlər — saytdaxili bildirişlər ARTIQ İŞLƏYİR (2026-09-06):
+            saxlanmış axtarışa uyğun yeni elan, elanın müddətinin bitməsi və
+            sevimlilərdəki elanın statusunun dəyişməsi. E-poçt/SMS kanalları hələ yoxdur,
+            ona görə onların açarları da göstərilmir — işləməyən açar yalan vəddir. */}
         <Section title="Bildirişlər və məxfilik" icon={Bell}>
-          <p className="text-sm text-ink-500">
-            E-poçt/SMS bildirişləri, saxlanılmış axtarış xəbərdarlıqları və telefon
-            görünürlüyü tənzimləmələri hazırlanır. Hazır olan kimi burada aktivləşəcək.
+          <p className="text-sm text-ink-600 dark:text-ink-300">
+            Saytdaxili bildirişlər aktivdir: saxladığınız axtarışa uyğun yeni elan çıxanda,
+            elanınızın müddəti bitməyə yaxınlaşanda və sevimlilərinizdəki elan satılanda
+            xəbər alırsınız.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href="/profil/bildirisler" className="btn-secondary text-sm">
+              Bildirişlərə bax
+            </Link>
+            <Link href="/profil/saxlanmis" className="btn-secondary text-sm">
+              Saxlanmış axtarışları idarə et
+            </Link>
+          </div>
+          <p className="text-xs text-ink-400 mt-3">
+            E-poçt və SMS ilə bildiriş, həmçinin telefon görünürlüyü tənzimləməsi hazırlanır.
           </p>
         </Section>
 
         {/* İnteqrasiyalar — push, telegram, email, autoreply, verification */}
         <Section title="İnteqrasiyalar və avtomatlaşdırma" icon={Bell}>
           <div className="space-y-3">
-            <PushSubscribe />
-            <TelegramBotConnect />
-            <EmailDigest />
+            
+            
+            
             <AutoReplyBot />
             <SellerVerification />
           </div>

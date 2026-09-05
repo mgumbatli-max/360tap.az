@@ -10,7 +10,14 @@ import ListingCard, { type Listing } from '@/components/ListingCard';
 import MessageSeller, { ListingActions } from '@/components/MessageSeller';
 import SellerReviews from '@/components/SellerReviews';
 import ReportButton from '@/components/ReportButton';
-import FollowButton from '@/components/FollowButton';
+// SAXTA KOMPONENTLƏR SÖNDÜRÜLDÜ (bildiriş işi, 2026-09-06).
+// Aşağıdakı komponentlər istifadəçiyə REAL VƏD verirdi, amma heç nə etmirdi:
+// serverə bir sorğu belə atmır, yalnız `localStorage`-a yazır və ya sadəcə toast
+// göstərirdilər. Yəni istifadəçi xəbərdarlıq qurub brauzerini bağlayır və heç vaxt
+// heç nə almırdı — bu, işləməyən düymədən daha pisdir, çünki gözlənti yaradır.
+// Fayllar SİLİNMƏDİ: real endpoint hazır olanda import və render bir sətirlə qaytarılır.
+// FollowButton: «yeni elanlardan xəbər tutacaqsınız» deyirdi, yalnız localStorage-a yazırdı.
+// import FollowButton from '@/components/FollowButton';
 import TrackRecentView from './TrackRecentView';
 import { serverGet } from '@/lib/server-fetch';
 import { SITE, buildMetadata, jsonLdScript } from '@/lib/seo';
@@ -561,7 +568,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                     Rəylərə bax
                   </a>
                 </div>
-                <FollowButton userId={l.ownerId} name={sellerName} />
+                
               </div>
             </section>
 
