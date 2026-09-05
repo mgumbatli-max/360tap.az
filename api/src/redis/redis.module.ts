@@ -14,6 +14,28 @@ export interface RedisHealth {
   everConnected: boolean;
   /** Hansı IP ailəsi ilə qoşulmağa çalışırıq (0 = hər ikisi). */
   family: number;
+  /**
+   * Hədəf ünvanın FORMATI — parol və istifadəçi adı OLMADAN.
+   * Canlıda `ECONNREFUSED` alındıqda ilk sual «hara qoşulmağa çalışırıq?» olur:
+   * sxem `rediss://` (TLS) yoxsa `redis://`, port standartdırmı, host adı
+   * gözlənilən servisdirmi. Bunlar olmadan uzaqdan diaqnoz qoymaq mümkün deyil.
+   */
+  target: { scheme: string; host: string; port: string; tls: boolean } | null;
+}
+
+/** URL-i kredensialsız hissələrə ayırır; yararsız URL-də `null` qaytarır. */
+function describeTarget(raw: string): RedisHealth['target'] {
+  try {
+    const u = new URL(raw);
+    return {
+      scheme: u.protocol.replace(':', ''),
+      host: u.hostname,
+      port: u.port || '(default 6379)',
+      tls: u.protocol === 'rediss:',
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -43,6 +65,7 @@ function scrub(message: string): string {
         lastError: null,
         everConnected: false,
         family: resolveRedisFamily(),
+        target: describeTarget(process.env.REDIS_URL ?? 'redis://localhost:6379'),
       }),
     },
     {

@@ -34,6 +34,8 @@ interface ReadinessResponse {
       error: string | null;
       /** Hansı IP ailəsi ilə qoşulmağa çalışırıq (0 = hər ikisi). */
       family: number;
+      /** Hədəf ünvanın formatı (kredensialsız) — diaqnostika üçün. */
+      target: { scheme: string; host: string; port: string; tls: boolean } | null;
     };
   };
 }
@@ -98,6 +100,7 @@ export class HealthController {
           // əlçatan olmadığı üçün nasazlığı tapmaq mümkün deyildi.
           error: this.redisHealth?.lastError ?? null,
           family: this.redisHealth?.family ?? -1,
+          target: this.redisHealth?.target ?? null,
         },
       },
     };
