@@ -46,6 +46,14 @@ services:
           type: keyvalue
           name: tap360-redis
           property: connectionString
+      # Redis DNS həllində IP ailəsi. Render-in Key Value servisi daxili şəbəkədə
+      # YALNIZ IPv6 üzərindən verilir, `ioredis` isə defolt olaraq yalnız IPv4-ə
+      # baxır — nəticədə host həll olunmur və klient sonsuz `reconnecting`
+      # vəziyyətində qalırdı (canlıda ölçüldü, /health/ready aylarla belə idi).
+      # Kod defoltu onsuz da 0-dır; dəyər burada AÇIQ yazılır ki, davranış
+      # blueprint-dən görünsün və təsadüfən dəyişdirilməsin.
+      - key: REDIS_FAMILY
+        value: "0"
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_ACCESS_TTL

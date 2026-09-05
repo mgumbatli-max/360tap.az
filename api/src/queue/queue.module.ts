@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
+import { resolveRedisFamily } from '../redis/redis-family';
 
 @Module({
   imports: [
@@ -15,9 +16,15 @@ import { ConfigService } from '@nestjs/config';
         // Rədd edilən alternativ — host/port/username/password/tls sahələrini əl ilə
         // doldurmaq: eyni nəticəni verir, amma URL sintaksisinin (db indeksi, query
         // parametrləri) idarəsini bizim üzərimizə atır.
+        //
+        // `family`: BullMQ də eyni ioredis klientini qurur, ona görə Render-in
+        // IPv6-only Key Value şəbəkəsi problemi burada da keçərlidir — `RedisModule`
+        // düzəldilib, bu isə düzəldilməsəydi növbələr səssizcə qoşula bilməzdi.
+        // Mənbə tək olsun deyə dəyər eyni funksiyadan gəlir.
         return {
           connection: {
             url: config.get<string>('redisUrl') ?? 'redis://localhost:6379',
+            family: resolveRedisFamily(),
           },
         };
       },

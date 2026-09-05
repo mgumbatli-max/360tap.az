@@ -9,7 +9,7 @@ import {
   type ProxyAwareRequest,
 } from '../common/client-ip';
 import { PrismaService } from '../prisma/prisma.service';
-import { REDIS } from '../redis/redis.module';
+import { REDIS, REDIS_HEALTH, type RedisHealth } from '../redis/redis.module';
 import { SearchService } from '../search/search.service';
 
 interface LivenessResponse {
@@ -26,7 +26,15 @@ interface ReadinessResponse {
   dependencies: {
     database: { required: true; ok: boolean; status: string; error: string | null };
     search: { required: false; ok: boolean; status: string; error: string | null };
-    redis: { required: false; ok: boolean; status: string };
+    redis: {
+      required: false;
+      ok: boolean;
+      status: string;
+      /** Sonuncu bağlantı xətası (kredensial təmizlənmiş) — səbəbi görünsün. */
+      error: string | null;
+      /** Hansı IP ailəsi ilə qoşulmağa çalışırıq (0 = hər ikisi). */
+      family: number;
+    };
   };
 }
 
@@ -36,6 +44,7 @@ export class HealthController {
     private readonly prisma: PrismaService,
     private readonly search: SearchService,
     @Optional() @Inject(REDIS) private readonly redis?: Redis,
+    @Optional() @Inject(REDIS_HEALTH) private readonly redisHealth?: RedisHealth,
   ) {}
 
   /**
@@ -80,7 +89,16 @@ export class HealthController {
           status: s.status,
           error: s.lastError,
         },
-        redis: { required: false, ok: redisStatus === 'ready', status: redisStatus },
+        redis: {
+          required: false,
+          ok: redisStatus === 'ready',
+          status: redisStatus,
+          // NİYƏ SƏBƏB DƏ GÖSTƏRİLİR: canlıda Redis aylarla `reconnecting`
+          // vəziyyətində qaldı və səbəbi heç yerdə görünmürdü — Render-də loq
+          // əlçatan olmadığı üçün nasazlığı tapmaq mümkün deyildi.
+          error: this.redisHealth?.lastError ?? null,
+          family: this.redisHealth?.family ?? -1,
+        },
       },
     };
 

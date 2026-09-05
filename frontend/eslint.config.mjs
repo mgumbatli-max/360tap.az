@@ -29,6 +29,23 @@ const eslintConfig = [
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
+  {
+    /**
+     * PLAYWRIGHT FIXTURE-LARI REACT DEYİL.
+     *
+     * `e2e/fixtures.ts`-də Playwright-ın standart naxışı `async ({ page }, use) => {
+     * ... await use(value) }` şəklindədir. ESLint-in `react-hooks` qaydası buradakı
+     * `use(...)` çağırışını React-in `use` HOOK-u sanır və «hook komponent olmayan
+     * funksiyada çağırılıb» deyə XƏTA verir. Bu, yalançı pozitivdir: fayl brauzerdə
+     * deyil, Node-da, test qoşqusu kimi işləyir və React-ə heç bir aidiyyəti yoxdur.
+     *
+     * Qayda YALNIZ `e2e/` üçün söndürülür — tətbiq kodunda o, real dəyər verir.
+     */
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 ];
 
 export default eslintConfig;
