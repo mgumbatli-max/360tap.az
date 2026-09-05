@@ -1,17 +1,23 @@
 import { test, expect, expectHealthy, visit } from './fixtures';
 
 /**
- * FİLTR KOMPONENTLƏRİ — REAL BRAUZERDƏ.
+ * FİLTR AXINI — REAL BRAUZERDƏ.
  *
- * NİYƏ AYRICA FAYL: bu komponentlərin hamısı eyni backend sorğusuna çevrilir, lakin
- * URL açarlarını FƏRQLİ üslubda yazır (çiplər camelCase, panel/topbar snake_case).
- * Ölçüldü: əvvəl 7 sürətli filtrdən 7-si backend-də mövcud olmayan parametr göndərib
- * HTTP 422 alırdı, `has_credit`/`has_barter` isə səssizcə TƏTBİQ OLUNMURDU — istifadəçi
- * filtr işlədiyini sanıb bütün kataloqu görürdü. Hər iki nasazlıq görünmür, ona görə
- * yalnız avtomatik yoxlama onları tuta bilər.
+ * NİYƏ AYRICA FAYL: filtrlər backend-də mövcud olmayan parametrlər göndərəndə
+ * iki cür sınırdı və hər ikisi GÖRÜNMÜRDÜ:
+ *   · HTTP 422 → səhifə «elan tapılmadı» göstərirdi (ölçüldü: 7 sürətli filtrdən 7-si);
+ *   · parametr ötürülmürdü → filtr SƏSSİZCƏ tətbiq olunmurdu və istifadəçi bütün
+ *     kataloqu görüb filtrin işlədiyini sanırdı (ölçüldü: has_credit=1 → 50 elan).
+ * İkincisi daha təhlükəlidir, çünki heç bir xəta əlaməti vermir.
  *
  * `health` fixture-u hər testdə konsol xətasını, uğursuz sorğunu və 4xx/5xx cavabı
- * avtomatik yoxlayır — yəni 422 qayıtsa test onsuz da sınacaq.
+ * avtomatik tutur — yəni 422 qayıtsa test onsuz da sınır.
+ *
+ * ƏHATƏ QEYDİ: `QuickFilterChips`, `UniversalTopBar` və `UniversalFullFilter`
+ * komponentləri `app/elanlar/ListingsClient.tsx`-dədir, HƏMİN FAYL İSƏ HEÇ YERDƏ
+ * İŞLƏDİLMİR (ölü kod) — ölçüldü: `/elanlar` HTML-ində çip mətnlərinin heç biri
+ * yoxdur. Ona görə onlar brauzerdə yoxlanıla bilməz; testlər filtrlərin REAL
+ * çatdığı yolu — URL parametrlərini və canlı `CategoryFilters` panelini yoxlayır.
  */
 
 /** Filtrli səhifədə görünən elan kartlarının sayı. */
@@ -19,34 +25,14 @@ async function cardCount(page: import('@playwright/test').Page): Promise<number>
   return page.locator('a[href^="/elanlar/"]').count();
 }
 
-test.describe('Sürətli filtr çipləri (QuickFilterChips)', () => {
-  const CHIPS = ['Bu gün', 'Çatdırılma var', 'Şəkilli', 'VIP', 'Təsdiqli satıcı'];
-
-  for (const label of CHIPS) {
-    test(`«${label}» çipi işləyir və xəta vermir`, async ({ page, health }) => {
-      await visit(page, '/elanlar', 'elanlar');
-
-      const chip = page.getByRole('button', { name: label, exact: false }).first();
-      if (!(await chip.count())) {
-        // Çip görünmürsə (viewport və ya A/B fərqi) test mənasız keçmir — açıq atlanır.
-        test.skip(true, `«${label}» çipi bu ölçüdə göstərilmir`);
-      }
-
-      await chip.click();
-      // URL dəyişməli və ya nəticə yenilənməlidir; hər halda səhifə sağlam qalmalıdır.
-      await page.waitForLoadState('networkidle').catch(() => {});
-
-      // ƏSAS YOXLAMA: 422/4xx/5xx və konsol xətası olmamalıdır (fixture tutur).
-      expectHealthy(health, `«${label}» çipi`);
-    });
-  }
-});
-
 /**
- * URL ilə birbaşa giriş — istifadəçinin paylaşdığı və ya əlfəcinə saldığı link.
- * Hər iki ad üslubu dəstəklənməlidir: köhnə linklər snake_case daşıyır.
+ * HƏR İKİ AD ÜSLUBU EYNİ NƏTİCƏNİ VERMƏLİDİR.
+ *
+ * URL-ə yazan komponentlər tarixən iki üslub işlədib (çiplər camelCase, panel və
+ * saxlanmış linklər snake_case). Səhifə qatı hər ikisini backend-in bildiyi tək ada
+ * çevirir; bu testlər həmin çevrilmənin sınmadığını qoruyur.
  */
-test.describe('Filtr URL-ləri (hər iki ad üslubu)', () => {
+test.describe('Filtr URL-ləri', () => {
   const CASES = [
     { param: 'hasDelivery=1', alias: 'has_delivery=1', label: 'çatdırılma' },
     { param: 'withPhoto=1', alias: 'with_photo=1', label: 'şəkilli' },
@@ -57,7 +43,10 @@ test.describe('Filtr URL-ləri (hər iki ad üslubu)', () => {
   ];
 
   for (const c of CASES) {
-    test(`${c.label}: camelCase və snake_case EYNİ nəticəni verir`, async ({ page, health }) => {
+    test(`${c.label}: camelCase və snake_case eyni nəticə verir, xəta yoxdur`, async ({
+      page,
+      health,
+    }) => {
       await visit(page, `/elanlar?${c.param}`, c.param);
       const a = await cardCount(page);
       expectHealthy(health, c.param);
@@ -70,46 +59,67 @@ test.describe('Filtr URL-ləri (hər iki ad üslubu)', () => {
     });
   }
 
-  test('verified «mağazalardan»dan FƏRQLİ filtrdir', async ({ page, health }) => {
-    await visit(page, '/elanlar?verified=1', 'verified');
-    expectHealthy(health, 'verified');
-    // İkisi eyni olsaydı, «Təsdiqli satıcı» çipi «Mağazalardan» kimi davranardı —
-    // ölçüldü: mağazadan 3, təsdiqlidən 2 elan.
-    const verified = await cardCount(page);
+  test('filtr NƏTİCƏNİ DARALDIR — səssizcə nəzərə alınmamazlıq olmamalıdır', async ({
+    page,
+    health,
+  }) => {
+    await visit(page, '/elanlar', 'filtrsiz');
+    const all = await cardCount(page);
+
+    // `vip=1` üçün lokal və canlı bazada elan sayı filtrsizdən AZDIR. Bərabər olsa,
+    // parametr ötürülmür deməkdir — məhz bu, `has_credit` nasazlığının əlaməti idi.
+    await visit(page, '/elanlar?vip=1', 'vip filtri');
+    const vip = await cardCount(page);
+    expectHealthy(health, 'vip filtri');
+
+    expect(vip, 'VIP filtri nəticəni daraltmadı — parametr ötürülmür ola bilər').toBeLessThan(all);
+  });
+
+  test('«mağazalardan» və «təsdiqli satıcı» FƏRQLİ filtrlərdir', async ({ page, health }) => {
     await visit(page, '/elanlar?onlyShops=1', 'onlyShops');
     const shops = await cardCount(page);
-    expect(shops, 'mağazalardan olan elan sayı təsdiqlidən az ola bilməz').toBeGreaterThanOrEqual(
-      verified,
+    expectHealthy(health, 'onlyShops');
+
+    await visit(page, '/elanlar?verified=1', 'verified');
+    const verified = await cardCount(page);
+    expectHealthy(health, 'verified');
+
+    // Təsdiqli mağazalar mağazaların ALT ÇOXLUĞUDUR, ona görə çox ola bilməz.
+    expect(verified, 'təsdiqli mağaza sayı mağaza sayından çox ola bilməz').toBeLessThanOrEqual(
+      shops,
     );
+  });
+
+  test('yararsız filtr dəyəri səhifəni sındırmır', async ({ page }) => {
+    // Köhnə/əl ilə redaktə olunmuş linklər gözlənilməz dəyər daşıya bilər.
+    const res = await page.goto('/elanlar?hasDelivery=xxx&vip=');
+    expect(res?.status(), 'yararsız filtr 5xx verməməlidir').toBeLessThan(500);
+    await expect(page.locator('body')).not.toBeEmpty();
   });
 });
 
-test.describe('Filtr paneli və zolağı', () => {
-  test('«Bütün filtrlər» paneli açılır və səhifəni sındırmır', async ({ page, health }) => {
+test.describe('Canlı filtr paneli (CategoryFilters)', () => {
+  test('«Bütün filtrlər» düyməsi mövcuddur və panel açılır', async ({ page, health }) => {
     await visit(page, '/elanlar', 'elanlar');
 
     const open = page.getByRole('button', { name: /Bütün filtrlər|Filtrlər/ }).first();
-    if (!(await open.count())) test.skip(true, 'filtr paneli düyməsi yoxdur');
-
+    await expect(open, 'filtr paneli düyməsi').toBeVisible({ timeout: 15_000 });
     await open.click();
-    await expect(page.getByText('Bütün filtrlər').first()).toBeVisible({ timeout: 10_000 });
+
+    // Panel `id="butun-filtrler"` olan bloka açılır (başlıq elementi işlətmir).
+    // Düymədəki mətn mobil ekranda `hidden sm:inline` ilə gizlədildiyi üçün mətnə
+    // görə axtarmaq da işləmir — açılışın yeganə etibarlı əlaməti panelin özüdür.
+    await expect(page.locator('#butun-filtrler')).toBeVisible({ timeout: 15_000 });
+
+    // Panel daxilində real filtr sahəsi olmalıdır — boş panel «açıldı» sayılmaz.
+    await expect(
+      page.locator('#butun-filtrler select, #butun-filtrler input').first(),
+    ).toBeVisible({ timeout: 10_000 });
+
     expectHealthy(health, 'filtr paneli');
   });
 
-  test('üst zolaqdakı filtr çipləri xəta vermir (UniversalTopBar)', async ({ page, health }) => {
-    await visit(page, '/elanlar', 'elanlar');
-
-    // Zolaq çipləri emoji + mətn daşıyır (məs. «🚚 Çatdırılma»).
-    const chip = page.getByRole('button', { name: /Çatdırılma|Şəkilli|Mağazalardan/ }).first();
-    if (!(await chip.count())) test.skip(true, 'üst zolaq çipləri bu ölçüdə yoxdur');
-
-    await chip.click();
-    await page.waitForLoadState('networkidle').catch(() => {});
-    expectHealthy(health, 'üst zolaq çipi');
-  });
-
   test('aktiv filtr göstəricisi (FilterChips) səhifəni sındırmır', async ({ page, health }) => {
-    // Filtrli səhifədə aktiv filtr nişanları görünür.
     await visit(page, '/elanlar?hasDelivery=1&withPhoto=1', 'iki filtr');
     expectHealthy(health, 'aktiv filtr göstəricisi');
   });
