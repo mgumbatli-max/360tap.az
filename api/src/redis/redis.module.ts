@@ -21,6 +21,17 @@ export interface RedisHealth {
    * gözlənilən servisdirmi. Bunlar olmadan uzaqdan diaqnoz qoymaq mümkün deyil.
    */
   target: { scheme: string; host: string; port: string; tls: boolean } | null;
+  /**
+   * IOREDIS-İN ÖZ GÖRDÜYÜ konfiqurasiya (`client.options`).
+   *
+   * NİYƏ BU DA LAZIMDIR: URL-in bizim tərəfimizdən oxunuşu ilə ioredis-in oxunuşu
+   * FƏRQLƏNƏ bilər — canlıda məhz belə oldu: bizim `new URL()` sındı (target=null),
+   * ioredis isə real IP-yə qoşulmağa çalışırdı. Bu sahə həmin fərqi görünən edir və
+   * «hansı host/port/TLS ilə cəhd edilir?» sualına birbaşa cavab verir.
+   */
+  effective: { host: string; port: number; tls: boolean; family: number | null } | null;
+  /** Xam dəyərin metadatası — dəyərin ÖZÜ deyil (uzunluq və sxem prefiksi). */
+  raw: { length: number; startsWith: string } | null;
 }
 
 /** URL-i kredensialsız hissələrə ayırır; yararsız URL-də `null` qaytarır. */
@@ -66,6 +77,14 @@ function scrub(message: string): string {
         everConnected: false,
         family: resolveRedisFamily(),
         target: describeTarget(process.env.REDIS_URL ?? 'redis://localhost:6379'),
+        effective: null,
+        raw: (() => {
+          const v = process.env.REDIS_URL;
+          if (typeof v !== 'string') return null;
+          // Dəyərin ÖZÜ heç vaxt qaytarılmır — yalnız uzunluq və sxem prefiksi.
+          const m = /^[a-z][a-z0-9+.-]*:\/\//i.exec(v);
+          return { length: v.length, startsWith: m ? m[0] : '(sxem yoxdur)' };
+        })(),
       }),
     },
     {
@@ -104,6 +123,17 @@ function scrub(message: string): string {
           health.everConnected = true;
           logger.log(`Redis qoşuldu (family=${family})`);
         });
+
+        // ioredis konfiqurasiyanı özü parse edir; onun NƏTİCƏSİNİ oxuyuruq.
+        const opts = client.options as {
+          host?: string; port?: number; tls?: unknown; family?: number;
+        };
+        health.effective = {
+          host: opts.host ?? '(?)',
+          port: opts.port ?? -1,
+          tls: Boolean(opts.tls),
+          family: typeof opts.family === 'number' ? opts.family : null,
+        };
 
         return client;
       },

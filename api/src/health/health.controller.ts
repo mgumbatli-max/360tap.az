@@ -36,6 +36,8 @@ interface ReadinessResponse {
       family: number;
       /** Hədəf ünvanın formatı (kredensialsız) — diaqnostika üçün. */
       target: { scheme: string; host: string; port: string; tls: boolean } | null;
+      effective: { host: string; port: number; tls: boolean; family: number | null } | null;
+      raw: { length: number; startsWith: string } | null;
     };
   };
 }
@@ -101,6 +103,8 @@ export class HealthController {
           error: this.redisHealth?.lastError ?? null,
           family: this.redisHealth?.family ?? -1,
           target: this.redisHealth?.target ?? null,
+          effective: this.redisHealth?.effective ?? null,
+          raw: this.redisHealth?.raw ?? null,
         },
       },
     };
