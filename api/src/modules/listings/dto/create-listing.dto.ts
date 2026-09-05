@@ -18,11 +18,41 @@ import {
   Max,
   Min,
   ValidateNested,
+  registerDecorator,
+  type ValidationOptions,
 } from 'class-validator';
 import { Condition, PriceType } from '@prisma/client';
 
 const CURRENCY_RE = /^(AZN|USD|EUR|RUB)$/;
 const PHONE_RE = /^\+?\d{9,15}$/;
+
+/** Bir elanda göndərilə bilən atribut açarlarının yuxarı həddi. */
+export const MAX_ATTRIBUTE_KEYS = 40;
+
+/**
+ * Atribut açarlarının sayına hədd qoyur.
+ * Tanınmayan açarlar servisdə səssizcə atılır, amma atılmadan ƏVVƏL hər açar
+ * parse olunur və yaddaşda saxlanılır — minlərlə açarlı JSON ilə sorğu yolunu
+ * yükləmək mümkün olardı. Ən "zəngin" kateqoriyada cəmi 14 atribut var,
+ * ona görə 40 bol ehtiyatdır və real istifadəçini heç vaxt bloklamır.
+ */
+function MaxKeys(max: number, options?: ValidationOptions) {
+  return (object: object, propertyName: string): void => {
+    registerDecorator({
+      name: 'maxKeys',
+      target: object.constructor,
+      propertyName,
+      options,
+      validator: {
+        validate(value: unknown): boolean {
+          if (value === null || typeof value !== 'object' || Array.isArray(value)) return true;
+          return Object.keys(value).length <= max;
+        },
+        defaultMessage: () => `Ən çox ${max} atribut göndərmək olar`,
+      },
+    });
+  };
+}
 
 export class ListingImageDto {
   @IsUrl({ require_tld: false }, { message: 'URL formatı yanlışdır' })
@@ -70,6 +100,13 @@ export class CreateListingDto {
   @Max(99_999_999_999.99, { message: 'Qiymət çox yüksəkdir' })
   price?: number;
 
+  /** Köhnə (üstündən xətt çəkilən) qiymət — endirim göstərmək üçün. */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0, { message: 'Köhnə qiymət mənfi ola bilməz' })
+  @Max(99_999_999_999.99, { message: 'Köhnə qiymət çox yüksəkdir' })
+  oldPrice?: number;
+
   @IsOptional()
   @Matches(CURRENCY_RE, { message: 'Valyuta yalnız AZN/USD/EUR/RUB ola bilər' })
   currency?: string;
@@ -83,14 +120,24 @@ export class CreateListingDto {
   condition?: Condition;
 
   // ----- Dinamik atributlar (kateqoriyaya görə) -----
+  // Burada yalnız formanın "obyektdir və çox böyük deyil" yoxlaması gedir.
+  // Açar/dəyər uyğunluğu kateqoriyadan asılıdır, ona görə məzmun servisdə
+  // (category_attributes sətirlərinə görə) təmizlənir.
   @IsOptional()
-  @IsObject()
+  @IsObject({ message: 'Atributlar obyekt formatında olmalıdır' })
+  @MaxKeys(MAX_ATTRIBUTE_KEYS)
   attributes?: Record<string, unknown>;
 
   // ----- Bayraqlar -----
   @IsOptional() @IsBoolean() hasDelivery?: boolean;
   @IsOptional() @IsBoolean() hasCredit?: boolean;
   @IsOptional() @IsBoolean() hasBarter?: boolean;
+  // `hasWarranty` və `inStock` DTO-da YOX İDİ, halbuki Prisma modeli onları saxlayır
+  // və cavab DTO-su qaytarırdı. `forbidNonWhitelisted: true` olduğu üçün bu sahələri
+  // göndərən sorğu 422 alırdı — yəni satıcı zəmanət/stok məlumatını HEÇ VAXT təyin
+  // edə bilmirdi, elan səhifəsi isə onları «yox» kimi göstərirdi.
+  @IsOptional() @IsBoolean() hasWarranty?: boolean;
+  @IsOptional() @IsBoolean() inStock?: boolean;
 
   // ----- Əlaqə -----
   @IsOptional()

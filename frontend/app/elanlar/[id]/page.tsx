@@ -80,7 +80,9 @@ type Detail = {
   hasDelivery?: boolean;
   hasWarranty?: boolean;
   hasCredit?: boolean;
+  hasBarter?: boolean;
   inStock?: boolean;
+  stockQty?: number | null;
   source?: string;
   isVip?: boolean;
   isPremium?: boolean;
@@ -117,15 +119,52 @@ const CONDITION_LABEL: Record<string, string> = {
   for_parts: 'Ehtiyat hissə üçün',
 };
 
+// `priceType` bazada enum-dur, amma cavabda sətir kimi gəlir. `fixed` qəsdən
+// siyahıda yoxdur: sabit qiymət üçün ayrıca sətir məlumat vermir.
+const PRICE_TYPE_LABEL: Record<string, string> = {
+  negotiable: 'Razılaşma yolu ilə',
+  free: 'Pulsuz',
+  exchange: 'Dəyişdirmə (barter)',
+  contract: 'Müqavilə ilə',
+};
+
 // Backend `attributes` sahəsini sərbəst açar/dəyər kimi saxlayır; tanınan açarlar
 // azərbaycanca göstərilir, tanınmayanlar isə itirilmir — açar adı gözəlləşdirilir.
+// Adlar `category_attributes.label_az` ilə uzlaşdırılıb ki, forma ilə detal
+// səhifəsi eyni sahəni eyni cür adlandırsın.
 const ATTR_LABEL: Record<string, string> = {
-  brand: 'Marka', model: 'Model', year: 'Buraxılış ili', mileage: 'Yürüş',
-  fuel: 'Yanacaq növü', transmission: 'Sürətlər qutusu', color: 'Rəng',
-  engine: 'Mühərrik', power: 'Güc', body: 'Ban növü', drive: 'Ötürücü',
+  // universal
+  condition: 'Vəziyyət', type: 'Növ', brand: 'Marka', model: 'Model',
+  color: 'Rəng', size: 'Ölçü', material: 'Material', group: 'Qrup',
+  age: 'Yaş', gender: 'Cins', language: 'Dil', season: 'Mövsüm',
+  purpose: 'Təyinat', deal_type: 'Əməliyyat', barter: 'Barter', credit: 'Kredit',
+  // nəqliyyat
+  year: 'Buraxılış ili', mileage: 'Yürüş', fuel: 'Yanacaq növü',
+  transmission: 'Sürətlər qutusu', body: 'Ban növü', drive: 'Ötürücü',
+  engine: 'Mühərrik', engine_volume: 'Mühərrik həcmi', power: 'Güc',
+  part_type: 'Hissə növü', radius: 'Radius', number_type: 'Nömrə növü',
+  no_accident: 'Vuruğu yoxdur', not_painted: 'Rənglənməyib',
+  // əmlak
   rooms: 'Otaq sayı', area: 'Sahə', floor: 'Mərtəbə', floors: 'Mərtəbə sayı',
-  memory: 'Yaddaş', size: 'Ölçü', material: 'Material',
-  salary: 'Maaş', experience: 'Təcrübə', schedule: 'İş qrafiki', type: 'Növ',
+  total_floors: 'Binanın mərtəbə sayı', building_type: 'Bina növü',
+  property_type: 'Əmlak növü', object_type: 'Obyekt növü', repair: 'Təmir',
+  has_extract: 'Çıxarış', has_mortgage: 'İpoteka',
+  // elektronika — `storage` bazada da «Yaddaş» adlanır, amma `memory` ilə eyni
+  // ad iki sətirdən birinin (təkrar ad kimi) itməsinə səbəb olardı.
+  memory: 'Yaddaş', storage: 'Daxili yaddaş', ram: 'RAM',
+  screen: 'Ekran ölçüsü', platform: 'Platforma', operator: 'Operator',
+  // iş elanları
+  salary: 'Maaş', salary_min: 'Maaş (min)', salary_max: 'Maaş (maks)',
+  experience: 'Təcrübə', schedule: 'İş qrafiki',
+  // heyvanlar
+  pedigree: 'Pasportlu / şəcərəli', vaccinated: 'Peyvəndli',
+};
+
+// Vahid yalnız kateqoriyadan ASILI OLMAYAN açarlar üçün sabitdir. `area` bazada
+// həm `m²`, həm `sot` ilə gəlir (kateqoriyaya görə), `year` isə vahid tələb
+// etmir — onları buraya salmaq yanlış vahid göstərmək demək olardı.
+const ATTR_UNIT: Record<string, string> = {
+  mileage: 'km', engine_volume: 'L', salary_min: 'AZN', salary_max: 'AZN',
 };
 
 function attrLabel(key: string): string {
@@ -144,6 +183,15 @@ function attrValue(v: unknown): string | null {
     return joined || null;
   }
   return null; // iç-içə obyektlər cədvəldə oxunaqlı deyil — göstərilmir
+}
+
+// Vahid yalnız ƏDƏDƏ əlavə olunur: baza `year: "not-a-number"` kimi zibil də
+// saxlaya bilir və belə dəyərə vahid yapışdırmaq mənasız cümlə yaradardı.
+function attrText(key: string, raw: unknown): string | null {
+  const v = attrValue(raw);
+  if (v == null) return null;
+  const unit = ATTR_UNIT[key];
+  return unit && typeof raw === 'number' ? `${v} ${unit}` : v;
 }
 
 // `toLocaleDateString('az-AZ')` server ICU qurulumundan asılıdır; meta sətrindəki
@@ -207,6 +255,12 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     l.price != null ? `${Number(l.price).toLocaleString('az-AZ')} ${l.currency}` : 'Razılaşma yolu ilə';
   const oldPrice =
     l.oldPrice != null ? `${Number(l.oldPrice).toLocaleString('az-AZ')} ${l.currency}` : null;
+  // Endirim faizi yalnız köhnə qiymət REAL olaraq böyük olduqda hesablanır —
+  // əks halda «0% endirim» və ya mənfi faiz kimi saxta rəqəm çıxardı.
+  const discountPct =
+    l.oldPrice != null && l.price != null && Number(l.oldPrice) > Number(l.price) && Number(l.oldPrice) > 0
+      ? Math.round(((Number(l.oldPrice) - Number(l.price)) / Number(l.oldPrice)) * 100)
+      : null;
   const phone = l.contactPhone ?? undefined;
   const sellerName = l.contactName?.trim() || 'Satıcı';
   const location = l.address || [l.districtName, l.regionName].filter(Boolean).join(', ');
@@ -222,18 +276,50 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     { name: l.title },
   ];
 
-  // §7.1.4 «Xüsusiyyətlər» — mövcud sahələr + dinamik `attributes`.
+  // §7.1.4 «Xüsusiyyətlər» (Avito «Характеристики» modeli) — sabit sahələr +
+  // dinamik `attributes`.
+  //
+  // QAYDA: bu cədvəl əşyanın NƏYƏ MALİK OLDUĞUNU sadalayır. Əvvəl «Çatdırılma»
+  // sətri ŞƏRTSİZ yazılırdı və satıcıya heç verilməyən sual haqqında «Yox»
+  // hökmü çıxarırdı (istifadəçi məhz bundan şikayət etdi). İndi qlobal
+  // bayraqlar (`hasDelivery/hasWarranty/hasCredit/hasBarter/inStock`) yalnız
+  // `true` olduqda sətir yaradır.
   const specs: { k: string; v: string }[] = [];
-  if (l.categoryName) specs.push({ k: 'Kateqoriya', v: l.categoryName });
-  if (l.condition) specs.push({ k: 'Vəziyyət', v: CONDITION_LABEL[l.condition] ?? l.condition });
+  const seenSpecs = new Set<string>();
+  // Eyni ad iki mənbədən gələ bilər (məs. `attributes.condition` və sütun
+  // `condition`): ilk dəyər qalır, təkrar isə həm cədvəli, həm də render-dəki
+  // React `key`-ni pozmasın deyə atılır.
+  const pushSpec = (k: string, v: string | null | undefined) => {
+    const id = k.toLowerCase();
+    if (!v || seenSpecs.has(id)) return;
+    seenSpecs.add(id);
+    specs.push({ k, v });
+  };
+
+  pushSpec('Kateqoriya', l.categoryName);
+  pushSpec('Vəziyyət', l.condition ? CONDITION_LABEL[l.condition] ?? l.condition : null);
+  // Kateqoriya atributları satıcıya formada AÇIQ sual kimi verilir, ona görə
+  // burada `false` da real cavabdır («Peyvəndli: Yox») — bu, yuxarıdakı qlobal
+  // bayraq qaydasından fərqlidir və heç bir açar itirilmir.
   for (const [key, raw] of Object.entries(l.attributes ?? {})) {
-    const v = attrValue(raw);
-    if (v) specs.push({ k: attrLabel(key), v });
+    pushSpec(attrLabel(key), attrText(key, raw));
   }
-  specs.push({ k: 'Çatdırılma', v: l.hasDelivery ? 'Var' : 'Yox' });
-  if (l.hasWarranty) specs.push({ k: 'Zəmanət', v: 'Var' });
-  if (l.hasCredit) specs.push({ k: 'Kredit', v: 'Var' });
-  if (l.source === 'erp') specs.push({ k: 'Stok', v: l.inStock ? 'Var' : 'Yox' });
+  pushSpec('Qiymət növü', PRICE_TYPE_LABEL[l.priceType]);
+  pushSpec(
+    'Köhnə qiymət',
+    oldPrice && discountPct != null ? `${oldPrice} · ${discountPct}% endirim` : oldPrice,
+  );
+  pushSpec('Region', l.regionName);
+  pushSpec('Rayon', l.districtName);
+  if (l.hasDelivery) pushSpec('Çatdırılma', 'Var');
+  if (l.hasWarranty) pushSpec('Zəmanət', 'Var');
+  if (l.hasCredit) pushSpec('Kredit', 'Var');
+  if (l.hasBarter) pushSpec('Barter', 'Var');
+  // ERP stoku yalnız təsdiqlənmiş anbar qalığı olduqda mənalıdır; miqdar varsa
+  // «Var»dan daha çox məlumat verir.
+  if (l.source === 'erp' && l.inStock) {
+    pushSpec('Stok', l.stockQty != null ? `${l.stockQty} ədəd` : 'Var');
+  }
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -295,13 +381,18 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 <dl className="mt-4 grid gap-x-10 gap-y-2.5 sm:grid-cols-2">
                   {specs.map((s) => (
                     <div key={s.k} className="flex items-baseline gap-2 text-sm">
-                      <dt className="shrink-0 text-ink-500 dark:text-ink-400">{s.k}</dt>
+                      {/* `min-w-0` + `break-words`: atribut dəyəri sərbəst mətn ola
+                          bilər (məs. yazılmış marka adı) və mobil enində flex
+                          sətrini genişləndirib üfüqi sürüşmə yaradardı. */}
+                      <dt className="min-w-0 break-words text-ink-500 dark:text-ink-400">{s.k}</dt>
                       {/* Nöqtəli "leader" xətti — ad ilə dəyəri gözlə bağlayır */}
                       <span
                         aria-hidden="true"
                         className="min-w-4 flex-1 translate-y-[-4px] border-b border-dotted border-ink-300 dark:border-ink-700"
                       />
-                      <dd className="text-right font-medium text-ink-900 dark:text-white">{s.v}</dd>
+                      <dd className="min-w-0 break-words text-right font-medium text-ink-900 dark:text-white">
+                        {s.v}
+                      </dd>
                     </div>
                   ))}
                 </dl>
