@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import ProfileLayout from '@/components/ProfileLayout';
 import { api } from '@/lib/api';
 import { Eye, Heart, Plus, Pencil, CheckCircle, Archive, RefreshCw } from 'lucide-react';
+import { azDate, azNumber } from '@/lib/format';
 
 type Item = {
   id: string;
@@ -120,7 +121,7 @@ export default function MyListingsPage() {
                     {it.title}
                   </Link>
                   <div className="text-xl font-extrabold mt-1 text-ink-900 dark:text-white">
-                    {it.price ? `${Number(it.price).toLocaleString('az-AZ')} ${it.currency}` : 'Razılaşma'}
+                    {it.price ? `${azNumber(it.price)} ${it.currency}` : 'Razılaşma'}
                   </div>
                   <div className="flex flex-wrap gap-3 text-xs text-ink-500 mt-2">
                     <span className="flex items-center gap-1">
@@ -129,7 +130,7 @@ export default function MyListingsPage() {
                     <span className="flex items-center gap-1">
                       <Heart className="w-3.5 h-3.5" /> {it.favoritesCount ?? 0}
                     </span>
-                    <span>· {new Date(it.createdAt).toLocaleDateString('az-AZ')}</span>
+                    <span>· {azDate(it.createdAt)}</span>
                     <span
                       className={`badge ${
                         it.status === 'active'

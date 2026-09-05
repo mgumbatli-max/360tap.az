@@ -72,11 +72,18 @@ export interface Envelope<T, M = Record<string, unknown>> {
  * Zərfli GET — `data` və `meta`-nı birbaşa qaytarır.
  * `unavailable` true olduqda səhifə "backend əlçatmazdır" fallback-i göstərməlidir
  * (boş siyahıdan fərqli haldır).
+ *
+ * `status` HTTP kodunu OLDUĞU KİMİ ötürür (uğursuzluqda `null` ola bilər: timeout/şəbəkə).
+ * Səbəb: `unavailable` bayrağı yalnız 5xx/timeout/network-u ayırd edir, 4xx-i isə udurdu —
+ * ona görə backend-in 404-ü (məs. «Region tapılmadı») səhifədə 200 + boş nəticə kimi görünürdü
+ * (soft-404). Çağıran tərəf indi `status === 404` olduqda `notFound()` çağıra bilər.
+ * ALTERNATİV RƏDD EDİLDİ: `unavailable`-ı 4xx-ə də şamil etmək — o zaman backend düşəndə və
+ * məzmun tapılmayanda eyni fallback çıxardı, Faza 0-dakı qəsdli ayrım pozulardı.
  */
 export async function serverGet<T, M = Record<string, unknown>>(
   path: string,
   init: ServerFetchInit = {},
-): Promise<{ data: T | null; meta: M | null; unavailable: boolean }> {
+): Promise<{ data: T | null; meta: M | null; unavailable: boolean; status: number | null }> {
   const res = await serverFetch<Envelope<T, M>>(path, init);
   if (!res.ok || !res.body) {
     // 4xx = məzmun problemi (məs. tapılmadı), 5xx/timeout/network = servis problemi
@@ -84,7 +91,12 @@ export async function serverGet<T, M = Record<string, unknown>>(
       res.outcome === 'timeout' ||
       res.outcome === 'network' ||
       (res.status !== null && res.status >= 500);
-    return { data: null, meta: null, unavailable };
+    return { data: null, meta: null, unavailable, status: res.status };
   }
-  return { data: res.body.data ?? null, meta: res.body.meta ?? null, unavailable: false };
+  return {
+    data: res.body.data ?? null,
+    meta: res.body.meta ?? null,
+    unavailable: false,
+    status: res.status,
+  };
 }

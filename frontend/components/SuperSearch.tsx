@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Search, Sparkles, ArrowRight, Hash, MapPin, Tag, Clock, Mic, Camera, X, Loader2 } from 'lucide-react';
 import { api, formatPrice } from '@/lib/api';
 import Link from 'next/link';
+import { azNumber } from '@/lib/format';
 
 type SearchResult = {
   query: string;
@@ -156,7 +157,7 @@ export default function SuperSearch({ open, onClose }: { open: boolean; onClose:
               {(data.filters_detected.price || data.filters_detected.year) && (
                 <div className="px-5 py-2 bg-tap-50 dark:bg-tap/10 border-y border-tap/20 text-xs">
                   <Sparkles className="w-3 h-3 inline mr-1 text-tap" /> AI tanıdı: {
-                    data.filters_detected.price && <strong>{data.filters_detected.price.toLocaleString('az-AZ')}₼ ətrafı</strong>
+                    data.filters_detected.price && <strong>{azNumber(data.filters_detected.price)}₼ ətrafı</strong>
                   } {data.filters_detected.year && <strong>{data.filters_detected.year}-ci il</strong>}
                 </div>
               )}

@@ -69,7 +69,7 @@ export default function ReviewsPage() {
                   </div>
                   <div>
                     <div className="font-semibold text-ink-900 dark:text-white">{r.reviewer.fullName}</div>
-                    <div className="text-xs text-ink-400">{timeAgo(r.createdAt)}</div>
+                    <div className="text-xs text-ink-400" suppressHydrationWarning>{timeAgo(r.createdAt)}</div>
                   </div>
                 </div>
                 <div className="flex">

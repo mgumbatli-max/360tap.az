@@ -13,10 +13,19 @@ export default function SaveSearchButton({ filters }: { filters: Record<string, 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Filter aktivdirsə göstər
-  const hasFilters = Object.entries(filters).some(([k, v]) =>
-    v && k !== 'sort' && (k === 'q' || k.startsWith('attr_') || ['category', 'city', 'min_price', 'max_price', 'condition'].includes(k))
-  );
+  /**
+   * /elanlar SƏHİFƏSİNİN ƏSL FİLTR LÜĞƏTİ.
+   *
+   * ƏVVƏL burada `city`/`min_price`/`max_price` və `attr_` prefiksi vardı —
+   * bunlar köhnə Express kontraktının açarlarıdır və səhifə onları HEÇ VAXT
+   * göndərmir. Nəticədə düymə yalnız `category` olan səhifədə görünürdü:
+   * region və qiymət filtrləri ilə «Axtarışı saxla» ümumiyyətlə çıxmırdı.
+   * İndi açarlar `app/elanlar/page.tsx`-in URL qurucusundan götürülüb.
+   */
+  const FILTER_KEYS = ['region', 'district', 'category', 'vertical', 'priceMin', 'priceMax', 'condition'];
+  const isFilterKey = (k: string) => k === 'q' || k.startsWith('a_') || FILTER_KEYS.includes(k);
+
+  const hasFilters = Object.entries(filters).some(([k, v]) => Boolean(v) && isFilterKey(k));
 
   if (!hasFilters) return null;
 
@@ -31,16 +40,21 @@ export default function SaveSearchButton({ filters }: { filters: Record<string, 
     }
     setSaving(true);
     try {
-      // NestJS DTO: query = bütün filtrlər (obyekt), notify (boolean)
+      // NestJS DTO: query = filtrlər (obyekt), notify (boolean).
+      // YALNIZ filtr açarları saxlanılır: `page`/`view`/`sort` görünüş
+      // parametrləridir və saxlanmış axtarışı «3-cü səhifə, xəritə rejimi»
+      // kimi dondurardı.
       const query: Record<string, string> = {};
       Object.entries(filters).forEach(([k, v]) => {
-        if (v) query[k] = v;
+        if (v && isFilterKey(k)) query[k] = v;
       });
       await api('/saved-searches', {
         method: 'POST',
         body: JSON.stringify({ name: name.trim(), query, notify: true }),
       });
-      toast.success('Axtarış saxlanıldı! Yeni elan gələndə xəbər tutacaqsınız.');
+      // Bildiriş mexanizmi hələ qurulmayıb (nə cron, nə matcher) — ona görə
+      // «xəbər tutacaqsınız» vədi verilmir; yerinə real olan deyilir.
+      toast.success('Axtarış saxlanıldı — profilinizdən izləyə bilərsiniz.');
       setSaved(true);
       setOpen(false);
       setName('');
@@ -56,9 +70,9 @@ export default function SaveSearchButton({ filters }: { filters: Record<string, 
     const parts: string[] = [];
     if (filters.q) parts.push(`"${filters.q}"`);
     if (filters.category) parts.push(filters.category);
-    if (filters.city) parts.push(filters.city);
-    if (filters.min_price || filters.max_price) {
-      parts.push(`${filters.min_price || '0'}–${filters.max_price || '∞'} ₼`);
+    if (filters.region) parts.push(filters.region);
+    if (filters.priceMin || filters.priceMax) {
+      parts.push(`${filters.priceMin || '0'}–${filters.priceMax || '∞'} ₼`);
     }
     return parts.slice(0, 3).join(' · ') || 'Yeni axtarış';
   })();
@@ -87,7 +101,7 @@ export default function SaveSearchButton({ filters }: { filters: Record<string, 
               <h2 className="text-xl font-bold">Axtarışı saxla</h2>
             </div>
             <p className="text-sm text-ink-500 mb-4">
-              Yeni uyğun elan gələndə email ilə xəbər tutacaqsınız.
+              Saxlanmış axtarışlarınızı profilinizdən bir kliklə açacaqsınız.
             </p>
 
             <input
@@ -102,7 +116,7 @@ export default function SaveSearchButton({ filters }: { filters: Record<string, 
             <div className="mt-4 p-3 rounded-lg bg-ink-50 text-xs text-ink-600 space-y-1">
               <p className="font-semibold mb-1">Saxlanılacaq filtrlər:</p>
               {Object.entries(filters).map(([k, v]) => (
-                v && k !== 'sort' ? (
+                v && isFilterKey(k) ? (
                   <div key={k} className="flex justify-between">
                     <span>{k}</span>
                     <span className="font-medium">{String(v)}</span>

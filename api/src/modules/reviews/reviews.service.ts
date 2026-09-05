@@ -52,20 +52,47 @@ export class ReviewsService {
       where: { reviewerId, reviewedId: dto.reviewedId },
       select: { id: true },
     });
-    const review = existing
-      ? await this.prisma.review.update({
-          where: { id: existing.id },
-          data: { rating: dto.rating, comment: dto.comment ?? null, listingId: dto.listingId ?? null },
-        })
-      : await this.prisma.review.create({
-          data: {
-            reviewerId,
-            reviewedId: dto.reviewedId,
-            listingId: dto.listingId ?? null,
-            rating: dto.rating,
-            comment: dto.comment ?? null,
-          },
-        });
+    // Rəy yazılır VƏ istifadəçinin aqreqat reytinqi eyni tranzaksiyada yenilənir.
+    // Əvvəl `users.rating` / `users.reviews_count` heç vaxt yazılmırdı: aqreqasiya yalnız
+    // forUser()-də uçuş zamanı hesablanırdı, ona görə profil kartı, ListingCard-dakı
+    // `owner_rating` və TrustScore HƏMİŞƏ 0 görürdü (DB-də 4 istifadəçidə real rəy var,
+    // rating isə 0.00 idi).
+    // Alternativ — hər oxunuşda aqreqasiya — rədd edildi: siyahı sorğularında elan başına
+    // əlavə hesablama deməkdir, halbuki rəy yazılışı nadir hadisədir.
+    const review = await this.prisma.$transaction(async (tx) => {
+      const saved = existing
+        ? await tx.review.update({
+            where: { id: existing.id },
+            data: {
+              rating: dto.rating,
+              comment: dto.comment ?? null,
+              listingId: dto.listingId ?? null,
+            },
+          })
+        : await tx.review.create({
+            data: {
+              reviewerId,
+              reviewedId: dto.reviewedId,
+              listingId: dto.listingId ?? null,
+              rating: dto.rating,
+              comment: dto.comment ?? null,
+            },
+          });
+      const agg = await tx.review.aggregate({
+        where: { reviewedId: dto.reviewedId },
+        _avg: { rating: true },
+        _count: true,
+      });
+      await tx.user.update({
+        where: { id: dto.reviewedId },
+        // Decimal(3,2) sütunu — orta qiymət 2 onluğa yuvarlaqlaşdırılır
+        data: {
+          rating: Math.round((agg._avg.rating ?? 0) * 100) / 100,
+          reviewsCount: agg._count,
+        },
+      });
+      return saved;
+    });
     if (!existing) {
       const reviewer = await this.prisma.user.findUnique({
         where: { id: reviewerId },

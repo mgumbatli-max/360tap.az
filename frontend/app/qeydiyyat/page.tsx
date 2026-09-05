@@ -4,6 +4,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import Logo from '@/components/Logo';
+import {
+  PASSWORD_HINT,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_PATTERN,
+  PASSWORD_PLACEHOLDER,
+  validatePassword,
+} from '@/lib/validation';
 
 // UX-SPEC §9 — /login ilə eyni vizual dil: boz fonlu/sərhədsiz sahələr,
 // yığcam CTA, fərqli fonlu alt zolaq. Rənglər `ink`/`tap` tokenləri ilə verilir ki,
@@ -29,7 +36,12 @@ export default function RegisterPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(''); setLoading(true);
+    setError('');
+    // Backend parol qaydasını göndərməmişdən əvvəl yoxla — əks halda istifadəçi
+    // formanı doldurub 422 alırdı (bax: lib/validation.ts).
+    const pwErr = validatePassword(form.password);
+    if (pwErr) { setError(pwErr); return; }
+    setLoading(true);
     try {
       const data: any = { full_name: form.full_name, password: form.password };
       if (form.email) data.email = form.email;
@@ -59,7 +71,8 @@ export default function RegisterPage() {
                    value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             <input className={FIELD} placeholder="Şəhər"
                    value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-            <input className={FIELD} type="password" placeholder="Parol (min 6 simvol) *" required minLength={6}
+            <input className={FIELD} type="password" placeholder={PASSWORD_PLACEHOLDER} required
+                   minLength={PASSWORD_MIN_LENGTH} pattern={PASSWORD_PATTERN} title={PASSWORD_HINT}
                    value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
 
             {/* Backend validasiyası email VƏ YA telefondan birini tələb edir — bu qeyd

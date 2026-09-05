@@ -6,6 +6,7 @@ import { getRecent, clearRecent, type RecentItem } from '@/lib/recent';
 import { formatPrice2 } from '@/lib/currency';
 import { Clock, Trash2 } from 'lucide-react';
 import { useToast } from '@/lib/toast';
+import { azDate } from '@/lib/format';
 
 export default function RecentlyViewedPage() {
   const toast = useToast();
@@ -53,7 +54,7 @@ export default function RecentlyViewedPage() {
               <div className="text-sm text-ink-600 line-clamp-2 mt-0.5 leading-tight">{it.title}</div>
               <div className="text-[11px] text-ink-400 mt-1">
                 {it.city ?? ''}
-                {it.viewedAt ? ` · ${new Date(it.viewedAt).toLocaleDateString('az-AZ')}` : ''}
+                {it.viewedAt ? ` · ${azDate(it.viewedAt)}` : ''}
               </div>
             </Link>
           ))}

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { TrendingUp, Loader2, Sparkles } from 'lucide-react';
 import { CAR_BRANDS } from '@/lib/transport-data';
+import { azNumber } from '@/lib/format';
 
 export default function MarketPriceAnalyzer() {
   const [brand, setBrand] = useState('');
@@ -58,11 +59,11 @@ export default function MarketPriceAnalyzer() {
       {result && (
         <div className="mt-4 p-4 bg-gradient-to-br from-tap-50 to-violet-50 rounded-xl animate-fade-in-up">
           <div className="text-xs text-ink-600 mb-1">{result.brand} {result.model} {result.year} bazar qiyməti</div>
-          <div className="text-3xl font-extrabold text-tap">{result.median.toLocaleString('az-AZ')} ₼</div>
+          <div className="text-3xl font-extrabold text-tap">{azNumber(result.median)} ₼</div>
           <div className="flex items-center gap-2 text-xs text-ink-600 mt-2">
-            <span>📉 Min: <strong>{result.min.toLocaleString('az-AZ')}₼</strong></span>
+            <span>📉 Min: <strong>{azNumber(result.min)}₼</strong></span>
             <span>•</span>
-            <span>📈 Max: <strong>{result.max.toLocaleString('az-AZ')}₼</strong></span>
+            <span>📈 Max: <strong>{azNumber(result.max)}₼</strong></span>
             <span>•</span>
             <span>📊 {result.sample} elanda</span>
           </div>

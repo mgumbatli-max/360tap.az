@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { api, AUTH_EXPIRED_EVENT, clearTokens, getToken, setTokens } from './api';
+import { migrateLocalFavorites } from './favorites';
 
 export type User = {
   id: string;
@@ -80,6 +81,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const payload = (d.data ?? d) as unknown as AuthPayload;
     setTokens(payload.tokens);
     setUser(normalize(payload.user));
+    // Anonim sevimliləri hesaba köçür — QƏSDƏN `await` EDİLMİR: köçürmə girişi
+    // gözlətməməlidir (bax: lib/favorites.ts → migrateLocalFavorites).
+    void migrateLocalFavorites();
   };
 
   const register: AuthCtx['register'] = async (data) => {
@@ -96,6 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const payload = (d.data ?? d) as unknown as AuthPayload;
     setTokens(payload.tokens);
     setUser(normalize(payload.user));
+    // Qeydiyyatda da eyni köçürmə — qonaq kimi seçilən elanlar ilk hesabda itməsin.
+    void migrateLocalFavorites();
   };
 
   const logout = useCallback(() => {

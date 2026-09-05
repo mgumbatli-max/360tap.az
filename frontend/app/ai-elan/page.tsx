@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Sparkles, Loader2, Wand2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
+import { azNumber } from '@/lib/format';
 
 type Draft = {
   title?: string;
@@ -141,7 +142,7 @@ export default function AiElanPage() {
             <h2 className="text-xl font-extrabold text-ink-900 dark:text-white">{draft.title}</h2>
             {draft.price != null && (
               <div className="text-2xl font-extrabold text-tap mt-1">
-                {Number(draft.price).toLocaleString('az-AZ')} {draft.currency ?? 'AZN'}
+                {azNumber(draft.price)} {draft.currency ?? 'AZN'}
               </div>
             )}
             <p className="text-ink-700 dark:text-ink-300 mt-3 leading-relaxed whitespace-pre-line">

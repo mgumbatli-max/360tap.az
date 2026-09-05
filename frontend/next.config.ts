@@ -9,14 +9,36 @@ const config: NextConfig = {
   //    quraşdırılmamışdı, yəni bu bayraq mövcud olmayan yoxlamanı söndürürdü.
   //    İndi `eslint.config.mjs` (next/core-web-vitals) var və build-də işləyir.
   images: {
+    // ŞƏKİL MƏNBƏYİ ALLOWLIST-İ — `lib/image-hosts.ts` ilə EYNİ SAXLANILMALIDIR
+    // (konfiq faylı oradan import edə bilmir, ona görə siyahı iki yerdə təkrarlanır).
+    //
+    // `*.onrender.com` JOKERİ ÇIXARILDI. O, /_next/image-i Render-də hostlanan
+    // İSTƏNİLƏN sayt üçün açıq proxy-ə çevirirdi: mövcud olmayan alt-domenlə sorğu
+    // belə allowlist-dən keçib upstream-i 7 saniyə gözləyirdi (HTTP 504 + boş yerə
+    // sərf olunan funksiya vaxtı). Konkret `tap360-api.onrender.com` qeydi onsuz da
+    // aşağıdadır, yəni joker heç bir işlək ssenariyə xidmət etmirdi.
+    //
+    // `localhost:5400` qeydi də ÇIXARILDI — 5400 portundakı köhnə Express ləğv
+    // olunub (aşağıdakı `rewrites()` şərhinə bax), yəni ölü konfiq idi.
+    //
+    // picsum.photos / images.unsplash.com QƏSDƏN SAXLANILDI. Onları production-da
+    // bağlamaq təklif olunmuşdu, lakin ölçdüm: canlı bazadakı elan şəkillərinin
+    // hamısı (50/50 media → picsum.photos/seed/…) məhz bu hostlardadır. Silinsəydi
+    // canlıda BÜTÜN elan şəkilləri 400 verərdi. Doğru ardıcıllıq: əvvəlcə şəkilləri
+    // öz storage-ımıza köçürmək, SONRA hostları çıxarmaq.
     remotePatterns: [
-      { protocol: 'http', hostname: 'localhost', port: '5400', pathname: '/uploads/**' },
       { protocol: 'http', hostname: 'localhost', port: '5500', pathname: '/uploads/**' },
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'picsum.photos' },
-      { protocol: 'https', hostname: 'tap360-api.onrender.com' }, // backend yüklənmiş şəkillər
-      { protocol: 'https', hostname: '*.onrender.com' },
+      // Backend-ə yüklənmiş şəkillər YALNIZ /uploads/ altında verilir
+      // (api/src/main.ts:48 `prefix: '/uploads/'`), ona görə yol məhdudiyyəti
+      // bu host-u da tam proxy olmaqdan çıxarır — localhost qeydləri ilə eyni üslub.
+      { protocol: 'https', hostname: 'tap360-api.onrender.com', pathname: '/uploads/**' },
     ],
+    // Optimallaşdırılmış variantın keşi defolt 60 saniyə idi — eyni şəkil üçün
+    // gün ərzində dəfələrlə yenidən transformasiya deməkdir (hər biri billable).
+    // Şəkil URL-ləri dəyişməz olduğuna görə 1 gün təhlükəsizdir.
+    minimumCacheTTL: 86_400,
   },
   async rewrites() {
     // Faza 0 — DEV ↔ PROD PARİTETİ.

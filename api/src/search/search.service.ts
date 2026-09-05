@@ -5,6 +5,7 @@ import type { Index } from 'meilisearch';
 import { MeiliSearch } from 'meilisearch';
 import type { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
+import { azKeywordAnd, normalizeAzQuery } from './az-text';
 
 const INDEX = 'listings';
 
@@ -44,6 +45,20 @@ const REGION_TOKENS: Record<string, string> = {
   goycay: 'goycay', göyçay: 'goycay', гёйчай: 'goycay',
   qax: 'qax', гах: 'qax',
 };
+
+/**
+ * AZ hal şəkilçiləri — «Bakıda», «Gəncədə», «Şəkidə» kimi sorğularda region
+ * tanınsın deyə soyulur. Uzundan qısaya sıralanıb ki, «bakının» → «nın»
+ * soyulsun, «n» yox.
+ *
+ * TƏHLÜKƏSİZLİK ŞƏRTİ: soyulmuş forma YALNIZ REGION_TOKENS-də tapıldıqda
+ * qəbul edilir, ona görə adi sözlər təsadüfən region kimi oxunmur.
+ * ASCII qarşılıqları («de», «den», «ye») da var — diakritiksiz yazanlar üçün.
+ */
+const REGION_CASE_SUFFIXES = [
+  'nın', 'nin', 'nun', 'nün', 'dan', 'dən', 'den',
+  'da', 'də', 'de', 'ya', 'yə', 'ye', 'a', 'ə', 'e',
+] as const;
 
 export interface SearchParams {
   q?: string;
@@ -157,6 +172,11 @@ export class SearchService implements OnModuleInit {
   // ---- indeksləmə (best-effort, əsas axını qırmır) ----
 
   async indexListing(id: string): Promise<void> {
+    // Meili konfiqurasiya olunmayıbsa OXUMA da baş vermir (:search → fallback).
+    // Guard olmadan yazma yolu işləyirdi: indeks doldurulur, heç vaxt
+    // oxunmurdu, üstəlik hər publish `waitForTask`-i gözləyirdi (Meili ayaqda
+    // deyilsə timeout-a qədər). reindexActive onsuz da eyni guard-a malikdir.
+    if (!this.configured) return;
     try {
       const l = await this.fetchForIndex(id);
       if (!l) return;
@@ -172,6 +192,7 @@ export class SearchService implements OnModuleInit {
   }
 
   async removeListing(id: string): Promise<void> {
+    if (!this.configured) return;
     try {
       const task = await this.index.deleteDocument(id);
       await this.client.waitForTask(task.taskUid);
@@ -244,8 +265,10 @@ export class SearchService implements OnModuleInit {
       degraded = true;
     }
 
-    // Tapılmayan axtarışları logla (doc 07 §3 — sinonim/kontent boşluğu aşkarı)
-    if (total === 0 && cleaned.trim()) {
+    // Tapılmayan axtarışları logla (doc 07 §3 — sinonim/kontent boşluğu aşkarı).
+    // ≥3 simvol şərti: search_logs-un retention-u yoxdur, 1-2 simvolluq
+    // sorğuların analitik dəyəri isə sıfırdır — cədvəlin şişməsini azaldır.
+    if (total === 0 && cleaned.trim().length >= 3) {
       await this.prisma.searchLog
         .create({ data: { query: (params.q ?? '').slice(0, 200), resultsCount: 0 } })
         .catch(() => undefined);
@@ -267,7 +290,8 @@ export class SearchService implements OnModuleInit {
   /**
    * DEGRADED rejim: Meili əlçatmaz olduqda axtarış tamamilə dayanmır,
    * Postgres üzərindən sadə keyword axtarışı ilə cavab verilir.
-   * (Typo-tolerance və sinonim yoxdur — bu, qəsdən məhdud fallback-dır.)
+   * (Sinonim və tam typo-tolerance yoxdur — bu, qəsdən məhdud fallback-dır;
+   * yalnız AZ diakritika/registr fərqləri `az-text` ilə örtülür.)
    */
   private async fallbackSearch(
     cleaned: string,
@@ -280,16 +304,11 @@ export class SearchService implements OnModuleInit {
     if (vertical) where.vertical = vertical;
     if (regionSlug) where.district = { region: { slug: regionSlug } };
 
-    const words = cleaned.split(/\s+/).filter((w) => w.length > 1).slice(0, 5);
-    if (words.length) {
-      where.AND = words.map((w) => ({
-        OR: [
-          { title: { contains: w, mode: 'insensitive' as const } },
-          { description: { contains: w, mode: 'insensitive' as const } },
-          { category: { nameAz: { contains: w, mode: 'insensitive' as const } } },
-        ],
-      }));
-    }
+    // Keyword şərtləri `az-text`-dən gəlir: diakritiksiz yazılış («menzil» →
+    // «mənzil»), böyük hərf (I/ı, İ/i) və brend/model atributları orada
+    // örtülür. Sözlər arasında AND semantikası dəyişməyib.
+    const keyword = azKeywordAnd(cleaned);
+    if (keyword.length) where.AND = keyword;
 
     try {
       const [rows, total] = await this.prisma.$transaction([
@@ -317,14 +336,33 @@ export class SearchService implements OnModuleInit {
     }
   }
 
+  /**
+   * Region slug-ını token-dən çıxarır: əvvəl tam uyğunluq, sonra hal
+   * şəkilçisi soyulmuş forma. Tapılmasa null.
+   */
+  private matchRegionToken(token: string): string | null {
+    const exact = REGION_TOKENS[token];
+    if (exact) return exact;
+    for (const suffix of REGION_CASE_SUFFIXES) {
+      if (!token.endsWith(suffix) || token.length - suffix.length < 3) continue;
+      const stem = token.slice(0, token.length - suffix.length);
+      const hit = REGION_TOKENS[stem];
+      if (hit) return hit;
+    }
+    return null;
+  }
+
   // Sorğu anlama: region tanıma + transliterasiya
   understand(q: string): { cleaned: string; detectedRegion: string | null } {
-    const tokens = q.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    // normalizeAzQuery: 'MƏNZİL' → 'mənzil' (adi toLowerCase 'mənzi̇l' verirdi —
+    // 'İ' kiçildikdə i + U+0307 birləşən nöqtəsinə çevrilir və heç nə tapılmırdı).
+    const tokens = normalizeAzQuery(q).split(/\s+/).filter(Boolean);
     let detectedRegion: string | null = null;
     const kept: string[] = [];
     for (const t of tokens) {
-      if (REGION_TOKENS[t]) {
-        detectedRegion = REGION_TOKENS[t];
+      const region = this.matchRegionToken(t);
+      if (region) {
+        detectedRegion = region;
         continue;
       }
       kept.push(TRANSLIT[t] ?? t);

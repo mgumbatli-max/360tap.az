@@ -1,5 +1,6 @@
 import { safeImageUrl } from '@/lib/image-hosts';
 import { ImageResponse } from 'next/og';
+import { azNumber } from '@/lib/format';
 
 export const runtime = 'edge';
 export const alt = 'Elan — 360tap.az';
@@ -45,7 +46,7 @@ export default async function OG({ params }: Props) {
 
   const title = listing?.title || '360tap.az elanı';
   const price = listing?.price
-    ? `${Number(listing.price).toLocaleString('az-AZ')} ${listing.currency || 'AZN'}`
+    ? `${azNumber(listing.price)} ${listing.currency || 'AZN'}`
     : 'Razılaşma';
   const city = listing?.regionName || 'Azərbaycan';
   const cover = safeImageUrl(listing?.images?.[0]?.url);

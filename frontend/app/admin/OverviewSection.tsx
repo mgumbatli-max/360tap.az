@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Store, Users, ListOrdered, FolderTree, Link2Off } from 'lucide-react';
 import { AdminApi, type AdminStats, type CountMap, type Fail } from './adminApi';
 import { FailBlock, LoadingBlock, SectionCard } from './ui';
+import { azDateTime } from '@/lib/format';
 
 /**
  * XÜLASƏ — YALNIZ REAL RƏQƏMLƏR.
@@ -117,7 +118,7 @@ export default function OverviewSection() {
           <DailyChart daily={stats.daily} />
 
           <p className="text-xs text-ink-400 dark:text-ink-500">
-            Hesablanma vaxtı: {new Date(stats.generatedAt).toLocaleString('az-AZ')}
+            Hesablanma vaxtı: {azDateTime(stats.generatedAt)}
           </p>
         </div>
       ) : null}

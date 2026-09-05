@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Users, Sparkles } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function GroupBuy({ price }: { price: number }) {
   const [joined, setJoined] = useState(0);
@@ -21,8 +22,8 @@ export default function GroupBuy({ price }: { price: number }) {
       </div>
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-xs text-ink-500 line-through">{price.toLocaleString('az-AZ')}₼</div>
-          <div className="text-2xl font-extrabold text-tap">{finalPrice.toLocaleString('az-AZ')}₼</div>
+          <div className="text-xs text-ink-500 line-through">{azNumber(price)}₼</div>
+          <div className="text-2xl font-extrabold text-tap">{azNumber(finalPrice)}₼</div>
           <div className="text-xs text-emerald-600 font-bold">-{discount}% endirim</div>
         </div>
         <button onClick={() => setJoined((j) => Math.min(target, j+1))} className="btn-tap">

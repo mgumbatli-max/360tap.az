@@ -142,6 +142,8 @@ async function seedListings(): Promise<void> {
         currency: 'AZN',
         status: 'active',
         source: 'manual',
+        // Vitrin boş qalmasın deyə yaradılmış NÜMUNƏ elan — UI-da açıq işarələnir.
+        isDemo: true,
         isVip: s.isVip ?? false,
         isPremium: s.isPremium ?? false,
         hasDelivery: s.hasDelivery ?? false,
@@ -207,6 +209,8 @@ async function seedFillEmptyCategories(): Promise<void> {
         currency: 'AZN',
         status: 'active',
         source: 'manual',
+        // Vitrin boş qalmasın deyə yaradılmış NÜMUNƏ elan — UI-da açıq işarələnir.
+        isDemo: true,
         contactName: DEMO_SELLER.fullName,
         contactPhone: '+994501112233',
         contactWhatsapp: true,

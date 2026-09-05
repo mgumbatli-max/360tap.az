@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { GitCompareArrows, X } from 'lucide-react';
 import { getCompare, removeCompare, clearCompare, type CompareItem } from '@/lib/compare';
+import { azNumber } from '@/lib/format';
 
 export default function CompareBar() {
   const [items, setItems] = useState<CompareItem[]>([]);
@@ -111,7 +112,7 @@ function CompareModal({ items, onClose }: { items: CompareItem[]; onClose: () =>
               <CompareRow label="Qiymət">
                 {items.map((it) => (
                   <td key={it.id} className="p-2 font-bold text-ink-900">
-                    {it.price ? `${Number(it.price).toLocaleString('az-AZ')} ${it.currency}` : 'Razılaşma'}
+                    {it.price ? `${azNumber(it.price)} ${it.currency}` : 'Razılaşma'}
                   </td>
                 ))}
               </CompareRow>

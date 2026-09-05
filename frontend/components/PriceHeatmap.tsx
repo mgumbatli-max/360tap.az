@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Flame } from 'lucide-react';
 import { api } from '@/lib/api';
+import { azNumber } from '@/lib/format';
 
 type District = { district: string; count: number; median: number; avg: number; price_per_sqm: number };
 
@@ -36,7 +37,7 @@ export default function PriceHeatmap({ propertyType = 'menzil-satilir' }: { prop
         {data.slice(0, 15).map((d) => (
           <div key={d.district} className={`p-2.5 rounded-lg ${color(Number(d.median))}`}>
             <div className="text-xs font-bold">{d.district}</div>
-            <div className="text-base font-extrabold">{Math.round(Number(d.median)).toLocaleString('az-AZ')} ₼</div>
+            <div className="text-base font-extrabold">{azNumber(Math.round(Number(d.median)))} ₼</div>
             <div className="text-[10px] opacity-80">{d.count} elan</div>
           </div>
         ))}

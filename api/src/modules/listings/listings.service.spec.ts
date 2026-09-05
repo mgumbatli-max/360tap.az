@@ -3,12 +3,20 @@ import { ListingsService } from './listings.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CategoriesService } from '../categories/categories.service';
 import { SearchService } from '../../search/search.service';
+import { ListingLimitService } from '../billing/listing-limit.service';
 
-// ListingsService konstruktoru SearchService tələb edir (indeksləmə best-effort çağırılır).
-// Mock olmadan Nest DI bu spec-i qırırdı — Faza 0-da düzəldildi.
+// ListingsService konstruktoru SearchService (indeksləmə best-effort) və
+// ListingLimitService (elan limiti yoxlaması) tələb edir. Mock olmadan Nest DI
+// bu spec-i qırır — hər yeni asılılıq buraya da əlavə olunmalıdır.
 const searchMock = {
   indexListing: async () => undefined,
   removeListing: async () => undefined,
+};
+
+// Limit mühərriki `findAll` yolunda ÇAĞIRILMIR (yalnız `create`-də), amma DI
+// konstruktoru həll edə bilməsə modul ümumiyyətlə qurulmur.
+const limitMock = {
+  check: async () => ({ used: 0, limit: null, remaining: null, blocked: false, enforced: false }),
 };
 
 describe('ListingsService.findAll', () => {
@@ -35,6 +43,7 @@ describe('ListingsService.findAll', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: CategoriesService, useValue: {} },
         { provide: SearchService, useValue: searchMock },
+        { provide: ListingLimitService, useValue: limitMock },
       ],
     }).compile();
     service = mod.get(ListingsService);
@@ -59,6 +68,7 @@ describe('ListingsService.findAll', () => {
         { provide: PrismaService, useValue: { region: { findUnique: async () => null } } },
         { provide: CategoriesService, useValue: {} },
         { provide: SearchService, useValue: searchMock },
+        { provide: ListingLimitService, useValue: limitMock },
       ],
     }).compile();
     const svc = mod.get(ListingsService);

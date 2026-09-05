@@ -60,7 +60,16 @@ export default (): AppConfig => ({
   nodeEnv: (process.env.NODE_ENV as AppConfig['nodeEnv']) ?? 'development',
   port: parseInt(process.env.PORT ?? '5500', 10),
   cors: {
-    origins: (process.env.CORS_ORIGINS ?? 'http://localhost:5401').split(','),
+    // `.trim()` MƏCBURİDİR: "a, b" kimi boşluqlu siyahıda ikinci origin " https://..."
+    // olurdu və heç bir sorğuya uyğun gəlmirdi — səhv səssiz idi (CORS bloku kimi görünürdü).
+    // `.filter(Boolean)` sondakı vergüldən yaranan boş sətri atır.
+    // Fallback saxlanılır, amma praktikada əlçatmazdır: env.validation.ts CORS_ORIGINS-i
+    // məcburi edir, yəni dəyişən olmadan proses ümumiyyətlə başlamır (buna görə də
+    // production-da "səssizcə localhost açılması" ssenarisi mövcud deyil).
+    origins: (process.env.CORS_ORIGINS ?? 'http://localhost:5401')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
   },
   jwt: {
     secret: required('JWT_SECRET'),

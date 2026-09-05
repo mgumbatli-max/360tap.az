@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Bell, TrendingDown, X } from 'lucide-react';
 import { useToast } from '@/lib/toast';
+import { azNumber } from '@/lib/format';
 
 export default function PriceDropAlert({ listingId, currentPrice }: { listingId: string; currentPrice: number }) {
   const [open, setOpen] = useState(false);
@@ -28,7 +29,7 @@ export default function PriceDropAlert({ listingId, currentPrice }: { listingId:
               <h3 className="font-bold flex items-center gap-2"><Bell className="w-4 h-4 text-tap" /> Qiymət xəbərdarlığı</h3>
               <button onClick={() => setOpen(false)}><X className="w-4 h-4" /></button>
             </div>
-            <p className="text-xs text-ink-500 mb-3">Cari qiymət: <strong>{currentPrice.toLocaleString('az-AZ')}₼</strong></p>
+            <p className="text-xs text-ink-500 mb-3">Cari qiymət: <strong>{azNumber(currentPrice)}₼</strong></p>
             <label className="text-xs font-semibold text-ink-700">Hədəf qiymət</label>
             <input type="number" value={target} onChange={(e) => setTarget(Number(e.target.value))}
               max={currentPrice} className="input mt-1" />

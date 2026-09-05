@@ -60,7 +60,15 @@ export class AuthService {
         data: {
           fullName: dto.fullName,
           email: dto.email ? normalizeEmail(dto.email) : null,
-          phone: dto.phone ?? null,
+          // Telefon E.164-ə gətirilir (email üçün normalizeEmail onsuz da var idi).
+          // Əvvəl XAM sətir yazılırdı: eyni nömrə üçün `+994553312211`, `0553312211` və
+          // `994553312211` AYRI-AYRI hesablar yaradırdı, OTP yolu isə (requirePhone →
+          // normalizePhone) həmişə E.164 işlədirdi — yəni parolla qeydiyyatdan keçən
+          // istifadəçi OTP ilə girəndə BAŞQA hesaba düşürdü.
+          // AZ formatına uyğun olmayan nömrədə 422 atmaq RƏDD EDİLDİ: hazırda
+          // `@Matches(/^\+?\d{9,15}$/)` beynəlxalq nömrəyə icazə verir və onu qəfil
+          // kəsmək işləyən qeydiyyatı sındırardı — belə dəyər xam saxlanılır.
+          phone: dto.phone ? (normalizePhone(dto.phone) ?? dto.phone) : null,
           passwordHash,
           districtId: dto.districtId ?? null,
         },
@@ -83,11 +91,34 @@ export class AuthService {
 
   async login(dto: LoginDto, ctx: ClientCtx): Promise<AuthResponse> {
     const isEmail = dto.identifier.includes('@');
-    const where: Prisma.UserWhereInput = isEmail
-      ? { email: dto.identifier.toLowerCase() }
-      : { phone: dto.identifier };
-
-    const user = await this.prisma.user.findFirst({ where });
+    // TELEFONLA GİRİŞ: əvvəl yalnız XAM sətir üzrə axtarılırdı — `+994704445566` ilə
+    // qeydiyyatdan keçən istifadəçi `0704445566` yazanda 401 alırdı. İndi eyni nömrənin
+    // bütün yayılmış formaları namizəd kimi yoxlanılır (registr artıq E.164 yazır, amma
+    // köhnə sətirlər xam formatdadır və backfill migrasiyası bu işin əhatəsindən kənardır).
+    // Namizədlər arasında seçim DETERMİNİSTİKdir (dublikat sətirlər mövcuddur):
+    // əvvəl istifadəçinin yazdığı formanın dəqiq uyğunluğu — yəni mövcud davranış
+    // toxunulmaz qalır — sonra E.164, sonra ən köhnə hesab.
+    const normalizedPhone = isEmail ? null : normalizePhone(dto.identifier);
+    let user: User | null;
+    if (isEmail) {
+      user = await this.prisma.user.findFirst({ where: { email: normalizeEmail(dto.identifier) } });
+    } else {
+      const local = normalizedPhone?.slice(4) ?? null; // +994XXXXXXXXX → XXXXXXXXX
+      const candidates = [
+        dto.identifier,
+        ...(local ? [`+994${local}`, `994${local}`, `0${local}`, local] : []),
+      ];
+      const rows = await this.prisma.user.findMany({
+        where: { phone: { in: [...new Set(candidates)] } },
+        orderBy: { createdAt: 'asc' },
+        take: 5,
+      });
+      user =
+        rows.find((u) => u.phone === dto.identifier) ??
+        rows.find((u) => u.phone === normalizedPhone) ??
+        rows[0] ??
+        null;
+    }
     if (!user) throw new UnauthorizedException('Yanlış məlumatlar');
     if (user.status === 'banned' || user.status === 'suspended') {
       throw new UnauthorizedException('Hesab bloklanıb');

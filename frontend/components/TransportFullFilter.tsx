@@ -5,6 +5,7 @@ import {
   CAR_BRANDS, BODY_TYPES, FUEL_TYPES, TRANSMISSION_TYPES, DRIVETRAIN_TYPES,
   COLORS, MARKET_FROM, SELLER_KIND, EQUIPMENT,
 } from '@/lib/transport-data';
+import { azNumber } from '@/lib/format';
 
 export type TransportFilters = {
   brand?: string;
@@ -221,7 +222,7 @@ export default function TransportFullFilter({
         <footer className="border-t border-ink-100 dark:border-ink-700 px-6 py-4 flex gap-3 bg-white dark:bg-[#1c2128] sticky bottom-0 rounded-b-3xl sm:rounded-b-2xl">
           <button onClick={reset} className="px-5 py-3.5 bg-ink-100 dark:bg-ink-700 rounded-xl font-semibold">Sıfırla</button>
           <button onClick={() => { onApply(); onClose(); }} className="flex-1 py-3.5 bg-tap text-white rounded-xl font-semibold hover:opacity-90">
-            {totalCount != null ? `${totalCount.toLocaleString('az-AZ')} elanı göstər` : 'Tətbiq et'}
+            {totalCount != null ? `${azNumber(totalCount)} elanı göstər` : 'Tətbiq et'}
           </button>
         </footer>
       </div>

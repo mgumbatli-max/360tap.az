@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Sparkles, Camera } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function QuickPriceEstimate() {
   const [estimate, setEstimate] = useState<number | null>(null);
@@ -22,7 +23,7 @@ export default function QuickPriceEstimate() {
       {estimate && (
         <div className="mt-3 text-center">
           <div className="text-xs text-ink-500">Təxmini qiymət</div>
-          <div className="text-3xl font-extrabold text-tap">{estimate.toLocaleString('az-AZ')} ₼</div>
+          <div className="text-3xl font-extrabold text-tap">{azNumber(estimate)} ₼</div>
           <div className="text-xs text-ink-400 mt-1">±15% xəta nisbəti</div>
         </div>
       )}

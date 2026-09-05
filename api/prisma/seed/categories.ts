@@ -38,6 +38,31 @@ const sel = (key: string, labelAz: string, options?: string[], extra: Partial<Se
 const num = (key: string, labelAz: string, unit?: string): SeedAttr =>
   ({ key, labelAz, type: 'number', ...(unit ? { unit } : {}) });
 const yes = (key: string, labelAz: string): SeedAttr => ({ key, labelAz, type: 'boolean' });
+/**
+ * AVTOMOBİL MARKALARI — filtrin opsiya siyahısı.
+ *
+ * NİYƏ BURADA: əvvəl `brand()` opsiyasız çağırılırdı, yəni `avtomobiller` kateqoriyasında
+ * `brand` atributu `select` tipində, amma BOŞ options ilə saxlanılırdı. Frontend-dəki
+ * `CategoryFilters` opsiyasız select-ləri süzdüyü üçün marka filtri ÜMUMİYYƏTLƏ
+ * render olunmurdu — avtomobil axtarışının ən vacib filtri yox idi.
+ *
+ * TƏK HƏQİQƏT MƏNBƏYİ: `frontend/lib/transport-data.ts` → `CAR_BRANDS`.
+ * Orada hər markanın MODEL siyahısı da var və marka→model asılılığı frontend-də
+ * oradan qurulur. Bu siyahı həmin faylın `name` sahələrindən çıxarılıb; marka
+ * əlavə edəndə HƏR İKİ yeri yeniləyin (model siyahısı yalnız frontend-də saxlanılır,
+ * çünki filtr asılılığı klient tərəfdə hesablanır).
+ */
+const CAR_BRAND_OPTIONS = [
+  'Acura', 'Alfa Romeo', 'Aston Martin', 'Audi', 'BMW', 'BYD', 'Cadillac', 'Chery',
+  'Chevrolet', 'Chrysler', 'Citroën', 'Daewoo', 'Dacia', 'Dodge', 'Fiat', 'Ford', 'GAZ',
+  'Geely', 'GMC', 'Great Wall', 'Honda', 'Hummer', 'Hyundai', 'Infiniti', 'Iran Khodro',
+  'Jaguar', 'Jeep', 'Kia', 'KrAZ', 'Lada (VAZ)', 'Lamborghini', 'Land Rover', 'Lexus',
+  'Lincoln', 'Maserati', 'Mazda', 'Mercedes-Benz', 'Mini', 'Mitsubishi', 'Moskvich',
+  'Nissan', 'Opel', 'Peugeot', 'Porsche', 'Range Rover', 'Renault', 'Rolls-Royce', 'Saab',
+  'SEAT', 'Škoda', 'Smart', 'SsangYong', 'Subaru', 'Suzuki', 'Tesla', 'Toyota', 'UAZ', 'VAZ',
+  'Volkswagen', 'Volvo', 'ZAZ', 'Yutong', 'ZX Auto'
+];
+
 // marka köməkçisi — həmişə axtarışa açıq (isSearchable), vahid qayda
 const brand = (options?: string[], labelAz = 'Marka'): SeedAttr =>
   sel('brand', labelAz, options, { isSearchable: true });
@@ -46,7 +71,7 @@ const COND: SeedAttr = sel('condition', 'Vəziyyəti', ['Yeni', 'İşlənmiş'])
 
 // ─────────────────────── NƏQLİYYAT ───────────────────────
 const CAR_ATTRS: SeedAttr[] = [
-  brand(),
+  brand(CAR_BRAND_OPTIONS),
   sel('model', 'Model', undefined, { isSearchable: true }),
   num('year', 'Buraxılış ili', 'il'),
   num('mileage', 'Yürüş', 'km'),
@@ -71,7 +96,8 @@ const TRAILER_ATTRS: SeedAttr[] = [
   num('year', 'Buraxılış ili', 'il'),
 ];
 const TRUCK_ATTRS: SeedAttr[] = [
-  brand(),
+  brand(['MAN', 'Mercedes-Benz', 'Volvo', 'Scania', 'DAF', 'Iveco', 'Renault', 'KamAZ',
+    'MAZ', 'GAZ', 'ZIL', 'Hyundai', 'Isuzu', 'Ford', 'Setra', 'Neoplan', 'Digər']),
   num('year', 'Buraxılış ili', 'il'),
   sel('type', 'Növ', ['Yük maşını', 'Avtobus', 'Mikroavtobus', 'Refrijerator', 'Tanker', 'Qoşqu', 'Digər']),
   sel('fuel', 'Yanacaq növü', ['Benzin', 'Dizel', 'Qaz', 'Elektro']),
@@ -86,7 +112,7 @@ const BOAT_ATTRS: SeedAttr[] = [
 ];
 const PARTS_ATTRS: SeedAttr[] = [
   sel('part_type', 'Hissə növü', ['Mühərrik', 'Sürət qutusu', 'Yürüş hissəsi', 'Ban', 'Salon', 'Elektrik', 'Optika', 'Şüşə', 'Digər']),
-  brand(undefined, 'Avtomobil markası'),
+  brand(CAR_BRAND_OPTIONS, 'Avtomobil markası'),
   COND,
 ];
 const WHEEL_ATTRS: SeedAttr[] = [
@@ -204,13 +230,22 @@ const TV_ATTRS: SeedAttr[] = [
 ];
 const AUDIO_ATTRS: SeedAttr[] = [
   sel('type', 'Növ', ['Dinamik/Səsucaldan', 'Qulaqlıq', 'Soundbar', 'Resiver', 'Mikrofon', 'Pleyer', 'Digər']),
-  brand(),
+  brand(['JBL', 'Sony', 'Bose', 'Samsung', 'LG', 'Philips', 'Marshall', 'Sennheiser',
+    'Beats', 'Xiaomi', 'Anker', 'Yamaha', 'Pioneer', 'Harman Kardon', 'Digər']),
   COND,
 ];
 const CAMERA_ATTRS: SeedAttr[] = [
   brand(['Canon', 'Nikon', 'Sony', 'Fujifilm', 'GoPro', 'Digər']),
   sel('type', 'Növ', ['Fotoaparat', 'Videokamera', 'Linza', 'Aksesuar', 'Digər']),
   COND,
+];
+
+// ─────────────────────── XİDMƏTLƏR ───────────────────────
+const SERVICE_ATTRS: SeedAttr[] = [
+  sel('provider_type', 'Kim təklif edir', ['Fiziki şəxs', 'Şirkət / Komanda']),
+  sel('price_basis', 'Qiymət hesablanır', ['Saatlıq', 'Günlük', 'İş üzrə', 'Kv.m üzrə', 'Razılaşma ilə']),
+  yes('at_home', 'Ünvana gəlir'),
+  sel('experience', 'Təcrübə', ['1 ilə qədər', '1-3 il', '3-5 il', '5+ il']),
 ];
 const CONSOLE_ATTRS: SeedAttr[] = [
   sel('platform', 'Platforma', ['PlayStation', 'Xbox', 'Nintendo', 'PC', 'Digər']),
@@ -542,13 +577,19 @@ export const CATEGORIES: SeedCategory[] = [
   ], undefined, 'sprout'),
 
   // 13) XİDMƏTLƏR
+  //
+  // NİYƏ ORTAQ ATRİBUT DƏSTİ: bu vertikalın 7 alt bölməsinin HEÇ BİRİNDƏ filtr yox idi,
+  // yəni «Xidmətlər»ə girən istifadəçi yalnız region və qiymət görürdü. Xidmət elanında
+  // alıcının verdiyi suallar bölmədən asılı olmayaraq eynidir: kim təklif edir (şəxs/şirkət),
+  // ödəniş necə hesablanır, evə gəlirmi, təcrübə nə qədərdir. Ona görə dəst bölməyə xas
+  // deyil, VERTİKALA xasdır və hamısına eyni verilir.
   c('xidmetler', 'Xidmətlər', 'universal', [
-    c('temir-xidmet', 'Təmir və tikinti xidmətləri', 'universal'),
-    c('neqliyyat-xidmet', 'Nəqliyyat və çatdırılma', 'universal'),
-    c('gozellik-xidmet', 'Gözəllik və sağlamlıq', 'universal'),
-    c('tehsil-xidmet', 'Təhsil və repetitorluq', 'universal'),
-    c('tedbir-xidmet', 'Tədbirlərin təşkili', 'universal'),
-    c('huquqi-xidmet', 'Hüquqi və maliyyə', 'universal'),
-    c('it-xidmet', 'İT və veb xidmətlər', 'universal'),
+    c('temir-xidmet', 'Təmir və tikinti xidmətləri', 'universal', undefined, SERVICE_ATTRS),
+    c('neqliyyat-xidmet', 'Nəqliyyat və çatdırılma', 'universal', undefined, SERVICE_ATTRS),
+    c('gozellik-xidmet', 'Gözəllik və sağlamlıq', 'universal', undefined, SERVICE_ATTRS),
+    c('tehsil-xidmet', 'Təhsil və repetitorluq', 'universal', undefined, SERVICE_ATTRS),
+    c('tedbir-xidmet', 'Tədbirlərin təşkili', 'universal', undefined, SERVICE_ATTRS),
+    c('huquqi-xidmet', 'Hüquqi və maliyyə', 'universal', undefined, SERVICE_ATTRS),
+    c('it-xidmet', 'İT və veb xidmətlər', 'universal', undefined, SERVICE_ATTRS),
   ], undefined, 'wrench'),
 ];

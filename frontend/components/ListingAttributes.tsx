@@ -1,5 +1,7 @@
 'use client';
 
+import { resolveAttributeOptions } from '@/lib/attribute-taxonomy';
+
 /**
  * KATEQORİYAYA GÖRƏ DİNAMİK XÜSUSİYYƏTLƏR (elan formasının «Xüsusiyyətlər» bölməsi).
  *
@@ -122,6 +124,7 @@ export default function ListingAttributes({
   invalidKeys,
   loading,
   hasCategory,
+  categorySlug = '',
 }: {
   attributes: AttrDef[];
   values: AttrValues;
@@ -130,6 +133,8 @@ export default function ListingAttributes({
   invalidKeys: string[];
   loading: boolean;
   hasCategory: boolean;
+  /** Klient taksonomiyası (marka→model) kateqoriyaya bağlıdır — bax `lib/attribute-taxonomy.ts`. */
+  categorySlug?: string;
 }) {
   if (!hasCategory) {
     return (
@@ -165,6 +170,10 @@ export default function ListingAttributes({
           key={def.id || def.key}
           def={def}
           value={values[def.key]}
+          // Bütün dəyərlər ötürülür: `model` sahəsi öz siyahısını qurmaq üçün
+          // `brand`-in cari dəyərini oxumalıdır (yeganə real asılılığımız).
+          values={values}
+          categorySlug={categorySlug}
           onChange={onChange}
           invalid={invalidKeys.includes(def.key)}
         />
@@ -176,19 +185,58 @@ export default function ListingAttributes({
 function AttributeField({
   def,
   value,
+  values,
+  categorySlug,
   onChange,
   invalid,
 }: {
   def: AttrDef;
   value: string | boolean | undefined;
+  values: AttrValues;
+  categorySlug: string;
   onChange: (key: string, value: string | boolean) => void;
   invalid: boolean;
 }) {
   const fieldId = `attr-${def.key}`;
   const errorId = `${fieldId}-error`;
-  const options = Array.isArray(def.options) ? def.options.filter((o) => typeof o === 'string') : [];
+  const schemaOptions = Array.isArray(def.options)
+    ? def.options.filter((o) => typeof o === 'string')
+    : [];
+  // Sxemdə ifadə oluna bilməyən siyahılar (marka→model) burada tamamlanır.
+  // Sxem doludursa o üstündür — bax `lib/attribute-taxonomy.ts`.
+  const resolved = resolveAttributeOptions(
+    categorySlug,
+    { key: def.key, options: schemaOptions },
+    (k) => {
+      const v = values[k];
+      return typeof v === 'string' ? v : '';
+    },
+  );
+  const options = resolved?.status === 'ready' ? resolved.options : schemaOptions;
+  const blockedBy = resolved?.status === 'needs-parent' ? resolved.parentLabelAz : undefined;
   const describedBy = invalid ? errorId : undefined;
   const error = invalid ? <FieldError id={errorId} label={def.labelAz} /> : null;
+
+  // ——— valideyn atribut seçilməyib (model ← marka) ———
+  // Sahəni GİZLƏTMİRİK: istifadəçi onun mövcud olduğunu və nə üçün hələ
+  // dolmadığını görməlidir. Sərbəst mətnə buraxmaq isə rədd edildi — o zaman
+  // «bmw x5», «X5», «X 5» kimi üç fərqli dəyər bazaya düşür və filtr işləmir.
+  if (blockedBy) {
+    const hintId = `${fieldId}-hint`;
+    return (
+      <div>
+        <label htmlFor={fieldId} className="mb-1.5 block text-sm font-semibold text-ink-800 dark:text-ink-200">
+          {def.labelAz} {def.isRequired && <RequiredMark />}
+        </label>
+        <select id={fieldId} value="" disabled aria-describedby={hintId} className="inp cursor-not-allowed opacity-60">
+          <option value="">Əvvəlcə «{blockedBy}» seçin</option>
+        </select>
+        <p id={hintId} className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
+          «{blockedBy}» seçdikdən sonra siyahı avtomatik dolur.
+        </p>
+      </div>
+    );
+  }
 
   // ——— boolean → keçid (switch) ———
   if (def.type === 'boolean') {
@@ -296,8 +344,9 @@ function AttributeField({
   }
 
   // ——— select(options=null) və tanınmayan tiplər → sərbəst mətn ———
-  // Bazada belə 5 atribut var (məs. avtomobil markası): siyahı hələ doldurulmayıb,
-  // amma sahə itməməlidir — istifadəçi özü yazır.
+  // Nə sxemdə, nə taksonomiyada siyahısı olmayan atributlar buraya düşür
+  // (məs. yeni əlavə olunmuş, seed-i hələ yazılmamış sahə): sahə itməməlidir,
+  // istifadəçi özü yazır. Backend belə dəyəri sərbəst mətn kimi qəbul edir.
   const hint = TEXT_TYPES.has(def.type) || def.type === 'select' ? undefined : def.type;
   return (
     <div>

@@ -8,7 +8,11 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: '*',
         allow: ['/', '/elanlar', '/k/', '/seher/', '/biznes', '/komek', '/blog'],
         disallow: [
-          '/profil/', '/admin/', '/api/',
+          // robots.txt-də dəyər PREFİKSDİR, tam yol deyil: `/admin/` məhz `/admin`
+          // ünvanının özünü tutmurdu (o isə statik prerender olunub 200 qaytarır).
+          // Sondakı «/» götürüldü ki, həm kök, həm alt yollar əhatə olunsun —
+          // eyni faylda `/elan-yerlesdir` artıq bu formatdadır.
+          '/profil', '/admin', '/api/',
           '/elan-yerlesdir', '/login', '/qeydiyyat', '/register', '/sifre-unutdum',
           '/*?cursor=', '/*?utm_*', '/*?fbclid=',
         ],

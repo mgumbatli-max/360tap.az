@@ -1,23 +1,26 @@
-import { Suspense } from 'react';
+import { cache, Suspense } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronDown, MapPin } from 'lucide-react';
 import Breadcrumb, { type Crumb } from '@/components/Breadcrumb';
+import { DemoNotice } from '@/components/DemoBadge';
 import Gallery from '@/components/Gallery';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import MessageSeller, { ListingActions } from '@/components/MessageSeller';
 import SellerReviews from '@/components/SellerReviews';
 import ReportButton from '@/components/ReportButton';
 import FollowButton from '@/components/FollowButton';
+import TrackRecentView from './TrackRecentView';
 import { serverGet } from '@/lib/server-fetch';
-import { buildMetadata, jsonLdScript } from '@/lib/seo';
+import { SITE, buildMetadata, jsonLdScript } from '@/lib/seo';
+import { azDateLong, azNumber } from '@/lib/format';
 
 function mapSimilar(l: any): Listing {
   return {
     id: l.id, title: l.title, slug: l.slug, price: l.price ?? null,
     currency: l.currency ?? 'AZN', price_type: l.priceType ?? 'fixed',
-    is_vip: l.isVip, is_premium: l.isPremium, has_delivery: l.hasDelivery,
+    is_vip: l.isVip, is_demo: l.isDemo, is_premium: l.isPremium, has_delivery: l.hasDelivery,
     created_at: l.createdAt, city_name: l.regionName ?? undefined, district: l.districtName ?? undefined,
     media: (l.images ?? []).map((i: any) => ({ url: i.url, sort_order: i.sortOrder ?? 0 })),
   };
@@ -37,7 +40,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const { listing: l } = await getListing(id);
   if (!l) return { title: 'Elan tapılmadı — 360tap.az' };
-  const price = l.price != null ? `${Number(l.price).toLocaleString('az-AZ')} ${l.currency}` : 'Razılaşma';
+  const price = l.price != null ? `${azNumber(l.price)} ${l.currency}` : 'Razılaşma';
   const loc = [l.districtName, l.regionName].filter(Boolean).join(', ');
   const desc = (l.description ?? '').slice(0, 160).replace(/\s+/g, ' ');
   const cover = l.images?.[0]?.url;
@@ -85,6 +88,7 @@ type Detail = {
   stockQty?: number | null;
   source?: string;
   isVip?: boolean;
+  isDemo?: boolean;
   isPremium?: boolean;
   views?: number;
   contactName?: string | null;
@@ -106,11 +110,24 @@ type Detail = {
  * Faza 0: timeout-lu. `unavailable` ayrıca qaytarılır ki, səhifə
  * "elan tapılmadı" (404) ilə "backend əlçatmaz" (503) hallarını ayırd etsin —
  * əks halda backend düşəndə bütün mövcud elanlar 404 kimi göstərilirdi.
+ *
+ * `cache()` — REACT REQUEST-SCOPE DEDUP.
+ * Bu funksiya HƏR render-də İKİ dəfə çağırılır: `generateMetadata()` və səhifə
+ * komponenti. `cache: 'no-store'` olduğu üçün Next-in öz fetch dedup-u tətbiq
+ * olunmurdu, yəni backend-ə iki sorğu gedirdi — və `GET /listings/:id` OXUMA
+ * yolunda `views: { increment: 1 }` etdiyi üçün hər səhifə açılışı baxış
+ * sayğacını 2 artırırdı (ölçüldü: 0 → 1 açılış → 2).
+ * `cache()` eyni request daxilində eyni promise-i paylaşır: cavab dəyişmir,
+ * `no-store` semantikası da qalır (növbəti sorğu yenidən çəkir).
+ * Sayğacı GET-dən çıxarıb `POST /listings/:id/view` etmək daha düzgün həlldir,
+ * amma o, backend + statistika səhifələrinə toxunur — ayrıca iş kimi qalır.
  */
-async function getListing(id: string): Promise<{ listing: Detail | null; unavailable: boolean }> {
-  const r = await serverGet<Detail>(`/listings/${id}`, { cache: 'no-store' });
-  return { listing: r.data, unavailable: r.unavailable };
-}
+const getListing = cache(
+  async (id: string): Promise<{ listing: Detail | null; unavailable: boolean }> => {
+    const r = await serverGet<Detail>(`/listings/${id}`, { cache: 'no-store' });
+    return { listing: r.data, unavailable: r.unavailable };
+  },
+);
 
 const CONDITION_LABEL: Record<string, string> = {
   new: 'Yeni',
@@ -176,7 +193,7 @@ function attrLabel(key: string): string {
 function attrValue(v: unknown): string | null {
   if (v == null || v === '') return null;
   if (typeof v === 'boolean') return v ? 'Var' : 'Yox';
-  if (typeof v === 'number') return new Intl.NumberFormat('az-AZ').format(v);
+  if (typeof v === 'number') return azNumber(v);
   if (typeof v === 'string') return v;
   if (Array.isArray(v)) {
     const joined = v.filter((x) => x != null && x !== '').join(', ');
@@ -194,16 +211,6 @@ function attrText(key: string, raw: unknown): string | null {
   return unit && typeof raw === 'number' ? `${v} ${unit}` : v;
 }
 
-// `toLocaleDateString('az-AZ')` server ICU qurulumundan asılıdır; meta sətrindəki
-// tarix həmişə eyni görünsün deyə ay adları sabit siyahıdan götürülür.
-const AZ_MONTHS = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
-  'iyul', 'avqust', 'sentyabr', 'oktyabr', 'noyabr', 'dekabr'];
-
-function azDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getDate()} ${AZ_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-}
 
 /**
  * SEO — BU ROUTE-UN ÜZƏRİNDƏ SUSPENSE SƏRHƏDİ OLMAMALIDIR.
@@ -252,9 +259,9 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   const cover = l.images?.[0]?.url;
   const price =
-    l.price != null ? `${Number(l.price).toLocaleString('az-AZ')} ${l.currency}` : 'Razılaşma yolu ilə';
+    l.price != null ? `${azNumber(l.price)} ${l.currency}` : 'Razılaşma yolu ilə';
   const oldPrice =
-    l.oldPrice != null ? `${Number(l.oldPrice).toLocaleString('az-AZ')} ${l.currency}` : null;
+    l.oldPrice != null ? `${azNumber(l.oldPrice)} ${l.currency}` : null;
   // Endirim faizi yalnız köhnə qiymət REAL olaraq böyük olduqda hesablanır —
   // əks halda «0% endirim» və ya mənfi faiz kimi saxta rəqəm çıxardı.
   const discountPct =
@@ -321,16 +328,45 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     pushSpec('Stok', l.stockQty != null ? `${l.stockQty} ədəd` : 'Var');
   }
 
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    name: l.title,
-    description: (l.description ?? '').slice(0, 300),
-    ...(cover ? { image: cover } : {}),
-    ...(l.price != null
-      ? { offers: { '@type': 'Offer', price: l.price, priceCurrency: l.currency, availability: 'https://schema.org/InStock' } }
-      : {}),
+  /**
+   * Product JSON-LD — YALNIZ QİYMƏTİ OLAN ELAN ÜÇÜN.
+   *
+   * Google `offers`/`review`/`aggregateRating` sahələrindən heç biri olmayan
+   * Product-ı zəngin nəticə üçün XƏTA kimi qeyd edir. Aktiv elanların 11-i
+   * qiymətsizdir («Razılaşma yolu ilə») və onlar üçün əvvəl boş Product
+   * emit olunurdu — yəni struktur data faydasız yerə xəta yaradırdı.
+   * `itemCondition` sxem sabitinə bağlıdır (yalnız uyğunluğu bilinən dəyərlər).
+   */
+  const ITEM_CONDITION: Record<string, string> = {
+    new: 'https://schema.org/NewCondition',
+    like_new: 'https://schema.org/RefurbishedCondition',
+    used: 'https://schema.org/UsedCondition',
+    for_parts: 'https://schema.org/DamagedCondition',
   };
+  const listingUrl = `${SITE.url}/elanlar/${l.id}`;
+  const jsonLd =
+    l.price != null
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: l.title,
+          description: (l.description ?? '').slice(0, 300),
+          ...(cover ? { image: cover } : {}),
+          ...(l.condition && ITEM_CONDITION[l.condition]
+            ? { itemCondition: ITEM_CONDITION[l.condition] }
+            : {}),
+          offers: {
+            '@type': 'Offer',
+            url: listingUrl,
+            price: l.price,
+            priceCurrency: l.currency,
+            availability: 'https://schema.org/InStock',
+            ...(l.condition && ITEM_CONDITION[l.condition]
+              ? { itemCondition: ITEM_CONDITION[l.condition] }
+              : {}),
+          },
+        }
+      : null;
 
   const h2 = 'text-[22px] font-bold text-ink-900 dark:text-white';
 
@@ -345,7 +381,19 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         amma mətn heç bir halda HTML parser-ini tərk edə bilmir.
         Eyni köməkçi layout.tsx və Breadcrumb.tsx-də artıq istifadə olunur.
       */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdScript(jsonLd)} />
+      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdScript(jsonLd)} />}
+
+      {/* «Son baxılanlar» üçün localStorage yazısı — görünüş render etmir. */}
+      <TrackRecentView
+        item={{
+          id: l.id,
+          title: l.title,
+          price: l.price,
+          currency: l.currency,
+          ...(cover ? { cover } : {}),
+          ...(l.regionName ? { city: l.regionName } : {}),
+        }}
+      />
 
       {/* Mobil sticky CTA paneli məzmunu örtməsin deyə aşağıda əlavə boşluq (§11). */}
       <div className="mx-auto max-w-[1360px] px-4 pb-28 pt-5 sm:px-6 lg:pb-12">
@@ -355,6 +403,10 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           {/* ═══ ƏSAS SÜTUN ═══ */}
           <div className="min-w-0">
             <Breadcrumb items={crumbs} />
+
+            {/* Nümunə elan xəbərdarlığı BAŞLIQDAN ƏVVƏL: istifadəçi telefonu
+                götürməmişdən qabaq bunun real təklif olmadığını bilməlidir. */}
+            {l.isDemo && <DemoNotice className="mt-3" />}
 
             <h1 className="mt-3 text-2xl font-bold leading-tight text-ink-900 dark:text-white md:text-[32px]">
               {l.title}
@@ -426,7 +478,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
             {/* §7.1.7 — meta sətri: № · tarix · baxış */}
             <p className="mt-8 text-[13px] text-ink-500 dark:text-ink-400">
-              № {l.id.slice(0, 8).toUpperCase()} · {azDate(l.createdAt)} · {l.views ?? 0} baxış
+              № {l.id.slice(0, 8).toUpperCase()} · {azDateLong(l.createdAt)} · {l.views ?? 0} baxış
             </p>
 
             {/* §7.1.8 — «Elandan şikayət et»: boz fonlu, sərhədsiz.
@@ -483,12 +535,22 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             <section className="border-t border-ink-200 pt-5 dark:border-ink-700">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <Link
-                    href={`/profil/${l.ownerId}`}
-                    className="block truncate text-[17px] font-bold text-ink-900 hover:text-tap dark:text-white"
-                  >
+                  {/*
+                    SATICI ADI KEÇİD DEYİL — QƏSDƏN.
+
+                    Əvvəl `/profil/<ownerId>`-ə link verilirdi, LAKİN belə bir səhifə
+                    mövcud deyil (`app/profil/[id]` yoxdur) və backend-də ictimai
+                    istifadəçi endpoint-i də yoxdur (`api/src/modules/users/` boşdur).
+                    Nəticədə HƏR elan səhifəsində satıcı adı 404 verirdi.
+
+                    İctimai satıcı profili real funksionallıqdır və ayrıca qərar tələb
+                    edir (endpoint + səhifə + hansı məlumatın açıq olması). Onu burada
+                    uydurmaq əvəzinə ölü keçid götürüldü. Mağazaya aid elanlarda isə
+                    MÖVCUD olan mağaza vitrininə keçid verilir.
+                  */}
+                  <span className="block truncate text-[17px] font-bold text-ink-900 dark:text-white">
                     {sellerName}
-                  </Link>
+                  </span>
                   <p className="mt-1 text-[13px] text-ink-500 dark:text-ink-400">
                     {l.storeId ? 'Mağaza' : 'Şəxsi şəxs'}
                   </p>

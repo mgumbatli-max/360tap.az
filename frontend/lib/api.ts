@@ -1,3 +1,4 @@
+import { azDate, azNumber } from './format';
 const BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export type ApiOptions = RequestInit & { token?: string };
@@ -207,14 +208,31 @@ export function unwrapMeta(res: any): Record<string, any> {
 
 export const formatPrice = (price: number | null | undefined, currency = 'AZN') => {
   if (price == null) return 'Razılaşma yolu ilə';
-  return new Intl.NumberFormat('az-AZ').format(price) + ' ' + currency;
+  return azNumber(price) + ' ' + currency;
 };
 
+/**
+ * NİSBİ VAXT — SSR/HİDRATASİYA UYĞUNSUZLUĞU MƏNBƏYİ.
+ *
+ * Bu funksiya render anında `Date.now()` oxuyur. Ana səhifə ISR ilə
+ * (`revalidate: 30`) keşlənir, yəni serverdə çap olunan «12 dəq əvvəl» mətni
+ * klient hidratasiya edəndə artıq «13 dəq əvvəl» ola bilir → React #418
+ * (mətn uyğunsuzluğu) və bütün alt ağacın klientdə yenidən qurulması.
+ *
+ * Nəticəni deterministik etmək MÜMKÜN DEYİL: dəyər tərifinə görə cari vaxtdan
+ * asılıdır. Ona görə ÇAĞIRIŞ YERİ məsuliyyət daşıyır — nisbi vaxtı çap edən
+ * element `suppressHydrationWarning` ilə işarələnməlidir (React-in məhz bu hal
+ * üçün nəzərdə tutduğu mexanizm: serverin dəyəri saxlanılır, klient öz dəyərini
+ * yazır, ağac YENİDƏN QURULMUR).
+ *
+ * Alternativ — SSR-də mütləq tarix, mount-dan sonra nisbi vaxt — rədd edildi:
+ * hər kartda görünən mətn sıçraması yaradır.
+ */
 export const timeAgo = (date: string) => {
   const diff = (Date.now() - new Date(date).getTime()) / 1000;
   if (diff < 60) return 'indi';
   if (diff < 3600) return `${Math.floor(diff / 60)} dəq əvvəl`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} saat əvvəl`;
   if (diff < 2592000) return `${Math.floor(diff / 86400)} gün əvvəl`;
-  return new Date(date).toLocaleDateString('az-AZ');
+  return azDate(date);
 };

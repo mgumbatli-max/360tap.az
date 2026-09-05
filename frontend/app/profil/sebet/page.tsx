@@ -4,6 +4,7 @@ import Link from 'next/link';
 import ProfileLayout from '@/components/ProfileLayout';
 import { ShoppingBag, Trash2, Plus, Minus } from 'lucide-react';
 import { useToast } from '@/lib/toast';
+import { azNumber } from '@/lib/format';
 
 type CartItem = {
   id: string;
@@ -35,9 +36,14 @@ export default function CartPage() {
   };
   const total = items.reduce((s, x) => s + Number(x.price) * x.qty, 0);
 
+  // Sabitləşdirmə: əvvəl bu funksiya `toast.success('Sifariş yaradıldı (demo)')` göstərib
+  // `update([])` ilə səbəti BOŞALDIRDI — halbuki backend-də nə POST /cart, nə POST /orders var,
+  // yəni real məhsullarla dolu səbət heç bir iz qoymadan itirdi və istifadəçi sifariş
+  // verdiyini zənn edirdi. İndi: dürüst xəbərdarlıq + səbət TOXUNULMAZ qalır.
+  // Alternativ (düyməni tamamilə silmək) rədd edildi: səbətin niyə hərəkətsiz olduğu
+  // istifadəçiyə heç cür izah olunmazdı.
   const checkout = () => {
-    toast.success('Sifariş yaradıldı (demo)');
-    update([]);
+    toast.info('Sifariş sistemi hazırlanır — sifarişiniz hələ qeydə alınmır. Satıcı ilə mesajlaşma vasitəsilə əlaqə saxlayın.');
   };
 
   return (
@@ -67,7 +73,7 @@ export default function CartPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <Link href={`/elanlar/${it.id}`} className="font-bold text-ink-900 line-clamp-2 hover:text-tap">{it.title}</Link>
-                    <div className="text-tap font-bold mt-1">{Number(it.price).toLocaleString('az-AZ')} {it.currency}</div>
+                    <div className="text-tap font-bold mt-1">{azNumber(it.price)} {it.currency}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setQty(it.id, it.qty - 1)} className="w-8 h-8 rounded-lg border border-ink-200 flex items-center justify-center hover:bg-ink-100">
@@ -87,9 +93,12 @@ export default function CartPage() {
 
             <div className="mt-5 flex items-center justify-between">
               <div className="text-sm text-ink-500">Cəmi: {items.length} məhsul</div>
-              <div className="text-2xl font-extrabold text-tap">{total.toLocaleString('az-AZ')} AZN</div>
+              <div className="text-2xl font-extrabold text-tap">{azNumber(total)} AZN</div>
             </div>
             <button onClick={checkout} className="btn-tap w-full mt-4">Sifariş ver</button>
+            <p className="text-xs text-ink-500 mt-2 text-center">
+              Onlayn sifariş hazırlanır. Hazırda alış satıcı ilə birbaşa razılaşma yolu ilə tamamlanır.
+            </p>
           </>
         )}
       </div>

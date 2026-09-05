@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseFloatPipe, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseFloatPipe, ParseUUIDPipe, Query } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { GeoService } from './geo.service';
 
@@ -20,7 +20,10 @@ export class GeoController {
 
   @Public()
   @Get('districts/:id/nearby')
-  nearby(@Param('id') id: string) {
+  // ParseUUIDPipe: qeyri-UUID id Postgres-ə çatanda `DatabaseError` (500)
+  // qaytarırdı — indi 400. Versiya PİNLƏNMİR (`version: '4'` verilmir), çünki
+  // gələcək seed başqa UUID versiyası yarada bilər.
+  nearby(@Param('id', ParseUUIDPipe) id: string) {
     return this.geo.nearby(id);
   }
 

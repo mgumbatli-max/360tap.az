@@ -82,7 +82,7 @@ export default function SavedSearchesPage() {
                     ) : null,
                   )}
                 </div>
-                <div className="text-xs text-ink-400 mt-1.5">Yaradılıb: {timeAgo(s.createdAt)}</div>
+                <div className="text-xs text-ink-400 mt-1.5" suppressHydrationWarning>Yaradılıb: {timeAgo(s.createdAt)}</div>
               </div>
               <button
                 onClick={() => remove(s.id)}

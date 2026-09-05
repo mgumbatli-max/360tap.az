@@ -1,8 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import ProfileLayout from '@/components/ProfileLayout';
-import { Bell, Globe, DollarSign, Eye, Moon, Sun, Monitor, Keyboard, Shield, User, Sliders, LayoutGrid, Rows3 } from 'lucide-react';
-import { useToast } from '@/lib/toast';
+import { Bell, Globe, Eye, Moon, Sun, Monitor, Keyboard, Sliders, LayoutGrid, Rows3 } from 'lucide-react';
 import PushSubscribe from '@/components/PushSubscribe';
 import TelegramBotConnect from '@/components/TelegramBotConnect';
 import EmailDigest from '@/components/EmailDigest';
@@ -10,16 +9,22 @@ import AutoReplyBot from '@/components/AutoReplyBot';
 import SellerVerification from '@/components/SellerVerification';
 
 export default function SettingsPage() {
-  const toast = useToast();
   const [theme, setTheme] = useState<string>('light');
   const [density, setDensity] = useState<string>('comfortable');
   const [lang, setLang] = useState<string>('az');
   const [currency, setCurrency] = useState<string>('AZN');
-  const [notifEmail, setNotifEmail] = useState(true);
-  const [notifPush, setNotifPush] = useState(true);
-  const [notifSms, setNotifSms] = useState(false);
-  const [phonePublic, setPhonePublic] = useState(false);
-  const [savedSearchAlerts, setSavedSearchAlerts] = useState(true);
+  // Sabitləşdirmə: notifEmail / notifPush / notifSms / savedSearchAlerts / phonePublic
+  // state-ləri və onların açarları ÇIXARILDI. Onlar nə serverə, nə localStorage-a
+  // yazılırdı — «Yadda saxla» yalnız uğur toast-u göstərirdi, səhifə yenilənən kimi
+  // hər şey ilkin dəyərə qayıdırdı.
+  // Niyə localStorage-a yazmaqla «düzəltmədim»: bu beş açarın hamısı SERVER tərəfli
+  // davranışa aiddir (e-poçt/SMS göndərişi, saxlanılmış axtarış xəbərdarlığı, elan
+  // cavabındakı telefonun maskalanması). Backend-də nə `PATCH /users/me`, nə
+  // `PUT /me/settings` var; brauzerdə saxlamaq açarı İŞLƏK etmirdi, sadəcə istifadəçini
+  // «e-poçt bildirişlərini söndürdüm» / «telefonum gizlidir» deyə yanıldırdı — yəni
+  // yarımçıq tətbiq indiki vəziyyətdən daha pisdir.
+  // Aşağıdakı Tema/Sıxlıq/Dil/Valyuta seçimləri QALIR: onların hər birinin real oxuyanı
+  // var (app/layout.tsx, DensityToggle, lib/i18n, lib/currency) — yəni həqiqətən işləyir.
 
   useEffect(() => {
     try {
@@ -77,27 +82,13 @@ export default function SettingsPage() {
           </Row>
         </Section>
 
-        {/* Bildirişlər */}
-        <Section title="Bildirişlər" icon={Bell}>
-          <Row label="E-poçt bildirişləri">
-            <Switch checked={notifEmail} onChange={setNotifEmail} />
-          </Row>
-          <Row label="Push bildirişləri" hint="Brauzer notification">
-            <Switch checked={notifPush} onChange={setNotifPush} />
-          </Row>
-          <Row label="SMS bildirişləri">
-            <Switch checked={notifSms} onChange={setNotifSms} />
-          </Row>
-          <Row label="Saxlanılmış axtarışlardan xəbərdar et" hint="Yeni uyğun elan gəldikdə">
-            <Switch checked={savedSearchAlerts} onChange={setSavedSearchAlerts} />
-          </Row>
-        </Section>
-
-        {/* Məxfilik */}
-        <Section title="Məxfilik" icon={Shield}>
-          <Row label="Telefonum hamıya görünsün" hint="Sönülü olduqda yalnız mesaj qutusundan əlaqə">
-            <Switch checked={phonePublic} onChange={setPhonePublic} />
-          </Row>
+        {/* Bildirişlər və məxfilik — server tərəfli tənzimləmə hələ mövcud deyil.
+            İşləməyən açarları göstərmək əvəzinə vəziyyət açıq yazılır. */}
+        <Section title="Bildirişlər və məxfilik" icon={Bell}>
+          <p className="text-sm text-ink-500">
+            E-poçt/SMS bildirişləri, saxlanılmış axtarış xəbərdarlıqları və telefon
+            görünürlüyü tənzimləmələri hazırlanır. Hazır olan kimi burada aktivləşəcək.
+          </p>
         </Section>
 
         {/* İnteqrasiyalar — push, telegram, email, autoreply, verification */}
@@ -121,9 +112,12 @@ export default function SettingsPage() {
           </ul>
         </Section>
 
-        <button onClick={() => toast.success('Tənzimləmələr saxlandı')} className="btn-tap">
-          Yadda saxla
-        </button>
+        {/* «Yadda saxla» düyməsi ÇIXARILDI: heç nə saxlamırdı, yalnız uğur toast-u atırdı.
+            Qalan seçimlər (tema/sıxlıq/dil/valyuta) onsuz da seçilən anda yazılır —
+            ayrıca saxlama addımı yanlış təsəvvür yaradırdı. */}
+        <p className="text-xs text-ink-500">
+          Yuxarıdakı seçimlər dəyişdiyiniz anda avtomatik yadda saxlanılır.
+        </p>
       </div>
     </ProfileLayout>
   );
@@ -152,14 +146,6 @@ function Row({ label, hint, children }: any) {
   );
 }
 
-function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button onClick={() => onChange(!checked)}
-      className={`relative w-11 h-6 rounded-full transition ${checked ? 'bg-tap' : 'bg-ink-200 dark:bg-ink-700'}`}>
-      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
-    </button>
-  );
-}
 
 function ToggleGroup({ value, onChange, options }: any) {
   return (

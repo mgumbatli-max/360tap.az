@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Calculator, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '@/lib/api';
+import { azNumber } from '@/lib/format';
 
 export default function MortgagePreapproval() {
   const [open, setOpen] = useState(false);
@@ -46,10 +47,10 @@ export default function MortgagePreapproval() {
                 <>
                   <div className="text-sm font-bold text-emerald-700 mb-1">✅ Siz uyğunsunuz</div>
                   <div className="text-xs space-y-0.5">
-                    <div>Max kredit: <strong>{Number(result.max_loan).toLocaleString('az-AZ')} ₼</strong></div>
-                    <div>İlkin ödəniş: <strong>{Number(result.suggested_down_payment).toLocaleString('az-AZ')} ₼</strong></div>
-                    <div>Max əmlak qiyməti: <strong className="text-emerald-700">{Number(result.max_property_price).toLocaleString('az-AZ')} ₼</strong></div>
-                    <div>Aylıq təhlükəsiz ödəniş: <strong>{Number(result.safe_monthly_payment).toLocaleString('az-AZ')} ₼</strong></div>
+                    <div>Max kredit: <strong>{azNumber(result.max_loan)} ₼</strong></div>
+                    <div>İlkin ödəniş: <strong>{azNumber(result.suggested_down_payment)} ₼</strong></div>
+                    <div>Max əmlak qiyməti: <strong className="text-emerald-700">{azNumber(result.max_property_price)} ₼</strong></div>
+                    <div>Aylıq təhlükəsiz ödəniş: <strong>{azNumber(result.safe_monthly_payment)} ₼</strong></div>
                   </div>
                   <p className="text-[10px] text-ink-500 mt-2">{result.note}</p>
                 </>

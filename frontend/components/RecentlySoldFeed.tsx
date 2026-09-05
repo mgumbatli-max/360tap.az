@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { CheckCircle, Clock } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 const FAKE_SOLD = [
   { title: 'BMW X5 2020', price: 78000, time: '2 dəq əvvəl', city: 'Bakı' },
@@ -27,7 +28,7 @@ export default function RecentlySoldFeed() {
         <div className="flex-1 min-w-0">
           <div className="text-[10px] text-emerald-600 font-bold uppercase">İndi satıldı</div>
           <div className="font-semibold text-sm line-clamp-1">{item.title}</div>
-          <div className="text-xs text-tap font-bold">{item.price.toLocaleString('az-AZ')} ₼</div>
+          <div className="text-xs text-tap font-bold">{azNumber(item.price)} ₼</div>
           <div className="text-[10px] text-ink-500 flex items-center gap-1 mt-0.5">
             <Clock className="w-2.5 h-2.5" /> {item.time} · 📍 {item.city}
           </div>

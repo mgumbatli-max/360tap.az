@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { SlidersHorizontal, MapPin, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { FiltersState } from './FilterSidebar';
+import { azNumber } from '@/lib/format';
 
 export default function UniversalTopBar({
   filters,
@@ -104,7 +105,7 @@ export default function UniversalTopBar({
 
         {/* Sayğac */}
         <span className="text-sm text-ink-500 ml-auto">
-          {totalCount != null && `${totalCount.toLocaleString('az-AZ')} elan`}
+          {totalCount != null && `${azNumber(totalCount)} elan`}
         </span>
       </div>
 

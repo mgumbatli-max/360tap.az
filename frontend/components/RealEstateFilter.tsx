@@ -9,6 +9,7 @@ import {
   PROPERTY_TYPES, BUILDING_TYPES, REPAIR_TYPES, BUILDING_MATERIALS, DOC_TYPES,
   FURNITURE_OPTIONS, APPLIANCES, NEARBY_POI, SELLER_TYPES, RENT_PERIOD, COMMISSION, DEPOSIT,
 } from '@/lib/realestate-data';
+import { azNumber } from '@/lib/format';
 
 export type RealEstateFilters = {
   // Tip
@@ -469,7 +470,7 @@ export default function RealEstateFilter({
 
       {/* Apply */}
       <button onClick={onApply} className="btn-tap w-full">
-        {totalCount != null ? `${totalCount.toLocaleString('az-AZ')} elan göstər` : 'Axtar'}
+        {totalCount != null ? `${azNumber(totalCount)} elan göstər` : 'Axtar'}
       </button>
 
       <LocationPicker

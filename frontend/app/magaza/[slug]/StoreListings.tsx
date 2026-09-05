@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import type { ListMeta, StoreListing } from '../store-api';
+import { azNumber } from '@/lib/format';
 
 /**
  * MAĞAZANIN ELANLARI — şəbəkə + sonsuz scroll + mağaza daxilində axtarış/kateqoriya filtri.
@@ -29,7 +30,7 @@ function mapListing(l: StoreListing): Listing {
     price: l.price ?? null,
     currency: l.currency ?? 'AZN',
     price_type: l.priceType ?? 'fixed',
-    is_vip: l.isVip,
+    is_vip: l.isVip, is_demo: l.isDemo,
     is_premium: l.isPremium,
     has_delivery: l.hasDelivery,
     views: l.views,
@@ -173,7 +174,7 @@ export default function StoreListings({
 
   const resultLabel = filtering
     ? `${filtered.length} nəticə`
-    : `${initialMeta.total.toLocaleString('az-AZ')} elan`;
+    : `${azNumber(initialMeta.total)} elan`;
 
   return (
     <section aria-labelledby="magaza-elanlari">

@@ -4,6 +4,7 @@ import { Gift, Loader2 } from 'lucide-react';
 import { useToast } from '@/lib/toast';
 import { AdminApi, type AdminPackage, type AdminSubscription, type Fail } from './adminApi';
 import { EmptyBlock, FailBlock, LoadingBlock, Pager, SectionCard, TableScroll, Td, Th } from './ui';
+import { azDate } from '@/lib/format';
 
 const LIMIT = 20;
 
@@ -170,8 +171,8 @@ export default function SubscriptionsSection() {
                       </span>
                     </Td>
                     <Td className="whitespace-nowrap text-xs">
-                      {new Date(s.startsAt).toLocaleDateString('az-AZ')} —{' '}
-                      {new Date(s.endsAt).toLocaleDateString('az-AZ')}
+                      {azDate(s.startsAt)} —{' '}
+                      {azDate(s.endsAt)}
                     </Td>
                     <Td className="whitespace-nowrap">
                       {s.quotaLeft} elan · {s.balanceLeft} ₼

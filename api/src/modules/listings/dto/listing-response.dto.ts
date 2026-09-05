@@ -40,6 +40,12 @@ export interface ListingResponse {
   lng: number | null;
   isVip: boolean;
   isPremium: boolean;
+  /**
+   * NÜMUNƏ (DEMO) ELAN — vitrin boş qalmasın deyə seed ilə yaradılıb.
+   * Klient bunu açıq nişanla göstərməlidir: istifadəçi saxta təklifə zəng edib
+   * cavab almasa, bu, birbaşa etibar itkisidir.
+   */
+  isDemo: boolean;
   views: number;
   favoritesCount: number;
   publishedAt: Date | null;
@@ -100,6 +106,7 @@ export function toListingResponse(listing: WithRelations): ListingResponse {
     lng: listing.lng,
     isVip: listing.isVip,
     isPremium: listing.isPremium,
+    isDemo: listing.isDemo,
     views: listing.views,
     favoritesCount: listing.favoritesCount,
     publishedAt: listing.publishedAt,

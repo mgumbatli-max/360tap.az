@@ -1,5 +1,6 @@
 'use client';
 import { TrendingDown, TrendingUp, Minus } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function PriceHistory({ currentPrice }: { currentPrice: number }) {
   // Mock: 6 nöqtə son 6 ay üçün
@@ -36,7 +37,7 @@ export default function PriceHistory({ currentPrice }: { currentPrice: number })
               />
               <div className="text-[9px] text-ink-400 mt-1 -rotate-45 whitespace-nowrap">{months[i]}</div>
               <div className="absolute -top-6 text-[10px] font-bold opacity-0 group-hover:opacity-100 bg-ink-900 text-white px-1.5 py-0.5 rounded">
-                {p.toLocaleString('az-AZ')} ₼
+                {azNumber(p)} ₼
               </div>
             </div>
           );

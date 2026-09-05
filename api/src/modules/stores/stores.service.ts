@@ -180,12 +180,24 @@ export class StoresService {
   }
 
   /** Sahibin öz mağazası — `pending`/`suspended` olsa da göstərilir (status daxil). */
+  /**
+   * «MƏNİM MAĞAZAM» — MAĞAZASI OLMAMAQ XƏTA DEYİL.
+   *
+   * ƏVVƏL: mağazası olmayan istifadəçi üçün 404 atılırdı. Nəticədə `/profil/magazam`
+   * səhifəsi HƏR ADİ AÇILIŞDA brauzer konsoluna «Failed to load resource: 404»
+   * yazırdı və şəbəkə panelində uğursuz sorğu görünürdü — halbuki bu, tam normal
+   * vəziyyətdir: istifadəçi hələ mağaza açmayıb.
+   *
+   * «Varmı?» sualına «yoxdur» cavabı 200 + `null`-dır. 404 yalnız MÖVCUD OLMAYAN
+   * resursa müraciətdə mənalıdır; burada resurs istifadəçinin özüdür və o mövcuddur.
+   * Klient `data === null` halını «mağaza yarat» ekranı kimi göstərir.
+   */
   async getMine(ownerId: string) {
     const store = await this.prisma.store.findUnique({
       where: { ownerId },
       select: STORE_PUBLIC_SELECT,
     });
-    if (!store) throw new NotFoundException('Mağazanız yoxdur — əvvəlcə POST /me/store');
+    if (!store) return null;
 
     const [activeListings, totalListings, branches] = await this.prisma.$transaction([
       this.prisma.listing.count({ where: { storeId: store.id, status: 'active' } }),

@@ -1,6 +1,7 @@
 'use client';
 import { TrendingUp } from 'lucide-react';
 import Link from 'next/link';
+import { azNumber } from '@/lib/format';
 
 const TRENDING = [
   { q: 'BMW X5 2020', count: 1840, change: '+45%' },
@@ -22,7 +23,7 @@ export default function TrendingSearches() {
             <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs">{i+1}</div>
             <div className="flex-1">
               <div className="text-sm font-medium group-hover:text-tap">{t.q}</div>
-              <div className="text-[10px] text-ink-500">{t.count.toLocaleString('az-AZ')} axtarış</div>
+              <div className="text-[10px] text-ink-500">{azNumber(t.count)} axtarış</div>
             </div>
             <span className="text-xs font-bold text-emerald-600">{t.change}</span>
           </Link>

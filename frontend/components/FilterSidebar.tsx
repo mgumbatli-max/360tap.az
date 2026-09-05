@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { Sparkles, X } from 'lucide-react';
 import DynamicFilters from './DynamicFilters';
+import { azNumber } from '@/lib/format';
 
 export type FiltersState = {
   q: string;
@@ -73,7 +74,7 @@ export default function FilterSidebar({
       {typeof totalCount === 'number' && (
         <div className="text-sm bg-tap-50 text-tap-700 px-3 py-2 rounded-lg flex items-center gap-2">
           <Sparkles className="w-4 h-4" />
-          {totalCount.toLocaleString('az-AZ')} elan tapıldı
+          {azNumber(totalCount)} elan tapıldı
         </div>
       )}
 

@@ -13,6 +13,7 @@ import ListingAttributes, {
   attributesToValues,
   type AttrDef,
 } from '@/components/ListingAttributes';
+import { dependentAttributeKeys } from '@/lib/attribute-taxonomy';
 
 type Region = { slug: string; nameAz: string };
 type District = { id: string; nameAz: string };
@@ -35,6 +36,40 @@ const PRICE_TYPES = [
 ];
 
 const CURRENCIES = ['AZN', 'USD', 'EUR'];
+
+/**
+ * SERVER KONTRAKTI İLƏ EYNİ HƏDLƏR (`api/.../create-listing.dto.ts`).
+ *
+ * ƏVVƏL klient qapısı 3/10 idi, backend isə 10/20 tələb edirdi: 6 simvollu
+ * başlıq formadan keçib serverdə 422 alırdı və istifadəçi bütün formanı
+ * doldurandan sonra imtina görürdü. Rəqəmlər burada sabit kimi saxlanılır ki,
+ * yoxlama mesajı, sayğac və `maxLength` bir mənbədən gəlsin.
+ */
+const TITLE_MIN = 10;
+const TITLE_MAX = 120;
+const DESC_MIN = 20;
+const DESC_MAX = 5000;
+
+/**
+ * Şəkil ölçüsü həddi — `api/src/media/media.controller.ts` (multer `fileSize`)
+ * ilə EYNİ olmalıdır. Biri dəyişəndə digəri də dəyişməlidir; server tərəfi
+ * həddi aşan faylı ingiliscə «File too large» ilə rədd edir, ona görə qapı
+ * burada, göndərişdən ƏVVƏL azərbaycanca bağlanır.
+ */
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Qiymət sahəsinin maskası: yalnız rəqəm + tək nöqtə + ən çox 2 onluq rəqəm.
+ * Backend `@IsNumber({ maxDecimalPlaces: 2 })` tələb edir və pozulanda XAM
+ * ingiliscə class-validator mesajı qaytarır — ona görə giriş anında kəsilir.
+ * «10.» kimi ARA vəziyyət qəsdən icazəlidir, əks halda onluq hissə yazmaq
+ * mümkün olmurdu.
+ */
+function maskAmount(raw: string): string {
+  const digitsOnly = raw.replace(/[^0-9.]/g, '');
+  const m = /^(\d*)(\.?)(\d{0,2})/.exec(digitsOnly);
+  return m ? `${m[1]}${m[2]}${m[3]}` : '';
+}
 
 /**
  * «Pulsuz» və «Müqavilə ilə» seçimlərində məbləğ mənasızdır — sahə söndürülür və
@@ -218,6 +253,13 @@ function ElanYerlesdirForm() {
     setError('');
     try {
       for (const file of Array.from(files).slice(0, 8 - photos.length)) {
+        // Həddi aşan fayl serverə ÜMUMİYYƏTLƏ göndərilmir: multer onu 413 +
+        // ingiliscə «File too large» ilə rədd edirdi və həmin mətn istifadəçiyə
+        // olduğu kimi çatırdı. `continue` — qalan şəkillər yüklənməyə davam etsin.
+        if (file.size > MAX_IMAGE_BYTES) {
+          setError('Şəkil 8 MB-dan böyük olmamalıdır');
+          continue;
+        }
         const fd = new FormData();
         fd.append('file', file);
         // `uploadWithAuth` — xam `fetch` + localStorage əvəzinə: o forma 401→refresh
@@ -236,8 +278,12 @@ function ElanYerlesdirForm() {
 
   const submit = async () => {
     setError('');
-    if (title.trim().length < 3) return setError('Başlıq ən azı 3 simvol olmalıdır');
-    if (description.trim().length < 10) return setError('Təsvir ən azı 10 simvol olmalıdır');
+    // Mesajlar backend mətni ilə EYNİDİR — istifadəçi eyni qaydanı iki cür
+    // ifadə olunmuş görməsin.
+    if (title.trim().length < TITLE_MIN)
+      return setError(`Başlıq ${TITLE_MIN}-${TITLE_MAX} simvol arasında olmalıdır`);
+    if (description.trim().length < DESC_MIN)
+      return setError(`Təsvir ${DESC_MIN}-${DESC_MAX} simvol arasında olmalıdır`);
     if (!categoryId) return setError('Kateqoriya seçin');
 
     // Məcburi xüsusiyyətlər — backend də yoxlayır, amma orada xəta sahəyə bağlanmır
@@ -253,14 +299,18 @@ function ElanYerlesdirForm() {
     setSubmitting(true);
     try {
       const attributes = buildAttributePayload(attrDefs, attrValues);
+      // Maska «10.» kimi ara vəziyyətə icazə verir → `Number('10.')` yaxşıdır,
+      // amma tək «.» NaN verir və JSON-da `null` kimi gedib 422 doğururdu.
+      const priceNum = !priceless && price ? Number(price) : NaN;
+      const oldPriceNum = !priceless && oldPrice ? Number(oldPrice) : NaN;
       const payload: Record<string, unknown> = {
         title: title.trim(),
         description: description.trim(),
         categoryId,
         districtId: districtId || undefined,
         address: address.trim() || undefined,
-        price: !priceless && price ? Number(price) : undefined,
-        oldPrice: !priceless && oldPrice ? Number(oldPrice) : undefined,
+        price: Number.isFinite(priceNum) ? priceNum : undefined,
+        oldPrice: Number.isFinite(oldPriceNum) ? oldPriceNum : undefined,
         currency,
         priceType,
         condition: condition || undefined,
@@ -355,10 +405,13 @@ function ElanYerlesdirForm() {
                 id="f-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Məs: iPhone 14 Pro 256GB"
+                placeholder="Məs: iPhone 14 Pro 256GB — zəmanətlə"
                 className="inp"
-                maxLength={120}
+                maxLength={TITLE_MAX}
               />
+              {/* Canlı sayğac: minimum hədd yalnız submit-də görünürdü, ona görə
+                  istifadəçi qısa başlıqla forma dolduranadək bunu bilmirdi. */}
+              <CharCounter value={title} min={TITLE_MIN} max={TITLE_MAX} />
             </Field>
             <Field label="Təsvir" htmlFor="f-desc">
               <textarea
@@ -368,8 +421,9 @@ function ElanYerlesdirForm() {
                 rows={5}
                 placeholder="Vəziyyəti, komplektasiyası, çatışmazlıqları — alıcı nə bilməlidirsə yazın."
                 className="inp resize-none"
-                maxLength={5000}
+                maxLength={DESC_MAX}
               />
+              <CharCounter value={description} min={DESC_MIN} max={DESC_MAX} />
             </Field>
           </Section>
 
@@ -381,10 +435,19 @@ function ElanYerlesdirForm() {
             <ListingAttributes
               attributes={attrDefs}
               values={attrValues}
-              onChange={(key, value) => setAttrValues((v) => ({ ...v, [key]: value }))}
+              onChange={(key, value) =>
+                setAttrValues((v) => {
+                  const next = { ...v, [key]: value };
+                  // Marka dəyişəndə köhnə model silinir: «Mercedes-Benz + Corolla»
+                  // backend-də sərbəst mətn kimi qəbul olunub bazaya düşərdi.
+                  for (const dep of dependentAttributeKeys(key)) delete next[dep];
+                  return next;
+                })
+              }
               invalidKeys={invalidAttrKeys}
               loading={attrLoading}
               hasCategory={!!categorySlug}
+              categorySlug={categorySlug}
             />
           </Section>
 
@@ -418,7 +481,7 @@ function ElanYerlesdirForm() {
                   <input
                     id="f-price"
                     value={price}
-                    onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ''))}
+                    onChange={(e) => setPrice(maskAmount(e.target.value))}
                     placeholder="0"
                     inputMode="decimal"
                     className="inp"
@@ -437,7 +500,7 @@ function ElanYerlesdirForm() {
                   <input
                     id="f-oldprice"
                     value={oldPrice}
-                    onChange={(e) => setOldPrice(e.target.value.replace(/[^0-9.]/g, ''))}
+                    onChange={(e) => setOldPrice(maskAmount(e.target.value))}
                     placeholder="—"
                     inputMode="decimal"
                     className="inp"
@@ -591,6 +654,22 @@ function ElanYerlesdirForm() {
       */}
       <style>{`.inp{width:100%;background:rgb(248 250 252);border:1px solid rgb(226 232 240);border-radius:0.625rem;padding:0.625rem 0.75rem;font-size:0.875rem;outline:none;color:inherit}.inp:focus{border-color:var(--tap)}.dark .inp{background:#1e293b;border-color:#334155}`}</style>
     </div>
+  );
+}
+
+/**
+ * Simvol sayğacı: minimum həddə çatmayanda nə qədər qaldığını göstərir.
+ * `aria-live` QƏSDƏN yoxdur — hər hərfdə ekran oxuyucusunu danışdırmaq
+ * yazmağı əngəlləyərdi; mətn sadəcə vizual göstəricidir.
+ */
+function CharCounter({ value, min, max }: { value: string; min: number; max: number }) {
+  const len = value.trim().length;
+  const short = len > 0 && len < min;
+  return (
+    <p className={`mt-1 text-right text-[12px] ${short ? 'text-danger' : 'text-ink-400'}`}>
+      {short ? `daha ${min - len} simvol · ` : ''}
+      {len}/{max}
+    </p>
   );
 }
 

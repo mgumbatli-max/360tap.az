@@ -313,6 +313,11 @@ model Listing {
 
   status          ListingStatus @default(review)
   rejectionReason String?       @map("rejection_reason")
+  /// DEMO ELAN NİŞANI — platformada real elan yoxdur, vitrin boş qalmasın deyə
+  /// seed ilə yaradılmış nümunə elanlar. İstifadəçi bunları REAL təklif zənn
+  /// etməməlidir, ona görə kartda və detal səhifəsində açıq şəkildə işarələnir.
+  /// Real elanlar gələndə təmizləmə bir sətirlik olur: DELETE ... WHERE is_demo.
+  isDemo          Boolean       @default(false) @map("is_demo")
   isVip           Boolean       @default(false) @map("is_vip")
   isPremium       Boolean       @default(false) @map("is_premium")
   isHighlight     Boolean       @default(false) @map("is_highlight")

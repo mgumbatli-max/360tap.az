@@ -24,13 +24,14 @@ type ImageSource = {
   pathPrefix?: string;
 };
 
+// QEYD: `*.onrender.com` jokeri və ölü `localhost:5400` qeydi çıxarıldı,
+// `tap360-api.onrender.com`-a isə /uploads/ yol məhdudiyyəti əlavə olundu —
+// səbəb `next.config.ts`-dəki `images` şərhində ətraflı yazılıb.
 export const ALLOWED_IMAGE_SOURCES: ImageSource[] = [
-  { protocol: 'http:', hostname: 'localhost', port: '5400', pathPrefix: '/uploads/' },
   { protocol: 'http:', hostname: 'localhost', port: '5500', pathPrefix: '/uploads/' },
   { protocol: 'https:', hostname: 'images.unsplash.com' },
   { protocol: 'https:', hostname: 'picsum.photos' },
-  { protocol: 'https:', hostname: 'tap360-api.onrender.com' },
-  { protocol: 'https:', hostname: '*.onrender.com' },
+  { protocol: 'https:', hostname: 'tap360-api.onrender.com', pathPrefix: '/uploads/' },
 ];
 
 /**

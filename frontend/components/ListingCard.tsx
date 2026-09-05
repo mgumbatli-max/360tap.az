@@ -9,6 +9,7 @@ import { addCompare, isInCompare, removeCompare } from '@/lib/compare';
 import { useAuth } from '@/lib/auth';
 import { safeImageUrl } from '@/lib/image-hosts';
 import StoreBadge from '@/components/StoreBadge';
+import { DemoTag } from '@/components/DemoBadge';
 
 export type Listing = {
   id: string;
@@ -23,6 +24,8 @@ export type Listing = {
   is_highlight?: boolean;
   is_urgent?: boolean;
   is_pro?: boolean;
+  /** Nümunə (seed) elan — kartda açıq DEMO nişanı ilə göstərilir. */
+  is_demo?: boolean;
   is_ad?: boolean;
   has_delivery?: boolean;
   views?: number;
@@ -162,6 +165,7 @@ export default function ListingCard({ item }: { item: Listing }) {
 
         {/* Bütün rozetlər sol-yuxarı küncdə toplanır (§6) */}
         <div className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
+          {item.is_demo && <DemoTag />}
           {item.is_vip && (
             <span className={PILL}>
               <Crown className="h-3 w-3 text-gold" aria-hidden="true" /> VIP
@@ -279,7 +283,7 @@ export default function ListingCard({ item }: { item: Listing }) {
         )}
 
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-500 dark:text-ink-400">
-          <span>{timeAgo(item.created_at)}</span>
+          <span suppressHydrationWarning>{timeAgo(item.created_at)}</span>
           {rating > 0 && (
             <span className="flex items-center gap-0.5">
               <Star className="h-3 w-3 fill-gold text-gold" aria-hidden="true" />

@@ -1,5 +1,6 @@
 'use client';
 import { Wrench, AlertCircle } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 const SERVICES = [
   { km: 10000, items: ['Motor yağı', 'Yağ filtri'] },
@@ -21,16 +22,16 @@ export default function ServiceReminder({ mileage = 0 }: { mileage?: number }) {
       {next && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-2">
           <div className="text-xs text-blue-700 font-bold">Növbəti servis</div>
-          <div className="font-bold mt-1">{next.km.toLocaleString('az-AZ')} km</div>
+          <div className="font-bold mt-1">{azNumber(next.km)} km</div>
           <div className="text-xs text-ink-600 mt-1">{next.items.join(', ')}</div>
-          <div className="text-[11px] text-ink-500 mt-1">Qalıb: {(next.km - mileage).toLocaleString('az-AZ')} km</div>
+          <div className="text-[11px] text-ink-500 mt-1">Qalıb: {azNumber((next.km - mileage))} km</div>
         </div>
       )}
       {overdue.length > 0 && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <div className="text-xs text-amber-700 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Vaxtı keçən servislər</div>
           {overdue.map((o) => (
-            <div key={o.km} className="text-xs mt-1">{o.km.toLocaleString('az-AZ')} km: {o.items[0]}</div>
+            <div key={o.km} className="text-xs mt-1">{azNumber(o.km)} km: {o.items[0]}</div>
           ))}
         </div>
       )}

@@ -16,7 +16,17 @@ export default async function OG({ params }: Props) {
         color: 'white', fontFamily: 'sans-serif',
       }}>
         <div style={{ fontSize: 28, opacity: 0.8 }}>360tap.az</div>
-        <div style={{ fontSize: 80, fontWeight: 900, textTransform: 'capitalize', marginTop: 8 }}>📍 {city}</div>
+        {/*
+          `display: 'flex'` MƏCBURİDİR. Satori (next/og) birdən çox uşaq düyünü olan
+          div üçün açıq `display` tələb edir; burada uşaqlar ikidir («📍 » mətni +
+          {city}), ona görə render istisna atırdı və marşrut lokalda cavabsız
+          bağlanır, canlıda isə 0 baytlıq image/png 200 qaytarırdı.
+          Alternativ (emoji ilə şəhəri bir string-ə birləşdirmək) rədd edildi —
+          bu fayldakı digər div-lər onsuz da açıq `display` istifadə edir, ona görə
+          eyni üslubu saxlamaq daha az sürprizlidir.
+          QEYD: `textTransform: 'capitalize'` GÜNAHKAR DEYİL — ölçüldü, işləyir.
+        */}
+        <div style={{ display: 'flex', fontSize: 80, fontWeight: 900, textTransform: 'capitalize', marginTop: 8 }}>📍 {city}</div>
         <div style={{ fontSize: 28, marginTop: 32, opacity: 0.9 }}>Bu şəhərdə bütün elanlar</div>
       </div>
     ),

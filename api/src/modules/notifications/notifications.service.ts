@@ -33,11 +33,26 @@ export class NotificationsService {
     }
   }
 
-  async list(userId: string, limit = 30): Promise<NotificationView[]> {
+  // Səhifələmə: `limit` (default 30, tavan 50) + keyset `cursor`.
+  // Cavab QƏSDƏN massiv olaraq qalır — `{data, meta}` zərfinə keçmək mövcud
+  // frontend-i (NotificationBell və bildirişlər səhifəsi) eyni anda sındırardı;
+  // klient «daha var?» sualını `nəticə.length === limit` ilə cavablandıra bilər.
+  async list(userId: string, limit = 30, cursor?: string): Promise<NotificationView[]> {
+    const take = Math.min(Math.max(limit, 1), 50);
+    if (cursor) {
+      // Yad/silinmiş kursor id-də Prisma gözlənilməz nəticə verir — əvvəl sahiblik yoxlanır
+      const anchor = await this.prisma.notification.findFirst({
+        where: { id: cursor, userId },
+        select: { id: true },
+      });
+      if (!anchor) return [];
+    }
     const items = await this.prisma.notification.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(limit, 50),
+      // id ikinci meyar kimi: eyni createdAt-da sıra sabit qalsın (kursor sürüşməsin)
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
     return items.map((n) => ({
       id: n.id,

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { azNumber } from '@/lib/format';
 
 type Insight = {
   position: number | null;
@@ -46,7 +47,7 @@ export default function PriceInsight({ listingId }: { listingId: string }) {
         <div className="flex-1">
           <div className="font-bold">{data.label}</div>
           <div className="text-xs mt-1.5 space-y-0.5">
-            <div>Bazar median: <strong>{Math.round(data.median).toLocaleString('az-AZ')} ₼</strong></div>
+            <div>Bazar median: <strong>{azNumber(Math.round(data.median))} ₼</strong></div>
             <div>Bənzər elan sayı: <strong>{data.sample}</strong></div>
             {data.position != null && (
               <div>Sizin qiymət: bütün bənzər elanların {data.position}%-dən aşağıdadır</div>

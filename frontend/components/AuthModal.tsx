@@ -4,6 +4,13 @@ import Link from 'next/link';
 import { X, Phone, Mail } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import PhoneOtpForm from './PhoneOtpForm';
+import {
+  PASSWORD_HINT,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_PATTERN,
+  PASSWORD_PLACEHOLDER,
+  validatePassword,
+} from '@/lib/validation';
 
 type Method = 'phone' | 'email';
 type EmailMode = 'login' | 'register';
@@ -63,7 +70,12 @@ export default function AuthModal({
 
   const onRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(''); setLoading(true);
+    setError('');
+    // Parol qaydası backend DTO-su ilə eynidir (lib/validation.ts) — sorğu göndərilməmişdən
+    // əvvəl yoxlanır. GİRİŞ formasına TOXUNULMUR: köhnə 6 simvollu parollar hələ də etibarlıdır.
+    const pwErr = validatePassword(regForm.password);
+    if (pwErr) { setError(pwErr); return; }
+    setLoading(true);
     try {
       const data: any = { full_name: regForm.full_name, password: regForm.password };
       if (regForm.email) data.email = regForm.email;
@@ -214,12 +226,14 @@ export default function AuthModal({
                 />
                 <input
                   type="password"
-                  placeholder="Parol (min 6) *"
+                  placeholder={PASSWORD_PLACEHOLDER}
                   value={regForm.password}
                   onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
                   className={FIELD}
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  pattern={PASSWORD_PATTERN}
+                  title={PASSWORD_HINT}
                 />
                 <input
                   type="text"

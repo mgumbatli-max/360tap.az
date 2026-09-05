@@ -1,6 +1,7 @@
 'use client';
 import { Trophy, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
+import { azNumber } from '@/lib/format';
 
 const POPULAR = [
   { rank: 1, brand: 'Toyota',   model: 'Camry',     count: 1840, avg: 28500, change: '+12%' },
@@ -31,7 +32,7 @@ export default function PopularCarsRanking() {
             }`}>{c.rank}</div>
             <div className="flex-1">
               <div className="font-bold text-sm group-hover:text-tap">{c.brand} {c.model}</div>
-              <div className="text-[11px] text-ink-500">{c.count.toLocaleString('az-AZ')} elan · orta {c.avg.toLocaleString('az-AZ')}₼</div>
+              <div className="text-[11px] text-ink-500">{azNumber(c.count)} elan · orta {azNumber(c.avg)}₼</div>
             </div>
             <span className="text-xs font-bold text-emerald-600 flex items-center gap-0.5">
               <TrendingUp className="w-3 h-3" /> {c.change}

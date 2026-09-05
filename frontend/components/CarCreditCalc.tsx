@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { CreditCard } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function CarCreditCalc({ price = 30000 }: { price?: number }) {
   const [carPrice, setCarPrice] = useState(price);
@@ -30,10 +31,10 @@ export default function CarCreditCalc({ price = 30000 }: { price?: number }) {
 
       <div className="mt-5 p-4 bg-tap-50 dark:bg-tap/10 rounded-xl">
         <div className="text-xs text-ink-600">Aylıq ödəniş</div>
-        <div className="text-3xl font-extrabold text-tap">{Math.round(monthly).toLocaleString('az-AZ')} ₼</div>
+        <div className="text-3xl font-extrabold text-tap">{azNumber(Math.round(monthly))} ₼</div>
         <div className="text-xs space-y-0.5 mt-2 text-ink-600">
-          <div>Ümumi ödəniş: <strong>{Math.round(total).toLocaleString('az-AZ')}₼</strong></div>
-          <div>Əlavə ödəniş: <strong className="text-amber-600">{Math.round(overpay).toLocaleString('az-AZ')}₼</strong></div>
+          <div>Ümumi ödəniş: <strong>{azNumber(Math.round(total))}₼</strong></div>
+          <div>Əlavə ödəniş: <strong className="text-amber-600">{azNumber(Math.round(overpay))}₼</strong></div>
         </div>
       </div>
     </div>
@@ -43,7 +44,7 @@ export default function CarCreditCalc({ price = 30000 }: { price?: number }) {
 function Range({ label, value, setValue, min, max, step, suffix }: any) {
   return (
     <div>
-      <div className="flex justify-between text-xs font-semibold mb-1"><span>{label}</span><span className="text-tap">{value.toLocaleString('az-AZ')}{suffix}</span></div>
+      <div className="flex justify-between text-xs font-semibold mb-1"><span>{label}</span><span className="text-tap">{azNumber(value)}{suffix}</span></div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => setValue(Number(e.target.value))} className="w-full" />
     </div>
   );

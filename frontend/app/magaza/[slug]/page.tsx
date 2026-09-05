@@ -31,6 +31,7 @@ import {
 import { parseWorkingHours } from '../working-hours';
 import StoreHours from './StoreHours';
 import StoreListings from './StoreListings';
+import { azNumber } from '@/lib/format';
 
 /** Elanlar/ana səhifə ilə eyni işçi sahə — səhifələr arası sıçrama olmasın. */
 const SHELL = 'mx-auto w-full max-w-[1360px] px-4 md:px-6';
@@ -181,7 +182,7 @@ export default async function StorePage({ params }: { params: Promise<{ slug: st
                 <span>Hələ rəy yoxdur</span>
               )}
               <span>
-                {(store.activeListings ?? meta.total).toLocaleString('az-AZ')} aktiv elan
+                {azNumber((store.activeListings ?? meta.total))} aktiv elan
               </span>
               <span>{new Date(store.createdAt).getFullYear()}-dən 360tap.az-da</span>
             </div>

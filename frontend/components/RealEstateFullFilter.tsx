@@ -9,6 +9,7 @@ import {
   SELLER_TYPES, REPAIR_TYPES, DOC_TYPES,
 } from '@/lib/realestate-data';
 import type { RealEstateFilters } from './RealEstateFilter';
+import { azNumber } from '@/lib/format';
 
 export type RealEstateFiltersV2 = RealEstateFilters & {
   housing_type?: string;
@@ -343,7 +344,7 @@ export default function RealEstateFullFilter({
             onClick={() => { onApply(); onClose(); }}
             className="flex-1 py-3.5 bg-tap text-white rounded-xl font-semibold hover:opacity-90 transition"
           >
-            {totalCount != null ? `${totalCount.toLocaleString('az-AZ')}+ elan göstər` : 'Tətbiq et'}
+            {totalCount != null ? `${azNumber(totalCount)}+ elan göstər` : 'Tətbiq et'}
           </button>
           {onShowMap && (
             <button

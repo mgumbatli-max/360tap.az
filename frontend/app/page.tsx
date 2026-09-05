@@ -31,6 +31,7 @@ type NestListing = {
   currency: string;
   priceType: string;
   isVip?: boolean;
+  isDemo?: boolean;
   isPremium?: boolean;
   hasDelivery?: boolean;
   views?: number;
@@ -49,7 +50,7 @@ function mapListing(l: NestListing): Listing {
     price: l.price ?? null,
     currency: l.currency ?? 'AZN',
     price_type: l.priceType ?? 'fixed',
-    is_vip: l.isVip,
+    is_vip: l.isVip, is_demo: l.isDemo,
     is_premium: l.isPremium,
     has_delivery: l.hasDelivery,
     views: l.views,

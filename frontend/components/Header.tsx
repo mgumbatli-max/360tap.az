@@ -89,7 +89,15 @@ export default function Header({ section }: { section?: string }) {
     e.preventDefault();
     router.push(`/elanlar${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`);
   };
-  // Elan yerləşdirmə girişsiz mümkün deyil — link kimi qalır, amma qonağa modal açırıq.
+  /**
+   * Girişsiz mümkün olmayan keçidlər (elan yerləşdir, sevimlilər, səbət).
+   *
+   * NİYƏ href REAL SƏHİFƏDİR: əvvəl qonaq üçün `href="#"` yazılırdı. Adi klik
+   * işləyirdi (modal açılırdı), LAKİN orta düymə, Cmd+klik və «yeni tabda aç»
+   * heç nə etmirdi, skrinrider isə hədəfsiz keçid oxuyurdu. İndi hədəf `/login`-dir:
+   * adi klikdə `preventDefault` modalı açır (davranış dəyişmir), yeni tabda isə
+   * istifadəçi real giriş səhifəsinə düşür.
+   */
   const guardPost = (e: React.MouseEvent) => {
     if (!user) {
       e.preventDefault();
@@ -181,7 +189,7 @@ export default function Header({ section }: { section?: string }) {
               <ThemeToggle />
 
               <Link
-                href={user ? '/profil/sevimliler' : '#'}
+                href={user ? '/profil/sevimliler' : '/login'}
                 onClick={(e) => { if (!user) { e.preventDefault(); openLogin(); } }}
                 aria-label="Sevimlilər"
                 title="Sevimlilər"
@@ -191,7 +199,7 @@ export default function Header({ section }: { section?: string }) {
               </Link>
 
               <Link
-                href={user ? '/profil/sebet' : '#'}
+                href={user ? '/profil/sebet' : '/login'}
                 onClick={(e) => { if (!user) { e.preventDefault(); openLogin(); } }}
                 aria-label="Səbət"
                 title="Səbət"
@@ -249,7 +257,7 @@ export default function Header({ section }: { section?: string }) {
 
               {/* Avito-da bu element düymə deyil, 600 çəkili mətn linkidir */}
               <Link
-                href={user ? '/elan-yerlesdir' : '#'}
+                href={user ? '/elan-yerlesdir' : '/login'}
                 onClick={guardPost}
                 className={`inline-flex items-center gap-1 rounded px-1 py-0.5 font-semibold text-ink-800 dark:text-ink-100 hover:text-tap ${RING}`}
               >
@@ -373,7 +381,7 @@ export default function Header({ section }: { section?: string }) {
 
             {/* Mobil əsas sətirdə yer olmadığına görə CTA drawer-in başında dayanır */}
             <Link
-              href={user ? '/elan-yerlesdir' : '#'}
+              href={user ? '/elan-yerlesdir' : '/login'}
               onClick={(e) => { setMobileOpen(false); guardPost(e); }}
               className={`flex items-center justify-center gap-1.5 h-11 rounded-lg bg-tap text-white font-bold mb-4 hover:bg-tap-600 ${RING}`}
             >

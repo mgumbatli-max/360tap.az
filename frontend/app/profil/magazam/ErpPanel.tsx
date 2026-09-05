@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Copy, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/lib/toast';
 import { StoreApi, type ErpCredentials, type ErpStatus, type Fail } from './storeApi';
+import { azDateTime } from '@/lib/format';
 
 /**
  * ERP İNTEQRASİYASI — platformanın rəqiblərdə OLMAYAN üstünlüyü, ona görə
@@ -104,7 +105,7 @@ export default function ErpPanel() {
               <Stat label="Sinxron məhsul" value={String(status.productCount ?? 0)} />
               <Stat
                 label="Son sinxronizasiya"
-                value={status.lastSyncAt ? new Date(status.lastSyncAt).toLocaleString('az-AZ') : 'Hələ yoxdur'}
+                value={status.lastSyncAt ? azDateTime(status.lastSyncAt) : 'Hələ yoxdur'}
               />
               <Stat label="Tenant ID" value={status.erpTenantId ?? '—'} mono />
             </div>

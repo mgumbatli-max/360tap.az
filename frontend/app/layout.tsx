@@ -36,22 +36,28 @@ export const metadata: Metadata = {
   // (hər cavabda `<link rel="canonical" href="https://360tap.az"/>`). Nəticədə axtarış
   // motorları üçün bütün sayt tək bir URL-ə yığılırdı: alt səhifələr indeksdən düşür.
   // Canonical artıq hər səhifənin ÖZ metadata-sında qurulur (`buildMetadata({ path })`).
-  alternates: {
-    languages: {
-      'az-AZ': SITE.url,
-      'ru-RU': `${SITE.url}/ru`,
-      'en-US': `${SITE.url}/en`,
-    },
-  },
+  //
+  // `alternates.languages` BLOKU TAMAMİLƏ SİLİNDİ. O, hər səhifədə üç hreflang elan
+  // edirdi: `az-AZ` → ANA SƏHİFƏ (yəni elan detalı özünü ana səhifənin az variantı
+  // sayırdı), `ru-RU` → /ru və `en-US` → /en — hər ikisi 404. Mövcud olmayan
+  // dil versiyalarına hreflang vermək axtarış motorlarında xəta yaradır və heç bir
+  // fayda vermir. Ru/En real qurulanda hreflang hər səhifə üçün ÖZ yolu ilə
+  // (`/ru/elanlar/<id>`) + `x-default` ilə bərpa olunmalı və `buildMetadata`-nın
+  // `alternates`-inə də əlavə edilməlidir.
+  // DİQQƏT: bura `canonical` GERİ QOYULMAMALIDIR — yuxarıdakı şərh səbəbi izah edir.
   openGraph: {
     type: 'website',
     locale: 'az_AZ',
-    alternateLocale: ['ru_RU', 'en_US'],
+    // `alternateLocale: ['ru_RU','en_US']` silindi — mövcud olmayan dil versiyalarını
+    // elan edirdi (yuxarıdakı hreflang qeydi ilə eyni səbəb).
     siteName: '360tap.az',
     title: '360tap.az — Universal elanlar marketplace',
     description: SITE.description,
     url: SITE.url,
-    images: [{ url: `${SITE.url}/og-default.png`, width: 1200, height: 630, alt: '360tap.az' }],
+    // `images: [/og-default.png]` silindi — həmin fayl `public/`-də YOXDUR (404).
+    // Onun yerinə Next-in fayl-konvensiyalı `app/opengraph-image.tsx`-i (işləyir,
+    // ~190 KB PNG) qüvvəyə minir və bütün alt marşrutlara miras keçir — bu davranış
+    // /biznes, /komek, /ai-elan səhifələrində onsuz da müşahidə olunub.
   },
   twitter: {
     card: 'summary_large_image',

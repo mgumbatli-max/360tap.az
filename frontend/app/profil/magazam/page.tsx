@@ -17,6 +17,7 @@ import CreateStoreForm from './CreateStoreForm';
 import StoreEditor from './StoreEditor';
 import StorefrontLink from './StorefrontLink';
 import { StoreApi, STORE_STATUS_LABEL, type Fail, type MyStore } from './storeApi';
+import { azDate } from '@/lib/format';
 
 /**
  * MAĞAZA SAHİBİNİN KABİNETİ.
@@ -130,7 +131,7 @@ function StoreHeader({ store }: { store: MyStore }) {
               {store.createdAt && (
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-ink-400 dark:text-ink-500" />
-                  {new Date(store.createdAt).toLocaleDateString('az-AZ')}-dən bəri
+                  {azDate(store.createdAt)}-dən bəri
                 </span>
               )}
             </div>

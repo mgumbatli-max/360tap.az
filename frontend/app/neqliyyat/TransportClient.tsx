@@ -14,6 +14,7 @@ import MonthlyCostCalc from '@/components/MonthlyCostCalc';
 import PopularCarsRanking from '@/components/PopularCarsRanking';
 import { api } from '@/lib/api';
 import { Car, LayoutGrid, List, Wrench, Sparkles } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function TransportClient({ initialItems = [], initialTotal = 0 }: { initialItems?: Listing[]; initialTotal?: number }) {
   const [filters, setFilters] = useState<TransportFilters>({});
@@ -98,7 +99,7 @@ export default function TransportClient({ initialItems = [], initialTotal = 0 }:
 
       <div className="flex items-center justify-between mb-3 gap-2">
         <span className="text-sm text-ink-500">
-          {loading ? 'Yüklənir...' : `${total.toLocaleString('az-AZ')} avtomobil`}
+          {loading ? 'Yüklənir...' : `${azNumber(total)} avtomobil`}
         </span>
         <div className="flex gap-1">
           <button onClick={() => setView('grid')} className={`btn-secondary !p-2 ${view==='grid' ? '!border-tap text-tap' : ''}`}><LayoutGrid className="w-4 h-4" /></button>

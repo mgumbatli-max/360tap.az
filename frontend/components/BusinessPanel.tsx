@@ -1,13 +1,20 @@
 import Link from 'next/link';
-import { Package, Building2, Box, Truck, Wrench, Users, Sparkles } from 'lucide-react';
+import { Package, Building2, Hammer, Truck, Wrench, Users, Sparkles } from 'lucide-react';
 
+// İKİ DÜZƏLİŞ:
+// 1) Slug-lar REAL kateqoriyalara bağlandı. Əvvəlki `avadanliq`, `saha`, `mehsullar`, `is`
+//    bazada MÖVCUD DEYİL (yalnız `neqliyyat` və `xidmetler` var idi) — bu 4 link boş nəticəli
+//    «soft-404» səhifəyə aparırdı, üstəlik indekslənməyə açıq idi.
+// 2) Hədəf birbaşa `/elanlar?category=…`-dır, `/k/<slug>` yox: `/k/*` route-u yönləndirmə
+//    edir və 307 ilə birlikdə ~33 KB gövdə göndərir — daxili naviqasiyada bu artıq hop
+//    heç bir fayda vermir. `/k/*` xarici/SEO linklər üçün olduğu kimi qalır.
 const SERVICES = [
-  { icon: Package, label: 'Avadanlıq', href: '/k/avadanliq' },
-  { icon: Building2, label: 'Sahə', href: '/k/saha' },
-  { icon: Box, label: 'Məhsullar', href: '/k/mehsullar' },
-  { icon: Truck, label: 'Nəqliyyat', href: '/k/neqliyyat' },
-  { icon: Wrench, label: 'Xidmətlər', href: '/k/xidmetler' },
-  { icon: Users, label: 'İşçilər', href: '/k/is' },
+  { icon: Package, label: 'Avadanlıq', href: '/elanlar?category=biznes-avadanliq' },
+  { icon: Building2, label: 'Əmlak', href: '/elanlar?category=dasinmaz-emlak' },
+  { icon: Hammer, label: 'Tikinti', href: '/elanlar?category=tikinti-temir' },
+  { icon: Truck, label: 'Nəqliyyat', href: '/elanlar?category=neqliyyat' },
+  { icon: Wrench, label: 'Xidmətlər', href: '/elanlar?category=xidmetler' },
+  { icon: Users, label: 'İşçilər', href: '/elanlar?category=is-elanlari' },
 ];
 
 export default function BusinessPanel() {

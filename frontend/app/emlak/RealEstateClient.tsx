@@ -14,6 +14,7 @@ import PropertyCompare from '@/components/PropertyCompare';
 import SavedMatches from '@/components/SavedMatches';
 import { api } from '@/lib/api';
 import { Home, LayoutGrid, List, Map, TrendingDown, Sparkles, Calculator } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 const DEFAULT_F: RealEstateFilters = {
   deal_type: 'sale',
@@ -152,7 +153,7 @@ export default function RealEstateClient() {
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="text-sm text-ink-500">
-          {loading ? 'Yüklənir...' : `${total.toLocaleString('az-AZ')} əmlak elanı`}
+          {loading ? 'Yüklənir...' : `${azNumber(total)} əmlak elanı`}
           {filters.recently_dropped && (
             <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
               <TrendingDown className="w-3 h-3" /> Endirilənlər
@@ -248,10 +249,10 @@ function MortgageCalc({ onClose }: { onClose: () => void }) {
         </div>
         <div className="mt-5 p-4 bg-tap-50 rounded-xl">
           <div className="text-sm text-ink-600">Aylıq ödəniş</div>
-          <div className="text-3xl font-extrabold text-tap">{Math.round(monthly).toLocaleString('az-AZ')} ₼</div>
+          <div className="text-3xl font-extrabold text-tap">{azNumber(Math.round(monthly))} ₼</div>
           <div className="text-xs text-ink-500 mt-2 space-y-0.5">
-            <div>Ümumi ödəniş: <strong>{Math.round(total).toLocaleString('az-AZ')} ₼</strong></div>
-            <div>Əlavə ödəniş: <strong className="text-amber-600">{Math.round(overpay).toLocaleString('az-AZ')} ₼</strong></div>
+            <div>Ümumi ödəniş: <strong>{azNumber(Math.round(total))} ₼</strong></div>
+            <div>Əlavə ödəniş: <strong className="text-amber-600">{azNumber(Math.round(overpay))} ₼</strong></div>
           </div>
         </div>
         <button onClick={onClose} className="btn-tap w-full mt-4">Bağla</button>
@@ -265,7 +266,7 @@ function Range({ label, value, setValue, min, max, step, suffix }: any) {
     <div>
       <div className="flex justify-between text-sm font-semibold text-ink-700 mb-1">
         <span>{label}</span>
-        <span className="text-tap">{value.toLocaleString('az-AZ')}{suffix}</span>
+        <span className="text-tap">{azNumber(value)}{suffix}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => setValue(Number(e.target.value))} className="w-full" />

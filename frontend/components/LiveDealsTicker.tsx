@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { TrendingUp, Users, Clock, Sparkles } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 const STATS = [
   { icon: TrendingUp, label: 'bu gün satıldı', from: 1200, to: 1450, color: 'text-emerald-500' },
@@ -30,7 +31,7 @@ export default function LiveDealsTicker() {
             <div key={i} className="flex items-center gap-2">
               <I className={`w-5 h-5 ${s.color}`} />
               <div>
-                <div className="font-extrabold text-base">{vals[i].toLocaleString('az-AZ')}</div>
+                <div className="font-extrabold text-base">{azNumber(vals[i])}</div>
                 <div className="text-[10px] text-ink-500">{s.label}</div>
               </div>
             </div>

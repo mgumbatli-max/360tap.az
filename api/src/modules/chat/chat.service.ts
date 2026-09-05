@@ -52,6 +52,12 @@ export class ChatService {
           },
         },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+        // Oxunmamış sayı: söhbət siyahısında heç bir göstərici yox idi, halbuki
+        // `messages.readAt` onsuz da doldurulur (getMessages:120). Aqreqasiya DB-də
+        // edilir — söhbət başına ayrıca sorğu (N+1) açmamaq üçün `_count` seçildi.
+        _count: {
+          select: { messages: { where: { senderId: { not: userId }, readAt: null } } },
+        },
       },
     });
     const otherIds = [
@@ -76,6 +82,8 @@ export class ChatService {
         otherUser: { id: otherId, fullName: nameMap.get(otherId) ?? 'İstifadəçi' },
         lastMessage: c.messages[0]?.content ?? null,
         lastMessageAt: c.lastMessageAt,
+        // Yeni sahə — mövcud klientlər üçün geriyə uyğundur (əlavədir, heç nə silinmir)
+        unreadCount: c._count.messages,
       };
     });
   }

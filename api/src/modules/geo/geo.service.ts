@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { haversineKm } from './utils/haversine';
+import { isSafeSlug } from './utils/slug';
 
 export interface ResolvedLocation {
   districtId: string;
@@ -26,6 +27,10 @@ export class GeoService {
 
   /** Regionun rayonları. */
   async districts(regionSlug: string) {
+    // Format yoxlaması DB sorğusundan ƏVVƏL: yararsız slug artıq 500 yox,
+    // mövcud olmayan region ilə eyni 404 verir (paritet).
+    // Mesajda xam dəyər ƏKS OLUNMUR — idarəedici simvollar cavaba düşməsin.
+    if (!isSafeSlug(regionSlug)) throw new NotFoundException('Region tapılmadı');
     const region = await this.prisma.region.findUnique({
       where: { slug: regionSlug },
       select: { id: true },

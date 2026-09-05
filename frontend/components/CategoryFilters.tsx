@@ -10,6 +10,8 @@ import {
   RotateCcw,
   SlidersHorizontal,
 } from 'lucide-react';
+import { azNumber } from '@/lib/format';
+import { dependentAttributeKeys, resolveAttributeOptions } from '@/lib/attribute-taxonomy';
 
 export type CatAttr = {
   key: string;
@@ -69,7 +71,16 @@ export default function CategoryFilters({
     router.push(s ? `${pathname}?${s}` : pathname);
   };
 
-  const setAttr = (key: string, value: string) => apply({ [`a_${key}`]: value });
+  /**
+   * Atribut filtri. Valideyn atribut (marka) dəyişəndə ondan asılı filtr (model)
+   * də URL-dən silinir — əks halda «Mercedes-Benz + Corolla» kimi heç vaxt
+   * nəticə verməyən kombinasiya linkdə qalırdı.
+   */
+  const setAttr = (key: string, value: string) => {
+    const patch: Record<string, string> = { [`a_${key}`]: value };
+    for (const dep of dependentAttributeKeys(key)) patch[`a_${dep}`] = '';
+    apply(patch);
+  };
 
   /** Filtrləri sıfırla, amma kateqoriya/axtarış kimliyini SAXLA. */
   const reset = () => {
@@ -82,10 +93,32 @@ export default function CategoryFilters({
     router.push(s ? `${pathname}?${s}` : pathname);
   };
 
-  // Filtrlənə bilən select(opsiyalı), number(range) və boolean atributlar
-  const selects = attributes.filter(
-    (a) => a.isFilterable !== false && a.type === 'select' && (a.options?.length ?? 0) > 0,
-  );
+  const categorySlug = get('category');
+
+  /**
+   * Filtrlənə bilən select atributları — seçim siyahısı İKİ mənbədən gəlir:
+   * sxem (`a.options`) və klient taksonomiyası (`resolveAttributeOptions`).
+   *
+   * ƏVVƏL burada yalnız `(a.options?.length ?? 0) > 0` şərti vardı, ona görə
+   * seed-də `options` boş olan atributlar (avtomobildə MARKA və MODEL) filtr
+   * panelində ÜMUMİYYƏTLƏ görünmürdü — yəni avtomobil axtaranın ən vacib iki
+   * filtri yox idi. İndi siyahısı olmayan atribut taksonomiyadan doldurulur,
+   * valideyndən asılı olan (model) isə `blockedBy` ilə deaktiv göstərilir —
+   * gizlətmək əvəzinə səbəbi izah edir.
+   */
+  type ResolvedSelect = CatAttr & { opts: string[]; blockedBy?: string };
+  const selects: ResolvedSelect[] = attributes
+    .filter((a) => a.isFilterable !== false && a.type === 'select')
+    .map((a): ResolvedSelect | null => {
+      const resolved = resolveAttributeOptions(categorySlug, a, (k) => get(`a_${k}`));
+      if (resolved?.status === 'needs-parent') {
+        return { ...a, opts: [], blockedBy: resolved.parentLabelAz };
+      }
+      const opts = resolved?.options ?? a.options ?? [];
+      return opts.length > 0 ? { ...a, opts } : null;
+    })
+    .filter((a): a is ResolvedSelect => a !== null);
+
   const numbers = attributes.filter((a) => a.isFilterable !== false && a.type === 'number');
   const bools = attributes.filter((a) => a.isFilterable !== false && a.type === 'boolean');
 
@@ -94,7 +127,7 @@ export default function CategoryFilters({
   ).length;
 
   const mapOn = get('view') === 'map';
-  const ctaLabel = total > 0 ? `${total.toLocaleString('az-AZ')} elan göstər` : 'Nəticələrə bax';
+  const ctaLabel = total > 0 ? `${azNumber(total)} elan göstər` : 'Nəticələrə bax';
 
   // Panelin daxilində yalnız ilk 3 atribut görünür — qalanı «Bütün filtrlər»dədir.
   // Səbəb: 64px-lik zolaq geniş ekranda da yalnız 6 bölmə saxlaya bilir, əks halda
@@ -165,9 +198,10 @@ export default function CategoryFilters({
                 label={a.labelAz}
                 value={get(`a_${a.key}`)}
                 onChange={(v) => setAttr(a.key, v)}
+                disabled={Boolean(a.blockedBy)}
               >
-                <option value="">Hamısı</option>
-                {(a.options ?? []).map((o) => (
+                <option value="">{a.blockedBy ? `Əvvəlcə «${a.blockedBy}»` : 'Hamısı'}</option>
+                {a.opts.map((o) => (
                   <option key={o} value={o}>
                     {o}
                   </option>
@@ -279,9 +313,12 @@ export default function CategoryFilters({
                   label={a.labelAz}
                   value={get(`a_${a.key}`)}
                   onChange={(v) => setAttr(a.key, v)}
+                  disabled={Boolean(a.blockedBy)}
                 >
-                  <option value="">Hamısı</option>
-                  {(a.options ?? []).map((o) => (
+                  <option value="">
+                    {a.blockedBy ? `Əvvəlcə «${a.blockedBy}» seçin` : 'Hamısı'}
+                  </option>
+                  {a.opts.map((o) => (
                     <option key={o} value={o}>
                       {o}
                     </option>
@@ -396,11 +433,14 @@ function BarSelect({
   value,
   onChange,
   children,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   children: ReactNode;
+  /** Valideyn atribut seçilməyibsə (marka→model) sahə görünür, amma seçilə bilmir. */
+  disabled?: boolean;
 }) {
   return (
     <div className="relative mt-1">
@@ -408,7 +448,12 @@ function BarSelect({
         aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full cursor-pointer appearance-none truncate bg-transparent pr-5 text-sm font-bold leading-none text-ink-900 outline-none dark:!bg-transparent dark:text-white"
+        disabled={disabled}
+        className={`w-full appearance-none truncate bg-transparent pr-5 text-sm font-bold leading-none outline-none dark:!bg-transparent ${
+          disabled
+            ? 'cursor-not-allowed text-ink-400'
+            : 'cursor-pointer text-ink-900 dark:text-white'
+        }`}
       >
         {children}
       </select>
@@ -473,11 +518,13 @@ function PanelSelect({
   value,
   onChange,
   children,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <div className="relative">
@@ -485,7 +532,12 @@ function PanelSelect({
         aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full cursor-pointer appearance-none truncate bg-transparent pr-5 text-sm font-semibold text-ink-900 outline-none dark:!bg-transparent dark:text-white"
+        disabled={disabled}
+        className={`w-full appearance-none truncate bg-transparent pr-5 text-sm font-semibold outline-none dark:!bg-transparent ${
+          disabled
+            ? 'cursor-not-allowed text-ink-400'
+            : 'cursor-pointer text-ink-900 dark:text-white'
+        }`}
       >
         {children}
       </select>

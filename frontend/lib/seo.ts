@@ -5,6 +5,9 @@ export const SITE = {
   url: process.env.NEXT_PUBLIC_SITE_URL || 'https://360tap.az',
   locale: 'az_AZ',
   twitter: '@360tap',
+  // DİQQƏT: `public/logo.png` HAZIRDA MÖVCUD DEYİL (lokalda da, canlıda da 404).
+  // Ona görə `jsonLdOrganization()` `logo` sahəsini artıq çıxarmır — aşağıya bax.
+  // Real logo faylı əlavə olunanda həm fayl, həm də oradakı sahə bərpa edilməlidir.
   logo: '/logo.png',
   description:
     'Azərbaycanda elanlar və alqı-satqı platforması. Avtomobil, mənzil, iş, telefon, xidmət və minlərlə kateqoriya. Pulsuz elan yerləşdir, milyonlarla insana çatdır.',
@@ -27,7 +30,15 @@ interface PageSEO {
 export function buildMetadata(p: PageSEO): Metadata {
   const url = p.path ? `${SITE.url}${p.path}` : SITE.url;
   const description = p.description ?? SITE.description;
-  const image = p.image ?? `${SITE.url}/og-default.png`;
+  // ŞƏKİL FALLBACK-İ ÇIXARILDI. Əvvəl `p.image ?? `${SITE.url}/og-default.png`` idi,
+  // amma `public/og-default.png` MÖVCUD DEYİL (canlıda da 404) — yəni ana səhifə,
+  // /elanlar və şəkilsiz elanlar sosial şəbəkələrə sınıq kart URL-i elan edirdi.
+  // İndi şəkil verilməyəndə `openGraph.images`/`twitter.images` ÜMUMİYYƏTLƏ təyin
+  // olunmur; onda Next-in fayl-konvensiyalı `app/opengraph-image.tsx`-i qüvvədə qalır
+  // (işləyir, ~190 KB PNG) — /biznes, /komek, /ai-elan səhifələrində müşahidə olunan
+  // davranış məhz budur. Alternativ (public/-a real og-default.png qoymaq) rədd
+  // edilmədi, sadəcə qrafik aktiv tələb edir; kod tərəfdən bu düzəliş kifayətdir.
+  const image = p.image;
 
   return {
     title: p.title,
@@ -44,14 +55,14 @@ export function buildMetadata(p: PageSEO): Metadata {
       title: p.title,
       description,
       locale: SITE.locale,
-      images: [{ url: image, width: 1200, height: 630, alt: p.title }],
+      ...(image ? { images: [{ url: image, width: 1200, height: 630, alt: p.title }] } : {}),
     },
     twitter: {
       card: 'summary_large_image',
       site: SITE.twitter,
       title: p.title,
       description,
-      images: [image],
+      ...(image ? { images: [image] } : {}),
     },
   };
 }
@@ -64,7 +75,12 @@ export function jsonLdOrganization() {
     '@type': 'Organization',
     name: SITE.name,
     url: SITE.url,
-    logo: `${SITE.url}${SITE.logo}`,
+    // `logo` SAHƏSİ MÜVƏQQƏTİ ÇIXARILDI: `${SITE.url}${SITE.logo}` → 404 idi, yəni
+    // hər səhifədə struktur data sınıq şəkil göstərirdi (Google logonu oxuya bilmir).
+    // schema.org-da `logo` məcburi deyil — sahəni tamamilə verməmək, yalan URL
+    // verməkdən yaxşıdır. OG şəklini (1200×630 marketinq kartı) logo kimi göstərmək
+    // alternativi rədd edildi: o, logo deyil və Google-un logo tələblərinə uyğun gəlmir.
+    // public/logo.png əlavə olunan kimi bu sətir geri qaytarılmalıdır.
     sameAs: [
       'https://facebook.com/360tap.az',
       'https://instagram.com/360tap.az',

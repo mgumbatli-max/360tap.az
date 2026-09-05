@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { X, Info } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { FiltersState } from './FilterSidebar';
+import { azNumber } from '@/lib/format';
 
 export default function UniversalFullFilter({
   open,
@@ -137,7 +138,7 @@ export default function UniversalFullFilter({
             Sıfırla
           </button>
           <button onClick={() => { onApply(); onClose(); }} className="flex-1 py-3.5 bg-tap text-white rounded-xl font-semibold hover:opacity-90">
-            {totalCount != null ? `${totalCount.toLocaleString('az-AZ')}+ elan göstər` : 'Tətbiq et'}
+            {totalCount != null ? `${azNumber(totalCount)}+ elan göstər` : 'Tətbiq et'}
           </button>
         </footer>
       </div>

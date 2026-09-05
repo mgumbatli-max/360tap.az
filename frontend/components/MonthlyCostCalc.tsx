@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo } from 'react';
 import { Wallet, Fuel, Wrench, FileText, Shield } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function MonthlyCostCalc() {
   const [fuelKm, setFuelKm] = useState(7);
@@ -34,7 +35,7 @@ export default function MonthlyCostCalc() {
         <CostRow icon={Wrench} label="Servis" value={service} color="text-emerald-500" />
         <div className="flex justify-between pt-2 mt-2 border-t border-ink-200 font-extrabold text-lg">
           <span>Cəmi aylıq</span>
-          <span className="text-tap">{total.toLocaleString('az-AZ')} ₼</span>
+          <span className="text-tap">{azNumber(total)} ₼</span>
         </div>
       </div>
     </div>
@@ -53,7 +54,7 @@ function CostRow({ icon: I, label, value, color }: any) {
   return (
     <div className="flex items-center justify-between">
       <span className="flex items-center gap-2 text-sm"><I className={`w-3.5 h-3.5 ${color}`} />{label}</span>
-      <strong>{value.toLocaleString('az-AZ')} ₼</strong>
+      <strong>{azNumber(value)} ₼</strong>
     </div>
   );
 }

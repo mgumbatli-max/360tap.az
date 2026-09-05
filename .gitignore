@@ -10,3 +10,8 @@ backend/uploads/
 /tmp/
 avito screen/
 
+
+# Playwright E2E artefaktları — hesabat/iz faylları repo-ya girməməlidir
+frontend/test-results/
+frontend/e2e-results/
+frontend/playwright-report/

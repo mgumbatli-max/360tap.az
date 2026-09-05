@@ -12,6 +12,7 @@ import {
   type UserStatus,
 } from './adminApi';
 import { EmptyBlock, FailBlock, LoadingBlock, Pager, SectionCard, TableScroll, Td, Th } from './ui';
+import { azDate } from '@/lib/format';
 
 const LIMIT = 20;
 const ROLES: UserRole[] = ['user', 'pro', 'business', 'moderator', 'admin', 'super_admin'];
@@ -201,7 +202,7 @@ export default function UsersSection({ currentUserId }: { currentUserId: string 
                         </select>
                       </Td>
                       <Td className="whitespace-nowrap">
-                        {new Date(u.createdAt).toLocaleDateString('az-AZ')}
+                        {azDate(u.createdAt)}
                       </Td>
                     </tr>
                   );

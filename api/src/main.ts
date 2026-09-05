@@ -44,7 +44,26 @@ async function bootstrap(): Promise<void> {
   // Media (Faza 0 — yerli fayl storage) statik serving: /uploads/*
   // MEDIA_DIR ilə eyni mənbə (storage ↔ serving uyğunluğu)
   const mediaDir = resolve(config.get('media', { infer: true }).dir);
-  app.useStaticAssets(mediaDir, { prefix: '/uploads/' });
+  app.useStaticAssets(mediaDir, {
+    prefix: '/uploads/',
+    // Fayl adları dəyişməzdir (media.service.ts: `${randomUUID()}.webp`) — eyni ad
+    // heç vaxt başqa məzmun almır, ona görə 1 illik immutable keş təhlükəsizdir.
+    // Əvvəl `max-age=0` idi: brauzer və Next image optimizer hər baxışda revalidasiya
+    // edirdi (Render-ə lüzumsuz sorğu + cold-start gecikməsi).
+    maxAge: '365d',
+    immutable: true,
+    etag: true,
+    // helmet aşağıda (:59) qeydiyyatdan keçdiyi üçün statik fayllara ÇATMIR.
+    // Rədd edilən alternativ: helmet-i bu sətirdən əvvələ köçürmək — onda şəkillərə
+    // CSP/COOP kimi siyasətlər də düşür və gələcəkdə başqa fayl tipi əlavə olunanda
+    // davranış gözlənilmədən dəyişir. Ona görə yalnız media üçün REAL lazım olan iki
+    // başlıq əl ilə verilir (crossOriginResourcePolicy: 'cross-origin' konfiqurasiyası
+    // məhz bunun üçün yazılmışdı).
+    setHeaders: (res) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    },
+  });
 
   // Proxy etibarı artıq kor-koranə deyil: sabit `1` birbaşa qoşulan müştərini də
   // "proxy" sayırdı, o da X-Forwarded-For yazaraq req.ip-i (deməli rate-limit açarını)

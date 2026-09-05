@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Scale, X } from 'lucide-react';
 import Link from 'next/link';
+import { azNumber } from '@/lib/format';
 
 const KEY = 'tap_property_compare';
 
@@ -51,7 +52,7 @@ export default function PropertyCompare() {
                     <td className="p-2 text-ink-500 capitalize">{k.replace('_', ' ')}</td>
                     {items.map((it) => (
                       <td key={it.id} className="p-2 font-medium">
-                        {k === 'price' ? `${Number(it.price || 0).toLocaleString('az-AZ')} ₼` :
+                        {k === 'price' ? `${azNumber(it.price || 0)} ₼` :
                          it.attributes?.[k] || it[k] || '—'}
                       </td>
                     ))}

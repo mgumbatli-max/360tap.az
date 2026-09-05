@@ -8,6 +8,8 @@ import {
 import type { AttributeType, ListingStatus } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { azKeywordOr, azSearchWords } from '../../search/az-text';
+import { isSafeSlug } from '../geo/utils/slug';
 import { CategoriesService } from '../categories/categories.service';
 import type { CreateListingDto } from './dto/create-listing.dto';
 import { toListingResponse, type ListingResponse } from './dto/listing-response.dto';
@@ -59,6 +61,32 @@ export interface ListMeta {
   hasMore: boolean;
   categoryName?: string;
 }
+
+/**
+ * Elan sahibinin ÖZ elanı üçün icazəli status keçidləri (mənbə → hədəf).
+ *
+ * NİYƏ cədvəl: əvvəl `setStatus` yalnız sahibliyi yoxlayır, mənbə statusa isə heç
+ * baxmırdı — moderasiya növbəsindəki (`review`) və ya rədd/blok edilmiş elanın sahibi
+ * `POST /listings/:id/reactivate` ilə onu bir sorğuda özü dərc edə bilirdi, yəni
+ * moderasiya darvazası tam bypass olunurdu. Alternativ (yalnız `reactivate` ucunu
+ * bağlamaq) rədd edildi: `sold`/`archive` ucları da eyni funksiyadan keçir, ona görə
+ * qapı mərkəzdə bağlanır.
+ *
+ * Cədvəldə OLMAYAN mənbə status (review/rejected/blocked/draft) = sahib üçün bağlıdır;
+ * belə keçidlər moderator/admin işidir.
+ *
+ * `archived → active` və `sold → active` MÜTLƏQ açıq qalmalıdır — profil səhifəsindəki
+ * «Aktivləşdir» düyməsi məhz bu iki keçidə söykənir (frontend/app/profil/elanlarim).
+ * `expired` gələcəkdə müddət tətbiqi işə düşəndə elanın kilidlənməməsi üçün əvvəlcədən
+ * cədvəldədir.
+ */
+const OWNER_STATUS_TRANSITIONS: Partial<Record<ListingStatus, ListingStatus[]>> = {
+  active: ['sold', 'archived'],
+  sold: ['active', 'archived'],
+  archived: ['active'],
+  out_of_stock: ['archived'],
+  expired: ['active', 'archived'],
+};
 
 /** Atribut options-undan icazəli dəyərləri çıxarır (massiv və ya {choices} formatı). */
 function optionValues(options: unknown): string[] {
@@ -304,6 +332,11 @@ export class ListingsService {
           lat: dto.lat ?? null,
           lng: dto.lng ?? null,
           status: 'active', // avto-dərc (moderasiya sonra aktivləşdirilə bilər)
+          // `status: 'active'` yazılırdı, amma `publishedAt` boş qalırdı — ERP yolu
+          // (erp.service.ts) onu həmişə doldurur, yəni eyni kod bazasında iki yazma
+          // yolu arasındakı ziddiyyət unutmadan yaranmışdı. Sitemap `lastmod`,
+          // hesabatlar və «nə vaxt dərc olunub» məntiqi bu sahəyə söykənir.
+          publishedAt: new Date(),
           expiresAt,
         },
       });
@@ -371,17 +404,34 @@ export class ListingsService {
     return sanitizeAttributes(schema, attributes);
   }
 
-  // Public: yalnız aktiv elan. Qeyri-aktiv (draft/review/...) anonim istifadəçiyə 404.
-  async findById(id: string): Promise<ListingResponse | null> {
+  /**
+   * Elanı id ilə oxuyur.
+   *
+   * Anonim (`viewerId` yoxdur): yalnız `active` elan — draft/review/archived kənar
+   * gözə görünməməlidir. Sahib öz elanını statusundan asılı olmayaraq görməlidir,
+   * əks halda profil → «Bax»/«Redaktə» axını arxivlənmiş elanda 404-ə düşür.
+   *
+   * DİQQƏT: OR budağı YALNIZ real `viewerId` olduqda əlavə olunur. `ownerId: undefined`
+   * yazsaydıq Prisma həmin şərti tamamilə söndürər və bütün qeyri-aktiv elanlar
+   * hamıya açılardı — bu, düzəlişin ən böyük riskidir, ona görə şərt açıq yazılıb.
+   */
+  async findById(id: string, viewerId?: string): Promise<ListingResponse | null> {
+    const where: Prisma.ListingWhereInput = viewerId
+      ? { id, OR: [{ status: 'active' }, { ownerId: viewerId }] }
+      : { id, status: 'active' };
+
     const listing = await this.prisma.listing.findFirst({
-      where: { id, status: 'active' },
+      where,
       include: { images: { orderBy: { sortOrder: 'asc' } }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
     });
     if (!listing) return null;
-    // Baxış sayğacını artır (best-effort)
-    void this.prisma.listing
-      .update({ where: { id }, data: { views: { increment: 1 } } })
-      .catch(() => undefined);
+    // Baxış sayğacını artır (best-effort). Sahibin öz baxışları sayılmır —
+    // əks halda redaktə/önbaxış gedişləri statistikanı şişirdərdi.
+    if (listing.ownerId !== viewerId) {
+      void this.prisma.listing
+        .update({ where: { id }, data: { views: { increment: 1 } } })
+        .catch(() => undefined);
+    }
     return toListingResponse(listing);
   }
 
@@ -391,7 +441,11 @@ export class ListingsService {
       where: { id },
       select: { categoryId: true },
     });
-    if (!listing) return [];
+    // Mövcud olmayan elan üçün əvvəl 200 + boş massiv qayıdırdı, halbuki eyni id
+    // üçün `GET /listings/:id` düzgün 404 verirdi — «tapılmadı» ilə «oxşarı yoxdur»
+    // eyni cavaba düşürdü. Mənbə elana `status: 'active'` şərti ƏLAVƏ EDİLMƏDİ:
+    // sahib öz arxiv elanına baxanda oxşarların itməsi ayrıca məhsul qərarıdır.
+    if (!listing) throw new NotFoundException('Elan tapılmadı');
     const items = await this.prisma.listing.findMany({
       where: { status: 'active', categoryId: listing.categoryId, id: { not: id } },
       orderBy: [{ isVip: 'desc' }, { createdAt: 'desc' }],
@@ -410,18 +464,40 @@ export class ListingsService {
     return items.map(toListingResponse);
   }
 
-  // Status dəyişdir (sahiblik yoxlaması ilə) — satıldı/arxiv/aktiv
+  // Status dəyişdir (sahiblik + icazəli keçid yoxlaması ilə) — satıldı/arxiv/aktiv
   async setStatus(ownerId: string, id: string, status: ListingStatus): Promise<ListingResponse> {
     const listing = await this.prisma.listing.findUnique({
       where: { id },
-      select: { ownerId: true },
+      // status: icazəli keçid cədvəli üçün; publishedAt: ilk dərc tarixi bir dəfə yazılır
+      select: { ownerId: true, status: true, publishedAt: true },
     });
     if (!listing) throw new NotFoundException('Elan tapılmadı');
     if (listing.ownerId !== ownerId) throw new ForbiddenException('Bu elan sizə aid deyil');
+
+    // Moderasiya darvazası: izahat OWNER_STATUS_TRANSITIONS şərhindədir.
+    if (listing.status !== status) {
+      const allowed = OWNER_STATUS_TRANSITIONS[listing.status] ?? [];
+      if (!allowed.includes(status)) {
+        throw new ForbiddenException(
+          'Bu elanın statusunu dəyişmək mümkün deyil — elan moderasiyadadır və ya bu keçidə icazə yoxdur',
+        );
+      }
+    }
+
     const updated = await this.prisma.listing.update({
       where: { id },
-      data: { status },
-      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
+      data: {
+        status,
+        // İlk dəfə aktivləşəndə dərc tarixi yazılır; təkrar aktivləşdirmə onu
+        // sıfırlamır (`??`) — «nə vaxt dərc olunub» tarixçəsi qorunur.
+        ...(status === 'active' && listing.publishedAt === null
+          ? { publishedAt: new Date() }
+          : {}),
+      },
+      // `take: 1` GÖTÜRÜLDÜ: bu endpoint tam `ListingResponse` qaytarır və create/findById
+      // ilə eyni tamlıqda olmalıdır — əks halda eyni tip endpoint-dən asılı olaraq
+      // 1 və ya bütün şəkillərlə gəlirdi. Siyahı endpoint-lərində `take: 1` qalır.
+      include: { images: { orderBy: { sortOrder: 'asc' } }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
     });
     void this.search.indexListing(updated.id); // status dəyişdi → index yenilə/sil
     return toListingResponse(updated);
@@ -459,8 +535,35 @@ export class ListingsService {
     if (dto.price !== undefined) data.price = dto.price ?? null;
     if (dto.priceType !== undefined) data.priceType = dto.priceType;
     if (dto.condition !== undefined) data.condition = dto.condition;
-    if (dto.categoryId !== undefined) data.categoryId = dto.categoryId;
+    if (dto.categoryId !== undefined) {
+      // `vertical` denormalizasiya sütunudur və yaratma anında kateqoriyadan
+      // götürülür (yuxarıda create()). Redaktədə isə yalnız `categoryId` yazılırdı,
+      // ona görə kateqoriya dəyişdirilən elan köhnə vertical-da ilişib qalırdı —
+      // `?vertical=` filtri (findAll) və frontend-in vertical çipləri yanlış nəticə
+      // verirdi. `assertExists` create yolundakı tanış naxışdır: mövcud olmayan
+      // kateqoriya üçün Prisma FK 500-ü əvəzinə düzgün 4xx qaytarır.
+      const category = await this.categories.assertExists(dto.categoryId);
+      data.categoryId = dto.categoryId;
+      data.vertical = category.vertical;
+    }
     if (dto.districtId !== undefined) data.districtId = dto.districtId ?? null;
+    // AŞAĞIDAKI SAHƏLƏR ƏVVƏL SƏSSİZCƏ ATILIRDI: UpdateListingDto = PartialType(CreateListingDto)
+    // olduğu üçün whitelist-dən keçirdilər, lakin data blokuna köçürülmürdülər —
+    // PATCH 200 qaytarır, dəyər isə dəyişmirdi. `?? null` semantikası `price` ilə
+    // eynidir: açıq `null` göndərmək = sahəni təmizləmək.
+    if (dto.currency !== undefined) data.currency = dto.currency;
+    if (dto.oldPrice !== undefined) data.oldPrice = dto.oldPrice ?? null;
+    if (dto.contactName !== undefined) data.contactName = dto.contactName ?? null;
+    if (dto.contactPhone !== undefined) data.contactPhone = dto.contactPhone ?? null;
+    if (dto.contactWhatsapp !== undefined) data.contactWhatsapp = dto.contactWhatsapp;
+    if (dto.address !== undefined) data.address = dto.address ?? null;
+    if (dto.lat !== undefined) data.lat = dto.lat ?? null;
+    if (dto.lng !== undefined) data.lng = dto.lng ?? null;
+    if (dto.hasDelivery !== undefined) data.hasDelivery = dto.hasDelivery;
+    if (dto.hasCredit !== undefined) data.hasCredit = dto.hasCredit;
+    if (dto.hasBarter !== undefined) data.hasBarter = dto.hasBarter;
+    if (dto.hasWarranty !== undefined) data.hasWarranty = dto.hasWarranty;
+    if (dto.inStock !== undefined) data.inStock = dto.inStock;
     // Redaktədə də eyni təmizləmə işləyir — əks halda yaratma yolunda bağlanan
     // qapı PATCH ilə açıq qalırdı.
     if (dto.attributes !== undefined) {
@@ -471,10 +574,36 @@ export class ListingsService {
       data.attributes = clean as Prisma.InputJsonValue;
     }
 
-    const updated = await this.prisma.listing.update({
-      where: { id },
-      data,
-      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
+    // Şəkillər də əvvəl səssizcə atılırdı: istifadəçi redaktədə şəkli silir, «Yadda
+    // saxla» 200 qaytarır, şəkil isə yerində qalırdı. Sahə + şəkil yazısı BİR
+    // tranzaksiyadadır — deleteMany uğurlu, createMany uğursuz olsa elan şəkilsiz
+    // qalardı. `!== undefined` yoxlaması kritikdir: PATCH qismidir, `images`
+    // göndərilməyən sorğu (məs. yalnız qiymət dəyişikliyi) şəkillərə TOXUNMAMALIDIR.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.listing.update({ where: { id }, data });
+
+      if (dto.images !== undefined) {
+        await tx.listingImage.deleteMany({ where: { listingId: id } });
+        if (dto.images.length) {
+          await tx.listingImage.createMany({
+            data: dto.images.map((img, i) => ({
+              listingId: id,
+              url: img.url,
+              width: img.width ?? null,
+              height: img.height ?? null,
+              blurHash: img.blurHash ?? null,
+              sortOrder: i, // sıra göndərilən massivin sırasıdır (create ilə eyni)
+            })),
+          });
+        }
+      }
+
+      return tx.listing.findUniqueOrThrow({
+        where: { id },
+        // `take: 1` GÖTÜRÜLDÜ — mutasiya cavabı create/findById ilə eyni tamlıqda
+        // olmalıdır (bax setStatus şərhi).
+        include: { images: { orderBy: { sortOrder: 'asc' } }, category: { select: { nameAz: true, slug: true } }, district: { select: { nameAz: true, slug: true, region: { select: { nameAz: true, slug: true } } } } },
+      });
     });
     void this.search.indexListing(updated.id); // redaktə → index yenilə
     return toListingResponse(updated);
@@ -493,6 +622,13 @@ export class ListingsService {
     if (q.district) {
       where.districtId = q.district;
     } else if (q.region) {
+      // FORMAT YOXLAMASI DB SORĞUSUNDAN ƏVVƏL: `?region=baki%00` kimi NUL baytlı və
+      // ya yararsız slug Postgres-ə çatanda Prisma P2023 atırdı və istifadəçi
+      // 500 görürdü. Belə dəyər heç bir regiona uyğun gələ bilmədiyi üçün
+      // cavab «tapılmadı»dır — server xətası deyil.
+      if (!isSafeSlug(q.region)) {
+        throw new NotFoundException('Region tapılmadı');
+      }
       const region = await this.prisma.region.findUnique({
         where: { slug: q.region },
         select: { isActive: true, districts: { select: { id: true } } },
@@ -541,20 +677,31 @@ export class ListingsService {
     if (q.vertical) where.vertical = q.vertical;
     if (q.source) where.source = q.source;
 
-    // Ani keyword axtarış (title VƏ YA description, sözlər OR)
-    if (q.q) {
-      const words = q.q
-        .trim()
-        .split(/\s+/)
-        .filter((w) => w.length >= 2)
-        .slice(0, 6);
-      if (words.length) {
-        where.OR = words.flatMap((w) => [
-          { title: { contains: w, mode: 'insensitive' as const } },
-          { description: { contains: w, mode: 'insensitive' as const } },
-          { category: { nameAz: { contains: w, mode: 'insensitive' as const } } },
-        ]);
-      }
+    /**
+     * Ani keyword axtarış — DİAKRİTİKSİZ YAZILIŞI DA TAPIR.
+     *
+     * ÖLÇÜLMÜŞ DEFEKT: `?q=mənzil` 5 nəticə verirdi, `?q=menzil` isə 0.
+     * Eyni cür `şəhər`→1, `seher`→0. Azərbaycan istifadəçilərinin böyük hissəsi
+     * diakritikasız yazır (ə→e, ş→s, ç→c, ğ→g, ı→i, ö→o, ü→u), yəni axtarışın
+     * mühüm hissəsi ölü idi.
+     *
+     * `az-text` modulu bunu bir yerdə həll edir: diakritik variantlar, İ/ı registr
+     * xüsusiyyəti, LIKE metasimvollarının escape-i və atributlardakı brend/model
+     * budaqları. Modul `SearchService`-in fallback yolu ilə ORTAQDIR — iki
+     * axtarış yolunun bir-birindən sürüşməsi məhz belə defektlərin mənbəyi idi.
+     *
+     * DİQQƏT: `azKeywordOr` escape-i ÖZÜ edir — buradakı `escapeLike` bir daha
+     * tətbiq edilməməlidir, əks halda `\` ikiqatlanar.
+     *
+     * 2 simvoldan qısa sorğuda (məs. «X») əvvəl filtr ÜMUMİYYƏTLƏ qurulmurdu və
+     * istifadəçi bütün kataloqu «X üzrə 111 nəticə» kimi görürdü. İndi sorğunun
+     * özü tək termin kimi tətbiq olunur.
+     */
+    if (q.q?.trim()) {
+      const raw = q.q.trim();
+      const words = azSearchWords(raw, 2, 6);
+      const terms = words.length ? words : [raw];
+      where.OR = terms.flatMap((w) => azKeywordOr(w));
     }
 
     // Kateqoriya-spesifik atribut filtrləri — scalar (equals) və range {min,max} (gte/lte)
@@ -574,14 +721,25 @@ export class ListingsService {
         }
         if (conds.length) where.AND = conds;
       } catch {
-        /* yanlış JSON → atribut filtri tətbiq olunmur */
+        // Əvvəl səssizcə atılırdı və filtrsiz BÜTÜN kataloq qayıdırdı — istifadəçi
+        // «filtr tətbiq olundu» sanırdı. Səssiz keçid həm də daxili ziddiyyət idi:
+        // `sort=random` kimi yanlış parametr onsuz da 422 verir. Frontend `attrs`-i
+        // həmişə JSON.stringify ilə göndərir, ona görə sayt trafiki təsirlənmir.
+        throw new BadRequestException('attrs parametri düzgün JSON deyil');
       }
     }
 
     if (q.priceMin != null || q.priceMax != null) {
+      // Tərs aralıq (priceMin > priceMax) əvvəl səssizcə 0 nəticə verirdi. 422 ATMIRIQ:
+      // saxlanmış axtarışlar və paylaşılmış linklər birdən xəta səhifəsinə düşərdi —
+      // əvəzinə hədləri yerbəyer edirik ki, istifadəçi gözlədiyi aralığı görsün.
+      let lo = q.priceMin;
+      let hi = q.priceMax;
+      if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];
+
       const price: Prisma.DecimalNullableFilter = {};
-      if (q.priceMin != null) price.gte = q.priceMin;
-      if (q.priceMax != null) price.lte = q.priceMax;
+      if (lo != null) price.gte = lo;
+      if (hi != null) price.lte = hi;
       where.price = price;
     }
 
@@ -589,14 +747,20 @@ export class ListingsService {
     // DESC üçün NULLS FIRST-dir — ona görə "Baha əvvəl" sıralaması qiymətsiz elanları başa atırdı.
     // nulls: 'last' hər iki istiqamətdə qiymətsizləri sona salır (ASC-də də açıq yazılır ki,
     // davranış DB default-undan asılı qalmasın). views/createdAt NOT NULL-dur — onlara lazım deyil.
-    const orderBy: Prisma.ListingOrderByWithRelationInput =
+    //
+    // Sıralama HƏMİŞƏ unikal açarla (`id`) bitir: tək açarlı ORDER BY-da bərabər
+    // dəyərlərin (eyni `views`, eyni qiymət) sırası Postgres üçün sərbəstdir, ona görə
+    // LIMIT/OFFSET səhifələri arasında elanlar sürüşürdü — ölçüldü: sort=popular üzrə
+    // 113 elandan 6-sı təkrarlanır, 6-sı isə heç bir səhifəyə düşmürdü.
+    // Birinci meyar dəyişmir, yalnız bərabərlik halları sabitləşir.
+    const orderBy: Prisma.ListingOrderByWithRelationInput[] =
       q.sort === 'price_asc'
-        ? { price: { sort: 'asc', nulls: 'last' } }
+        ? [{ price: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }]
         : q.sort === 'price_desc'
-          ? { price: { sort: 'desc', nulls: 'last' } }
+          ? [{ price: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }]
           : q.sort === 'popular'
-            ? { views: 'desc' }
-            : { createdAt: 'desc' };
+            ? [{ views: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }]
+            : [{ createdAt: 'desc' }, { id: 'asc' }];
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.listing.findMany({

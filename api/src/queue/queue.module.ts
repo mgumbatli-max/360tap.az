@@ -7,13 +7,17 @@ import { ConfigService } from '@nestjs/config';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const url = new URL(
-          config.get<string>('redisUrl') ?? 'redis://localhost:6379',
-        );
+        // Əvvəl URL parse edilib yalnız host+port götürülürdü — istifadəçi adı,
+        // parol və `rediss://` (TLS) İTİRDİ. Managed Redis-də (Upstash/Render Key
+        // Value, bax .env.production.example) bu, NOAUTH/TLS xətası deməkdir.
+        // BullMQ ≥5 `connection.url` sahəsini birbaşa dəstəkləyir
+        // (redis-connection: `new IORedis(url, rest)`), ona görə tam URL ötürülür.
+        // Rədd edilən alternativ — host/port/username/password/tls sahələrini əl ilə
+        // doldurmaq: eyni nəticəni verir, amma URL sintaksisinin (db indeksi, query
+        // parametrləri) idarəsini bizim üzərimizə atır.
         return {
           connection: {
-            host: url.hostname,
-            port: Number(url.port) || 6379,
+            url: config.get<string>('redisUrl') ?? 'redis://localhost:6379',
           },
         };
       },

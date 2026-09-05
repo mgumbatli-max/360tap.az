@@ -13,6 +13,7 @@ import MapView from '@/components/MapView';
 import ListingSkeleton from '@/components/ListingSkeleton';
 import { api } from '@/lib/api';
 import { Map, LayoutGrid, List, SlidersHorizontal } from 'lucide-react';
+import { azDate, azNumber } from '@/lib/format';
 
 type ViewMode = 'grid' | 'list' | 'map';
 
@@ -95,7 +96,7 @@ function ListingsContent({ initialItems = [], initialTotal = 0 }: { initialItems
         {filters.q ? `"${filters.q}" üzrə tapıldı` : 'Bütün elanlar'}
         {total > 0 && (
           <span className="ml-2 text-base font-normal text-ink-500">
-            {total.toLocaleString('az-AZ')}
+            {azNumber(total)}
           </span>
         )}
       </h1>
@@ -128,7 +129,7 @@ function ListingsContent({ initialItems = [], initialTotal = 0 }: { initialItems
         <div>
           <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <div className="text-sm text-ink-500">
-              {loading ? 'Yüklənir...' : `${total.toLocaleString('az-AZ')} elan göstərilir`}
+              {loading ? 'Yüklənir...' : `${azNumber(total)} elan göstərilir`}
             </div>
             <div className="flex items-center gap-2">
               <SaveSearchButton filters={filters as Record<string, string>} />
@@ -201,12 +202,12 @@ function ListingRowCard({ item }: { item: Listing }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="font-bold text-lg sm:text-xl text-ink-900">
-          {item.price ? `${Number(item.price).toLocaleString('az-AZ')} ${item.currency}` : 'Razılaşma'}
+          {item.price ? `${azNumber(item.price)} ${item.currency}` : 'Razılaşma'}
         </div>
         <h3 className="text-sm text-ink-800 mt-1 group-hover:text-tap line-clamp-2">{item.title}</h3>
         <div className="text-xs text-ink-500 mt-2 space-y-0.5">
           {item.city_name && <div>📍 {item.city_name}</div>}
-          <div>{new Date(item.created_at).toLocaleDateString('az-AZ')}</div>
+          <div>{azDate(item.created_at)}</div>
         </div>
       </div>
     </a>

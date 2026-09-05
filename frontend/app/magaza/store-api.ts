@@ -60,6 +60,7 @@ export interface StoreListing {
   currency: string;
   priceType: string;
   isVip?: boolean;
+  isDemo?: boolean;
   isPremium?: boolean;
   hasDelivery?: boolean;
   views?: number;

@@ -45,6 +45,11 @@ export default function AvatarUploader({
       if (!url) throw new Error('URL alınmadı');
 
       // 2) Profilə tətbiq et
+      // XƏBƏRDARLIQ (Faza 0 auditi): `PATCH /api/v1/auth/me` backend-də HƏLƏ YOXDUR —
+      // canlıda 404 qaytarır (auth.controller.ts-də yalnız `@Get('me')` var). Bu komponent
+      // hazırda heç bir səhifədə mount olunmayıb, ona görə istifadəçi axını təsirlənmir.
+      // MOUNT ETMƏMİŞDƏN ƏVVƏL backend-də `@Patch('me')` route-u əlavə edilməlidir
+      // (avatarUrl host allowlist-i ilə — profil şəkli bütün platformada render olunur).
       await api('/auth/me', {
         method: 'PATCH',
         body: JSON.stringify({ avatar_url: url }),

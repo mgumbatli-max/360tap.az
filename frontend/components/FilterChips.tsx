@@ -1,6 +1,7 @@
 'use client';
 import { X } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { dependentAttributeKeys } from '@/lib/attribute-taxonomy';
 
 const LABELS: Record<string, string> = {
   q: 'Axtarış',
@@ -61,6 +62,11 @@ export default function FilterChips({
     if (onRemove) return onRemove(k);
     const p = new URLSearchParams(params.toString());
     p.delete(k);
+    // Valideyn atribut silinəndə ondan asılı olan da getməlidir (marka → model):
+    // əks halda URL-də tək «Model: X» qalır və heç bir nəticə vermir.
+    if (k.startsWith('a_')) {
+      for (const dep of dependentAttributeKeys(k.slice(2))) p.delete(`a_${dep}`);
+    }
     p.delete('page');
     const s = p.toString();
     router.push(s ? `${pathname}?${s}` : pathname);

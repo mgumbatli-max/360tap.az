@@ -122,5 +122,11 @@ services:
 
       # Vercel proxy server-side olduğu üçün CORS funksional kritik deyil,
       # lakin canlı domen siyahıda olmalıdır (gələcək birbaşa brauzer→API çağırışları üçün).
+      # DİQQƏT: `http://localhost:5401` bu siyahıdan ÇIXARILDI — production API
+      # `credentials: true` ilə həmin origin-i əks etdirirdi, yəni developerin öz
+      # maşınındakı 5401 portu canlı API-yə brauzerdən girə bilirdi.
+      # Nəticə: lokal frontend-i BİRBAŞA canlı API-yə bağlayan debug axını artıq
+      # brauzerdə CORS ilə bloklanacaq (SSR/proxy yolu təsirlənmir). Belə bir axın
+      # lazımdırsa ayrıca preview servisi üçün öz CORS_ORIGINS dəyəri təyin edilsin.
       - key: CORS_ORIGINS
-        value: "https://360tap.az,https://www.360tap.az,https://360tap-az.vercel.app,http://localhost:5401"
+        value: "https://360tap.az,https://www.360tap.az,https://360tap-az.vercel.app"

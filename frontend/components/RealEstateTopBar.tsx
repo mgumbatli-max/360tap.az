@@ -4,6 +4,7 @@ import { MapPin, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import LocationPicker from './LocationPicker';
 import { PROPERTY_TYPES } from '@/lib/realestate-data';
 import type { RealEstateFilters } from './RealEstateFilter';
+import { azNumber } from '@/lib/format';
 
 export default function RealEstateTopBar({
   filters,
@@ -91,7 +92,7 @@ export default function RealEstateTopBar({
           <SlidersHorizontal className="w-3.5 h-3.5" /> Ətraflı
         </button>
         <button onClick={onApply} className="btn-tap !py-1.5 !text-sm flex-1 sm:flex-initial min-w-[120px]">
-          {totalCount != null ? `${totalCount.toLocaleString('az-AZ')} elan` : 'Axtar'}
+          {totalCount != null ? `${azNumber(totalCount)} elan` : 'Axtar'}
         </button>
       </div>
 

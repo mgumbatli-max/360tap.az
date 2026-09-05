@@ -10,7 +10,7 @@ import ListingCard, { type Listing } from '@/components/ListingCard';
 // Ona görə tip hər iki formanı qəbul edir, mapper isə normallaşdırır.
 type NestListing = {
   id: string; title: string; slug?: string; price: number | null; currency: string;
-  priceType: string; isVip?: boolean; isPremium?: boolean; hasDelivery?: boolean;
+  priceType: string; isVip?: boolean; isDemo?: boolean; isPremium?: boolean; hasDelivery?: boolean;
   views?: number; favoritesCount?: number; createdAt: string | number;
   regionName?: string | null; districtName?: string | null;
   images?: { url: string; sortOrder: number }[];
@@ -21,7 +21,7 @@ function mapListing(l: NestListing): Listing {
   return {
     id: l.id, title: l.title, slug: l.slug ?? '', price: l.price ?? null,
     currency: l.currency ?? 'AZN', price_type: l.priceType ?? 'fixed',
-    is_vip: l.isVip, is_premium: l.isPremium, has_delivery: l.hasDelivery,
+    is_vip: l.isVip, is_demo: l.isDemo, is_premium: l.isPremium, has_delivery: l.hasDelivery,
     views: l.views, favorites_count: l.favoritesCount,
     created_at:
       typeof l.createdAt === 'number' ? new Date(l.createdAt).toISOString() : l.createdAt,

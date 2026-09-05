@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { SlidersHorizontal, ChevronDown } from 'lucide-react';
 import { CAR_BRANDS } from '@/lib/transport-data';
 import type { TransportFilters } from './TransportFullFilter';
+import { azNumber } from '@/lib/format';
 
 export default function TransportTopBar({
   filters,
@@ -114,7 +115,7 @@ export default function TransportTopBar({
 
       {/* Sayğac */}
       <div className="flex items-center justify-between mt-3 text-sm">
-        <span className="text-ink-500">{totalCount != null ? `${totalCount.toLocaleString('az-AZ')} elan göstərilir` : ''}</span>
+        <span className="text-ink-500">{totalCount != null ? `${azNumber(totalCount)} elan göstərilir` : ''}</span>
         <button onClick={onOpenAdvanced} className="text-tap font-semibold flex items-center gap-1 hover:underline">
           Daha çox filter <ChevronDown className="w-3.5 h-3.5" />
         </button>

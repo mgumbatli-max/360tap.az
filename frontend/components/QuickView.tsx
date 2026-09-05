@@ -99,7 +99,7 @@ export default function QuickView({
               <div className="flex flex-wrap gap-3 text-xs text-ink-500 mt-3">
                 <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {listing.city_name ?? '—'}</span>
                 <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {listing.views ?? 0}</span>
-                <span>{timeAgo(listing.created_at)}</span>
+                <span suppressHydrationWarning>{timeAgo(listing.created_at)}</span>
               </div>
 
               <p className="text-sm text-ink-700 mt-4 line-clamp-6">{listing.description}</p>

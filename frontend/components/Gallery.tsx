@@ -1,12 +1,21 @@
 'use client';
 import { useCallback, useState } from 'react';
+import Image from 'next/image';
 import { ChevronLeft, ChevronRight, ImageOff } from 'lucide-react';
+import { safeImageUrl } from '@/lib/image-hosts';
 
 /**
  * Elan detalı qalereyası (§7.1.3): böyük şəkil + yanlarda dairəvi ‹ › + altda thumb sətri.
  *
  * Prop imzası (`images`, `title`) qəsdən dəyişdirilməyib — səhifə `l.images ?? []`
  * ötürür və şəkil obyektinin yalnız `url` sahəsinə etibar edir.
+ *
+ * ŞƏKİL ÇATDIRILMASI: `next/image` (optimizator) — ölçülmüş fərq böyükdür,
+ * eyni fayl xam halda 2.4 MB, `w=1080&q=75` ilə 64 KB idi; thumbnail zolağı isə
+ * 72×54 px üçün TAM ölçülü faylı endirirdi. Xam `<img>` YALNIZ allowlist-dən
+ * kənar host üçün qalır: `next/image` belə URL-də istisna atır və bütün detal
+ * səhifəsini çökdürür (bax `lib/image-hosts.ts`), ona görə orada optimizasiyadan
+ * imtina edilir — şəklin itməsindənsə optimallaşmamış göstərilməsi yaxşıdır.
  */
 export default function Gallery({ images, title }: { images: { url: string }[]; title: string }) {
   const [active, setActive] = useState(0);
@@ -33,6 +42,8 @@ export default function Gallery({ images, title }: { images: { url: string }[]; 
     );
   }
 
+  const heroSrc = safeImageUrl(images[idx].url);
+
   const navBtn =
     'absolute top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full ' +
     'bg-white/90 text-ink-800 shadow-soft transition hover:bg-white dark:bg-ink-800/90 dark:text-white dark:hover:bg-ink-800';
@@ -40,8 +51,21 @@ export default function Gallery({ images, title }: { images: { url: string }[]; 
   return (
     <div>
       <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-ink-100 dark:bg-ink-800">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={images[idx].url} alt={title} className="h-full w-full object-cover" />
+        {heroSrc ? (
+          <Image
+            src={heroSrc}
+            alt={title}
+            fill
+            // Əsas sütun ≤1024px-də tam en, ondan yuxarı 400px-lik sağ rels çıxılır.
+            sizes="(max-width: 1024px) 100vw, 900px"
+            // Hero LCP elementidir — `priority` onu preload sırasına salır.
+            priority
+            className="object-cover"
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={images[idx].url} alt={title} className="h-full w-full object-cover" />
+        )}
 
         {count > 1 && (
           <>
@@ -71,23 +95,39 @@ export default function Gallery({ images, title }: { images: { url: string }[]; 
       {count > 1 && (
         // Thumb sətri yalnız ÖZ içində üfüqi sürüşür — səhifə gövdəsi sürüşmür (§11).
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          {images.map((img, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setActive(i)}
-              aria-label={`${i + 1}-ci şəkil`}
-              aria-current={i === idx ? 'true' : undefined}
-              className={`h-[54px] w-[72px] shrink-0 overflow-hidden rounded-lg border-2 transition ${
-                i === idx
-                  ? 'border-tap'
-                  : 'border-transparent hover:border-ink-300 dark:hover:border-ink-600'
-              }`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.url} alt="" className="h-full w-full object-cover" />
-            </button>
-          ))}
+          {images.map((img, i) => {
+            const thumbSrc = safeImageUrl(img.url);
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setActive(i)}
+                aria-label={`${i + 1}-ci şəkil`}
+                aria-current={i === idx ? 'true' : undefined}
+                className={`h-[54px] w-[72px] shrink-0 overflow-hidden rounded-lg border-2 transition ${
+                  i === idx
+                    ? 'border-tap'
+                    : 'border-transparent hover:border-ink-300 dark:hover:border-ink-600'
+                }`}
+              >
+                {thumbSrc ? (
+                  // 72×54 CSS px, 2x ekran üçün 144 — optimizator məhz bu ölçüdə
+                  // variant qaytarır, tam ölçülü faylı yox.
+                  <Image
+                    src={thumbSrc}
+                    alt=""
+                    width={144}
+                    height={108}
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={img.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

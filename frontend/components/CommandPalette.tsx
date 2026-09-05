@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Home, Plus, Heart, MessageCircle, Settings, MapPin, Car, Phone, Briefcase, Sparkles, Mic, ArrowRight, Hash } from 'lucide-react';
 import { api } from '@/lib/api';
+import { azNumber } from '@/lib/format';
 
 type Item = { id: string; title: string; subtitle?: string; icon: any; href?: string; action?: () => void; section: string; shortcut?: string };
 
@@ -65,7 +66,7 @@ export default function CommandPalette() {
   const filtered = STATIC_ITEMS.filter((it) => !q || it.title.toLowerCase().includes(q.toLowerCase()));
   const all = [
     ...filtered,
-    ...results.map((r): Item => ({ id: 'l-'+r.id, title: r.title, subtitle: `${Number(r.price||0).toLocaleString('az-AZ')} ${r.currency||'₼'}`, icon: Hash, href: `/elanlar/${r.id}`, section: 'Elanlar' }))
+    ...results.map((r): Item => ({ id: 'l-'+r.id, title: r.title, subtitle: `${azNumber(r.price||0)} ${r.currency||'₼'}`, icon: Hash, href: `/elanlar/${r.id}`, section: 'Elanlar' }))
   ];
 
   // Group by section

@@ -5,32 +5,47 @@ import ProfileLayout from '@/components/ProfileLayout';
 import { useAuth } from '@/lib/auth';
 import { api, unwrap } from '@/lib/api';
 import TrustScore from '@/components/TrustScore';
-import LoyaltyPoints from '@/components/LoyaltyPoints';
-import AchievementBadges from '@/components/AchievementBadges';
-import SmartAlerts from '@/components/SmartAlerts';
-import ReferralProgram from '@/components/ReferralProgram';
+// Qeyd (sabitləşdirmə): LoyaltyPoints / AchievementBadges / SmartAlerts / ReferralProgram
+// import-ları buradan ÇIXARILDI. Həmin dörd komponentin hamısı literal uydurma data
+// göstərirdi (1240 sadiqlik xalı, «5 ulduz satıcı» nişanı, hər istifadəçidə eyni
+// TAP-MAQ-2026 referal kodu, «BMW X5 -2000₼» bildirişi) — nə API, nə localStorage
+// oxumurdular, yəni HƏR istifadəçi eyni saxta rəqəmləri görürdü.
+// Alternativ (komponentləri məcburi prop-lu refaktor etmək) rədd edildi: onları
+// dolduracaq real data mənbəyi (loyalty/referral/badge endpoint-i) backend-də hələ YOXDUR.
+// Komponent faylları silinmədi — real endpoint hazır olanda blok geri qaytarıla bilər.
 import {
   ListOrdered, MessageCircle, Heart, Bell, Wallet, Eye, Plus, Star, Crown,
 } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function ProfileDashboardPage() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<any>({ active: 0, sold: 0, archived: 0 });
+  const [stats, setStats] = useState<any>({ active: 0, sold: 0, archived: 0, favorites: 0, conversations: 0 });
   const [recent, setRecent] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
     // Faza 0: NestJS `{ ok, data }` qaytarır — köhnə `d.items` həmişə undefined idi,
     // buna görə profil statistikası (aktiv/satılan/arxiv) həmişə 0 görünürdü.
-    api<any>('/listings/me/list').then((d) => {
-      const items = unwrap<any[]>(d, []);
+    // Sabitləşdirmə: «Sevimlilər» və «Söhbətlər» KPI-ları əvvəl koda SABİT 0 yazılmışdı,
+    // halbuki /favorites və /conversations endpoint-ləri işləkdir. İndi real sayğaclar.
+    // Üç sorğu ARDICIL deyil PARALEL gedir (dashboard açılışını yavaşlatmamaq üçün) və
+    // hər birinin AYRICA .catch-i var — birinin xətası digər KPI-ları sıfırlamır.
+    Promise.all([
+      api<any>('/listings/me/list').catch(() => null),
+      api<any>('/favorites').catch(() => null),
+      api<any>('/conversations').catch(() => null),
+    ]).then(([mine, favs, convs]) => {
+      const items = unwrap<any[]>(mine, []);
       setStats({
         active: items.filter((x) => x.status === 'active').length,
         sold: items.filter((x) => x.status === 'sold').length,
         archived: items.filter((x) => x.status === 'archived').length,
+        favorites: unwrap<any[]>(favs, []).length,
+        conversations: unwrap<any[]>(convs, []).length,
       });
       setRecent(items.slice(0, 4));
-    }).catch(() => {});
+    });
   }, [user]);
 
   if (!user) return null;
@@ -54,21 +69,15 @@ export default function ProfileDashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard icon={ListOrdered} label="Aktiv elan" value={stats.active} color="bg-emerald-50 text-emerald-600" href="/profil/elanlarim" />
           <KpiCard icon={Eye} label="Satılan" value={stats.sold} color="bg-blue-50 text-blue-600" href="/profil/elanlarim" />
-          <KpiCard icon={Heart} label="Sevimlilər" value={0} color="bg-pink-50 text-pink-600" href="/profil/sevimliler" />
-          <KpiCard icon={MessageCircle} label="Mesajlar" value={0} color="bg-violet-50 text-violet-600" href="/profil/mesajlar" />
+          <KpiCard icon={Heart} label="Sevimlilər" value={stats.favorites} color="bg-pink-50 text-pink-600" href="/profil/sevimliler" />
+          {/* Etiket «Mesajlar» deyil «Söhbətlər»dir: /conversations oxunmamış sayı QAYTARMIR,
+              yalnız söhbətlərin özünü — etiket göstərdiyi rəqəmə uyğun olmalıdır. */}
+          <KpiCard icon={MessageCircle} label="Söhbətlər" value={stats.conversations} color="bg-violet-50 text-violet-600" href="/profil/mesajlar" />
         </div>
 
-        {/* Etibar + Sadiqlik + Dəvət */}
-        <div className="grid md:grid-cols-3 gap-3">
+        {/* Etibar balı — istifadəçinin öz profil sahələrindən hesablanır (real data). */}
+        <div className="md:max-w-md">
           <TrustScore user={user} />
-          <LoyaltyPoints />
-          <ReferralProgram />
-        </div>
-
-        {/* Nailiyyətlər + Smart bildirişlər */}
-        <div className="grid md:grid-cols-2 gap-3">
-          <AchievementBadges />
-          <SmartAlerts />
         </div>
 
         {/* Şəbəkə banneri */}
@@ -107,7 +116,7 @@ export default function ProfileDashboardPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm truncate">{it.title}</div>
                     <div className="font-bold text-ink-900 mt-1">
-                      {it.price ? `${Number(it.price).toLocaleString('az-AZ')} ${it.currency}` : 'Razılaşma'}
+                      {it.price ? `${azNumber(it.price)} ${it.currency}` : 'Razılaşma'}
                     </div>
                     <div className="text-xs text-ink-500 mt-0.5 flex items-center gap-2">
                       <Eye className="w-3 h-3" /> {it.views ?? 0}

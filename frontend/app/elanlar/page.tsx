@@ -16,6 +16,7 @@ import { meiliSearch, type MeiliHit } from '@/lib/meili';
 import CategoryIcon from '@/components/CategoryIcon';
 import { serverGet } from '@/lib/server-fetch';
 import { buildMetadata } from '@/lib/seo';
+import { azNumber } from '@/lib/format';
 
 /** Header/ana səhifə ilə eyni işçi sahə — sütunlar səhifələr arasında sıçramasın. */
 const SHELL = 'mx-auto w-full max-w-[1360px] px-4 md:px-6';
@@ -50,7 +51,7 @@ interface SP {
 
 type NestListing = {
   id: string; title: string; slug: string; price: number | null; currency: string;
-  priceType: string; isVip?: boolean; isPremium?: boolean; hasDelivery?: boolean;
+  priceType: string; isVip?: boolean; isPremium?: boolean; isDemo?: boolean; hasDelivery?: boolean;
   views?: number; favoritesCount?: number; createdAt: string;
   regionName?: string | null; districtName?: string | null;
   images?: { url: string; sortOrder: number }[];
@@ -97,13 +98,24 @@ function mapListing(l: NestListing): Listing {
   return {
     id: l.id, title: l.title, slug: l.slug, price: l.price ?? null,
     currency: l.currency ?? 'AZN', price_type: l.priceType ?? 'fixed',
-    is_vip: l.isVip, is_premium: l.isPremium, has_delivery: l.hasDelivery,
+    is_vip: l.isVip, is_demo: l.isDemo, is_premium: l.isPremium, has_delivery: l.hasDelivery,
     views: l.views, favorites_count: l.favoritesCount, created_at: l.createdAt,
     city_name: l.regionName ?? undefined, district: l.districtName ?? undefined,
     media: (l.images ?? []).map((i) => ({ url: i.url, sort_order: i.sortOrder ?? 0 })),
   };
 }
 
+type GeoRegion = { slug: string; nameAz: string };
+
+/**
+ * REGION SİYAHISI — YALNIZ FALLBACK.
+ *
+ * Bazada 74 region var və sitemap onların hamısına landing URL-i verir, bu sabit
+ * siyahı isə 7-ni tanıyırdı: `?region=xacmaz` səhifəsində h1 ASCII slug göstərirdi
+ * («— xacmaz»), filtr paneli isə seçilməmiş görünürdü. İndi siyahı işə salınanda
+ * `/geo/regions`-dən (24 saat keşlə) gəlir; bu massiv yalnız API əlçatmaz olduqda
+ * işlədilir ki, filtr paneli boş qalmasın.
+ */
 const REGIONS = [
   { slug: '', name: 'Bütün AZ' }, { slug: 'baki', name: 'Bakı' },
   { slug: 'sumqayit', name: 'Sumqayıt' }, { slug: 'gence', name: 'Gəncə' },
@@ -259,8 +271,103 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
   let catTree: CatNode[] = []; // vertikal landinq: seqment tabları + plitələr
   let understanding: Understanding | null = null;
   let backendDown = false; // timeout/şəbəkə/5xx → "elan yoxdur"dan fərqli fallback
+  /**
+   * Nəticələrin MƏNBƏYİ — «daha çox» səhifələməsi buna görə qurulur:
+   *  · listings → `/api/listings` + `baseQuery` (bütün filtrlər daxil)
+   *  · search   → `/api/search` + `searchQuery` (transliterasiya orada var)
+   *  · static   → Meili/AI cavabı; ranking bir dəfəlikdir, səhifələnmir.
+   */
+  let listSource: 'listings' | 'search' | 'static' = 'listings';
 
-  if (sp.q) {
+  // Aktiv a_* atribut filtrləri (boş dəyərlər sayılmır).
+  const attrEntries = Object.entries(sp).filter(
+    (e): e is [string, string] => e[0].startsWith('a_') && Boolean(e[1]),
+  );
+
+  /**
+   * MƏTN AXTARIŞI + FİLTR.
+   *
+   * `q` budağı Meili/AI/`/search` zəncirindən keçir və həmin mərhələlərin heç biri
+   * region/kateqoriya/qiymət/sıralamanı QƏBUL ETMİR — nəticədə `?q=telefon&region=gence`
+   * filtrsiz siyahı göstərirdi (ölçüldü: eyni 9 nəticə). `/listings` isə həm `q`-ni,
+   * həm bütün filtrləri dəstəkləyir, ona görə FİLTR VARSA sorğu ora yönləndirilir.
+   * Filtr YOXDURSA zəncir toxunulmaz qalır — typo dözümü və semantik axtarış itməsin.
+   */
+  const hasFilters =
+    Boolean(sp.region || sp.category || sp.vertical || sp.priceMin || sp.priceMax || sp.sort) ||
+    attrEntries.length > 0;
+
+  // Köməkçi sorğular DƏRHAL başladılır (waterfall olmasın) və aşağıda `await` edilir.
+  const emptyRes = { data: null, meta: null, unavailable: false };
+  const attrPromise: Promise<{ data: CatAttr[] | null }> = sp.category
+    ? serverGet<CatAttr[]>(`/categories/${sp.category}/attributes`, { next: { revalidate: 600 } })
+    : Promise.resolve(emptyRes);
+  const treePromise: Promise<{ data: CatNode[] | null }> = sp.category
+    ? serverGet<CatNode[]>('/categories', { next: { revalidate: 300 } })
+    : Promise.resolve(emptyRes);
+  // Regionlar praktiki olaraq statikdir → 24 saat keş; h1, filtr paneli və çip
+  // etiketləri eyni mənbədən qidalanır.
+  const regionsPromise = serverGet<GeoRegion[]>('/geo/regions', { next: { revalidate: 86_400 } });
+
+  /**
+   * Rəqəm tipli atributun BƏRABƏRLİK filtri JSONB-də `number` ilə müqayisə olunur,
+   * ona görə `a_year=2020` string kimi göndəriləndə 0 nəticə verirdi (ölçüldü:
+   * attrs={"year":2020} → 1, {"year":"2020"} → 0).
+   *
+   * Çevrilmə KOR-KORANƏ edilmir: sxemdə `type === 'number'` olan açarlar süzülür.
+   * Əks halda tamamilə rəqəmdən ibarət SELECT dəyəri (məs. yaddaş «512») də
+   * rəqəmə çevrilib hazırda İŞLƏYƏN filtri sındırardı.
+   *
+   * Sxem yalnız belə bir filtr HƏQİQƏTƏN varsa gözlənilir — adi hallarda sorğular
+   * paralel qalır. Gözlənilən promise yuxarıda artıq başladığı üçün əlavə HTTP
+   * sorğusu yaranmır.
+   */
+  let numberAttrKeys = new Set<string>();
+  const needsAttrTypes =
+    Boolean(sp.category) &&
+    attrEntries.some(
+      ([k, v]) => !k.endsWith('_min') && !k.endsWith('_max') && Number.isFinite(Number(v)),
+    );
+  if (needsAttrTypes) {
+    const d = await attrPromise;
+    if (d.data) {
+      numberAttrKeys = new Set(d.data.filter((a) => a.type === 'number').map((a) => a.key));
+    }
+  }
+
+  /** `/listings` sorğu sətri — həm browse, həm «q + filtr» budağı işlədir. */
+  const buildListingParams = (): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (sp.q) params.set('q', sp.q);
+    if (sp.region) params.set('region', sp.region);
+    if (sp.category) params.set('category', sp.category);
+    if (sp.vertical) params.set('vertical', sp.vertical);
+    if (sp.priceMin) params.set('priceMin', sp.priceMin);
+    if (sp.priceMax) params.set('priceMax', sp.priceMax);
+    if (sp.sort) params.set('sort', sp.sort);
+    // a_* atribut filtrləri → attrs JSON (scalar + range _min/_max)
+    const attrsObj: Record<string, unknown> = {};
+    for (const [k, v] of attrEntries) {
+      const key = k.slice(2);
+      if (key.endsWith('_min')) {
+        const base = key.slice(0, -4);
+        attrsObj[base] = { ...(attrsObj[base] as object), min: Number(v) };
+      } else if (key.endsWith('_max')) {
+        const base = key.slice(0, -4);
+        attrsObj[base] = { ...(attrsObj[base] as object), max: Number(v) };
+      } else if (numberAttrKeys.has(key)) {
+        attrsObj[key] = Number(v);
+      } else {
+        // boolean filtrlər `a_<key>=true` STRING göndərir; seed JSON boolean saxlayır →
+        // əsl boolean-a çevir ki, Prisma `equals` uyğunlaşsın (select dəyərləri olduğu kimi qalır)
+        attrsObj[key] = v === 'true' ? true : v === 'false' ? false : v;
+      }
+    }
+    if (Object.keys(attrsObj).length) params.set('attrs', JSON.stringify(attrsObj));
+    return params;
+  };
+
+  if (sp.q && !hasFilters) {
     // ---- Hibrid axtarış: Meili (typo+sinonim) → AI semantik → keyword ----
     // Faza 0: üç mərhələ ARDICIL işlədiyi üçün sabit timeout-lar cəmlənib səhifəni
     // 15-20 s gözlədə bilirdi. İndi ÜMUMİ büdcə var: hansı mərhələdə olursa olsun,
@@ -271,6 +378,8 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     // İlk batch browse budağı ilə eyni ölçüdə (50) — əvvəl 24 idi və nəticə sayı
     // ondan çox olanda qalanına heç bir yol qalmırdı.
     const SEARCH_LIMIT = 50;
+
+    listSource = 'static';
 
     const hits = await meiliSearch(sp.q, SEARCH_LIMIT, Math.min(4_000, left()));
     if (hits.length) {
@@ -309,6 +418,7 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
         { cache: 'no-store', timeoutMs: Math.max(2_000, Math.min(4_000, left())) },
       );
       if (kw.data) {
+        listSource = 'search';
         items = kw.data.map(mapSearchHit);
         total = kw.meta?.total ?? items.length;
         // `/search` meta-da `hasMore` yoxdur → total-dan hesablanır.
@@ -319,32 +429,8 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
       if (kw.unavailable) backendDown = true;
     }
   } else {
-    // ---- Adi filter axtarış ----
-    const params = new URLSearchParams();
-    if (sp.region) params.set('region', sp.region);
-    if (sp.category) params.set('category', sp.category);
-    if (sp.vertical) params.set('vertical', sp.vertical);
-    if (sp.priceMin) params.set('priceMin', sp.priceMin);
-    if (sp.priceMax) params.set('priceMax', sp.priceMax);
-    if (sp.sort) params.set('sort', sp.sort);
-    // a_* atribut filtrləri → attrs JSON (scalar + range _min/_max)
-    const attrsObj: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(sp)) {
-      if (!k.startsWith('a_') || !v) continue;
-      const key = k.slice(2);
-      if (key.endsWith('_min')) {
-        const base = key.slice(0, -4);
-        attrsObj[base] = { ...(attrsObj[base] as object), min: Number(v) };
-      } else if (key.endsWith('_max')) {
-        const base = key.slice(0, -4);
-        attrsObj[base] = { ...(attrsObj[base] as object), max: Number(v) };
-      } else {
-        // boolean filtrlər `a_<key>=true` STRING göndərir; seed JSON boolean saxlayır →
-        // əsl boolean-a çevir ki, Prisma `equals` uyğunlaşsın (select dəyərləri olduğu kimi qalır)
-        attrsObj[key] = v === 'true' ? true : v === 'false' ? false : v;
-      }
-    }
-    if (Object.keys(attrsObj).length) params.set('attrs', JSON.stringify(attrsObj));
+    // ---- Adi filter axtarış (və «q + filtr» halı) ----
+    const params = buildListingParams();
     baseQuery = params.toString(); // sonsuz scroll üçün (page/limit-siz)
     params.set('page', '1');
     params.set('limit', '50');
@@ -356,14 +442,8 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
         `/listings?${params}`,
         { next: { revalidate: 30 } },
       ),
-      sp.category
-        ? serverGet<CatAttr[]>(`/categories/${sp.category}/attributes`, {
-            next: { revalidate: 600 },
-          })
-        : Promise.resolve({ data: null, meta: null, unavailable: false }),
-      sp.category
-        ? serverGet<CatNode[]>('/categories', { next: { revalidate: 300 } })
-        : Promise.resolve({ data: null, meta: null, unavailable: false }),
+      attrPromise,
+      treePromise,
     ]);
     if (listD.data) {
       items = listD.data.map(mapListing);
@@ -376,6 +456,13 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     if (treeD.data) catTree = treeD.data;
   }
 
+  // Region lüğəti — h1, filtr paneli və çip etiketləri üçün TƏK mənbə.
+  const regionsD = await regionsPromise;
+  const regions =
+    regionsD.data?.length
+      ? [{ slug: '', name: 'Bütün AZ' }, ...regionsD.data.map((r) => ({ slug: r.slug, name: r.nameAz }))]
+      : REGIONS;
+
   const uChips = understanding
     ? Object.entries(understanding).filter(([, v]) => v != null && v !== '')
     : [];
@@ -385,7 +472,7 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
   const found = sp.category ? findCategory(catTree, sp.category) : null;
   const heading = found?.node.nameAz || catName || (sp.category ?? '').replace(/-/g, ' ');
   const regionName = sp.region
-    ? REGIONS.find((r) => r.slug === sp.region)?.name ?? sp.region
+    ? regions.find((r) => r.slug === sp.region)?.name ?? sp.region
     : '';
   // Seqment tabları: alt kateqoriyalar; yarpaq kateqoriyadasınsa QARDAŞLAR göstərilir,
   // yəni bir səviyyə aşağı düşəndə naviqasiya itmir (Avito vertikal modeli).
@@ -408,7 +495,7 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
     }
   }
   const attrLabels = Object.fromEntries(catAttrs.map((a) => [a.key, a.labelAz]));
-  const regionLabels = Object.fromEntries(REGIONS.filter((r) => r.slug).map((r) => [r.slug, r.name]));
+  const regionLabels = Object.fromEntries(regions.filter((r) => r.slug).map((r) => [r.slug, r.name]));
 
   /** Seqment/tab keçidi: atribut filtrləri kateqoriyaya bağlıdır → yeni tabda sıfırlanır. */
   const segHref = (slug: string): string => {
@@ -435,9 +522,13 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
               «{sp.q}»
             </h1>
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 text-sm font-bold text-tap">
-                🤖 AI axtarışı
-              </span>
+              {/* Filtrli axtarış `/listings`-dən gəlir (Meili/AI zənciri keçilir),
+                  ona görə orada «AI axtarışı» nişanı yanlış vəd olardı. */}
+              {listSource !== 'listings' && (
+                <span className="inline-flex items-center gap-1 text-sm font-bold text-tap">
+                  🤖 AI axtarışı
+                </span>
+              )}
               {uChips.map(([k, v]) => (
                 <span
                   key={k}
@@ -458,7 +549,7 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
                 {regionName && <span className="font-extrabold text-ink-400"> — {regionName}</span>}
                 {total > 0 && (
                   <span className="ml-2.5 whitespace-nowrap font-extrabold text-ink-400">
-                    {total.toLocaleString('az-AZ')}
+                    {azNumber(total)}
                   </span>
                 )}
               </h1>
@@ -495,19 +586,22 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
               {regionName && <span className="text-ink-400"> — {regionName}</span>}
               {total > 0 && (
                 <span className="ml-2.5 font-extrabold text-ink-400">
-                  {total.toLocaleString('az-AZ')}
+                  {azNumber(total)}
                 </span>
               )}
             </h1>
           </header>
         )}
 
-        {/* ——— §8.3 üfüqi filtr paneli + silinə bilən çiplər ——— */}
-        {!sp.q && (
+        {/* ——— §8.3 üfüqi filtr paneli + silinə bilən çiplər ———
+            Mətn axtarışında da göstərilir, ƏGƏR filtr aktivdirsə: əks halda
+            istifadəçi tətbiq olunmuş region/qiymət filtrini nə görür, nə silə bilirdi
+            («boş səhifə, səbəbi bilinmir»). */}
+        {(!sp.q || hasFilters) && (
           <>
             <CategoryFilters
               attributes={catAttrs}
-              regions={REGIONS}
+              regions={regions}
               sorts={SORTS}
               total={total}
             />
@@ -539,7 +633,7 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
                       </span>
                       {typeof c.listingsCount === 'number' && c.listingsCount > 0 && (
                         <span className="relative z-10 mt-1 text-[13px] text-ink-400">
-                          {c.listingsCount.toLocaleString('az-AZ')}
+                          {azNumber(c.listingsCount)}
                         </span>
                       )}
                       {/* Vahid ikon sistemi — hər alt-kateqoriyanın ÖZ qlifi var.
@@ -573,15 +667,22 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
           </div>
         )}
 
-        {/* ——— §8.5 «Ən yenilər» ——— */}
-        {!sp.q && (
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        {/* ——— §8.5 «Ən yenilər» ———
+            «Axtarışı saxla» ARTIQ ŞƏRTSİZDİR: əvvəl bu blok bütövlükdə `!sp.q`
+            içində idi, ona görə düymə mətn axtarışında heç vaxt görünmürdü.
+            Görünüb-görünməməsinə komponentin özü (aktiv filtr var?) qərar verir.
+            Boş `<span>` layoutu saxlayır — `justify-between` tək uşaqda düyməni
+            sola dartardı. */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          {!sp.q ? (
             <h2 className="text-[22px] font-bold text-ink-900 dark:text-white">
               {isMap ? 'Xəritədə' : 'Ən yenilər'}
             </h2>
-            <SaveSearchButton filters={sp as Record<string, string>} />
-          </div>
-        )}
+          ) : (
+            <span />
+          )}
+          <SaveSearchButton filters={sp as Record<string, string>} />
+        </div>
 
         <div id="netice" className="scroll-mt-24">
           {items.length === 0 && backendDown ? (
@@ -601,7 +702,9 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
           ) : items.length === 0 ? (
             <div className="rounded-2xl bg-ink-100 p-12 text-center dark:bg-ink-800">
               <p className="text-lg text-ink-500">
-                {sp.q ? 'AI bu sorğuya uyğun elan tapmadı' : 'Bu filtrlə elan tapılmadı'}
+                {sp.q && !hasFilters
+                  ? 'AI bu sorğuya uyğun elan tapmadı'
+                  : 'Bu filtrlə elan tapılmadı'}
               </p>
               <Link href="/elanlar" className="btn-secondary mt-4 inline-flex">
                 Bütün elanlara bax
@@ -609,26 +712,24 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
             </div>
           ) : isMap ? (
             <MapView listings={items} />
-          ) : sp.q ? (
-            searchQuery ? (
-              // Axtarış nəticələri də səhifələnir: əvvəl bu budaq sadə grid idi və
-              // meta.total 64 olsa belə yalnız ilk batch görünürdü, "daha çox" yolu yox idi.
-              <InfiniteListings
-                key={searchQuery}
-                initialItems={items}
-                baseQuery={searchQuery}
-                initialHasMore={hasMore}
-                endpoint="/api/search"
-              />
-            ) : (
-              // Meili/AI cavabları səhifələnən mənbə deyil (ranking bir dəfəlikdir),
-              // ona görə onlar sadə grid kimi qalır — yanlış "daha çox" vədi verilmir.
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-5 lg:grid-cols-4 xl:grid-cols-5">
-                {items.map((l) => (
-                  <ListingCard key={l.id} item={l} />
-                ))}
-              </div>
-            )
+          ) : listSource === 'search' ? (
+            // Axtarış nəticələri də səhifələnir: əvvəl bu budaq sadə grid idi və
+            // meta.total 64 olsa belə yalnız ilk batch görünürdü, "daha çox" yolu yox idi.
+            <InfiniteListings
+              key={searchQuery}
+              initialItems={items}
+              baseQuery={searchQuery}
+              initialHasMore={hasMore}
+              endpoint="/api/search"
+            />
+          ) : listSource === 'static' ? (
+            // Meili/AI cavabları səhifələnən mənbə deyil (ranking bir dəfəlikdir),
+            // ona görə onlar sadə grid kimi qalır — yanlış "daha çox" vədi verilmir.
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-5 lg:grid-cols-4 xl:grid-cols-5">
+              {items.map((l) => (
+                <ListingCard key={l.id} item={l} />
+              ))}
+            </div>
           ) : (
             // `key` = filtr imzası: filtr dəyişəndə komponent REMOUNT olunur, yəni
             // `useState(initialItems)` yenidən oxunur (komponent daxilindəki sıfırlama

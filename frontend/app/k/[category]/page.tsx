@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { buildRedirectUrl, type IncomingParams } from '@/lib/forward-params';
 
 /**
  * SEO — DİNAMİK YÖNLƏNDİRMƏ, ÜZƏRİNDƏ SUSPENSE SƏRHƏDİ OLMAMALIDIR.
@@ -19,9 +20,12 @@ import { redirect } from 'next/navigation';
  */
 export default async function CategoryLandingPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ category: string }>;
+  searchParams: Promise<IncomingParams>;
 }) {
   const { category } = await params;
-  redirect(`/elanlar?category=${encodeURIComponent(category)}`);
+  // Gələn filtrlər (qiymət, sıralama, atributlar) ötürülür — əvvəl itirdi.
+  redirect(buildRedirectUrl({ category }, await searchParams));
 }

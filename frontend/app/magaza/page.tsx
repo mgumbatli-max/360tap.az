@@ -8,6 +8,7 @@ import { serverGet } from '@/lib/server-fetch';
 import { safeImageUrl } from '@/lib/image-hosts';
 import { buildMetadata } from '@/lib/seo';
 import { hasRating, type ListMeta, type Store } from './store-api';
+import { azNumber } from '@/lib/format';
 
 const SHELL = 'mx-auto w-full max-w-[1360px] px-4 md:px-6';
 const PER_PAGE = 24;
@@ -62,7 +63,7 @@ export default async function StoresCatalogPage({
             Mağazalar
             {stores && total > 0 && (
               <span className="ml-2.5 font-extrabold text-ink-400">
-                {total.toLocaleString('az-AZ')}
+                {azNumber(total)}
               </span>
             )}
           </h1>
@@ -178,7 +179,7 @@ function StoreCard({ store }: { store: Store }) {
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-500 dark:text-ink-400">
           {typeof store.activeListings === 'number' && (
-            <span>{store.activeListings.toLocaleString('az-AZ')} elan</span>
+            <span>{azNumber(store.activeListings)} elan</span>
           )}
           {hasRating(store) && (
             <span className="flex items-center gap-1">

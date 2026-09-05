@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Search, Shield, AlertTriangle, CheckCircle2, X, Loader2 } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 const WMI_DB: Record<string, string> = {
   'WBA': 'BMW (AG)', 'WBS': 'BMW M', 'WBX': 'BMW (X SUV)',
@@ -87,7 +88,7 @@ export default function VINChecker() {
             <Info label="İl (təxmini)" value={result.year || '—'} />
             <Info label="Sahibə sayı" value={result.owners} />
             <Info label="Qəzalar" value={result.accidents === 0 ? '✓ Yoxdur' : `⚠ ${result.accidents}`} />
-            <Info label="Yürüş (km)" value={result.mileage.toLocaleString('az-AZ')} />
+            <Info label="Yürüş (km)" value={azNumber(result.mileage)} />
             <Info label="VIN" value={result.vin} mono />
           </div>
 

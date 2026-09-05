@@ -103,7 +103,7 @@ export default function NotificationsPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-ink-900 dark:text-white">{n.title}</p>
                   {n.body && <p className="text-sm text-ink-600 dark:text-ink-300 mt-0.5">{n.body}</p>}
-                  <p className="text-xs text-ink-400 mt-1">{timeAgo(n.createdAt)}</p>
+                  <p className="text-xs text-ink-400 mt-1" suppressHydrationWarning>{timeAgo(n.createdAt)}</p>
                 </div>
                 {!n.read && <span className="w-2 h-2 rounded-full bg-tap mt-2 shrink-0" />}
               </div>

@@ -1,5 +1,6 @@
 'use client';
 import { Sparkles, Award } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function LoyaltyPoints({ points = 1240, level = 'Silver' }: { points?: number; level?: string }) {
   const next = level === 'Silver' ? 'Gold' : level === 'Gold' ? 'Platinum' : 'Diamond';
@@ -11,11 +12,11 @@ export default function LoyaltyPoints({ points = 1240, level = 'Silver' }: { poi
         <h3 className="font-bold flex items-center gap-2"><Award className="w-4 h-4 text-violet-600" /> Sadiqlik xalları</h3>
         <span className="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">{level}</span>
       </div>
-      <div className="text-3xl font-extrabold text-violet-700">{points.toLocaleString('az-AZ')} <span className="text-sm">xal</span></div>
+      <div className="text-3xl font-extrabold text-violet-700">{azNumber(points)} <span className="text-sm">xal</span></div>
       <div className="mt-3">
         <div className="flex justify-between text-[10px] text-ink-600 mb-1">
           <span>İndi {level}</span>
-          <span>{next} → {nextAt.toLocaleString('az-AZ')}</span>
+          <span>{next} → {azNumber(nextAt)}</span>
         </div>
         <div className="h-2 bg-ink-100 rounded-full overflow-hidden">
           <div className="h-full bg-gradient-to-r from-violet-500 to-pink-500" style={{ width: `${pct}%` }} />

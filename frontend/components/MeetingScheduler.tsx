@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Calendar, MapPin, Clock, Send, X } from 'lucide-react';
+import { azDateLong } from '@/lib/format';
 
 export default function MeetingScheduler({ onSchedule }: { onSchedule: (text: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -16,7 +17,7 @@ export default function MeetingScheduler({ onSchedule }: { onSchedule: (text: st
     e.preventDefault();
     if (!date || !time || !place) return;
     const d = new Date(`${date}T${time}`);
-    const formatted = `📅 Görüş təklifim:\n• Tarix: ${d.toLocaleDateString('az-AZ', { weekday: 'long', day: 'numeric', month: 'long' })}\n• Saat: ${time}\n• Yer: ${place}${note ? `\n• Qeyd: ${note}` : ''}\n\nUyğundursa təsdiq edin 🙂`;
+    const formatted = `📅 Görüş təklifim:\n• Tarix: ${azDateLong(d)}\n• Saat: ${time}\n• Yer: ${place}${note ? `\n• Qeyd: ${note}` : ''}\n\nUyğundursa təsdiq edin 🙂`;
     onSchedule(formatted);
     setOpen(false);
     setDate(''); setTime('15:00'); setPlace(''); setNote('');

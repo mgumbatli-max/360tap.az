@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Shield, Loader2 } from 'lucide-react';
+import { azNumber } from '@/lib/format';
 
 export default function InsuranceCalc() {
   const [carPrice, setCarPrice] = useState(30000);
@@ -51,7 +52,7 @@ function Row({ label, value, bold }: any) {
   return (
     <div className={`flex justify-between py-1 ${bold ? 'border-t pt-2 mt-2 border-ink-200' : ''}`}>
       <span className={bold ? 'font-bold' : 'text-sm text-ink-700'}>{label}</span>
-      <span className={`font-bold ${bold ? 'text-tap text-lg' : ''}`}>{value.toLocaleString('az-AZ')} ₼</span>
+      <span className={`font-bold ${bold ? 'text-tap text-lg' : ''}`}>{azNumber(value)} ₼</span>
     </div>
   );
 }

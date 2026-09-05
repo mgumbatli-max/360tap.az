@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Handshake, Send, Sparkles, X } from 'lucide-react';
 import { useToast } from '@/lib/toast';
+import { azNumber } from '@/lib/format';
 
 export default function AINegotiator({ price, listingId }: { price: number; listingId: string }) {
   const [open, setOpen] = useState(false);
@@ -11,7 +12,7 @@ export default function AINegotiator({ price, listingId }: { price: number; list
 
   const sendOffer = () => {
     const pct = (price - offer) / price;
-    setChat([...chat, { from: 'me', text: `${offer.toLocaleString('az-AZ')} ₼ təklif edirəm` }]);
+    setChat([...chat, { from: 'me', text: `${azNumber(offer)} ₼ təklif edirəm` }]);
 
     setTimeout(() => {
       let reply = '';
@@ -51,7 +52,7 @@ export default function AINegotiator({ price, listingId }: { price: number; list
                 className="w-full mt-2" />
               <div className="flex justify-between text-xs text-ink-500 mt-1">
                 <span>-{Math.round((1 - offer/price) * 100)}%</span>
-                <span>Bazar qiyməti: {price.toLocaleString('az-AZ')} ₼</span>
+                <span>Bazar qiyməti: {azNumber(price)} ₼</span>
               </div>
             </div>
 
