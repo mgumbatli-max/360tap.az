@@ -116,16 +116,29 @@ export class HealthController {
     chain: string[];
     socket: string;
     selectedKey: string;
+    candidates: Record<string, string | null>;
     note: string;
   } {
     const short = (v: string): string => createHash('sha256').update(v).digest('hex').slice(0, 10);
     const chain = forwardedChain(req);
+
+    // Hansı «real müştəri IP-si» başlığının mövcud olduğunu göstərir. XFF hop sayı
+    // yola görə dəyişir (ölçüldü: proxy üzərindən 4, birbaşa 3), ona görə sabit hop
+    // etibarlı açar vermir — bu başlıqlardan biri varsa, düzgün həll odur.
+    const candidates: Record<string, string | null> = {};
+    for (const name of ['cf-connecting-ip', 'true-client-ip', 'x-real-ip', 'fly-client-ip']) {
+      const raw = req.headers?.[name];
+      const value = Array.isArray(raw) ? raw[0] : raw;
+      candidates[name] = value ? short(value) : null;
+    }
+
     return {
       trustProxyHops: TRUST_PROXY_HOPS,
       chainLength: chain.length,
       chain: chain.map(short),
       socket: short(req.socket?.remoteAddress ?? 'unknown'),
       selectedKey: short(clientIp(req)),
+      candidates,
       note: 'Fərqli şəbəkələrdən eyni selectedKey gəlirsə, rate limit bucket-i paylaşılır.',
     };
   }
