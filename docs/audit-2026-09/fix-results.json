@@ -1,0 +1,612 @@
+{
+ "fixedCount": 78,
+ "skippedCount": 36,
+ "groups": [
+  {
+   "key": "api_listings",
+   "fixed": [
+    {
+     "id": "listing-patch-silent-field-drop",
+     "what": "api/src/modules/listings/listings.service.ts update() — data blokuna 12 skalyar əlavə edildi (currency, oldPrice, contactName, contactPhone, contactWhatsapp, address, lat, lng, hasDelivery, hasCredit, hasBarter, hasWarranty, inStock), hər biri `if (dto.X !== undefined)` + nullable-lar üçün `?? null` (price semantikası qorundu). Şəkillər ayrıca defektdə həll olundu (listing-images-patch-ignored). UpdateListingDto daraldılmadı — PATCH-in qismi olması saxlanıldı.",
+     "verified": "İzolyasiya edilmiş build (dist-lcheck, port 5598, 5500-ə toxunulmadı): POST ilə elan yaradıldı, sonra PATCH ilə hamısı göndərildi → cavab {'currency':'EUR','contactPhone':'+994559999999','contactName':'Yeni Ad','address':'Yeni unvan 5','lat':40.4,'lng':49.8,'hasCredit':True,'hasDelivery':False,'hasWarranty':True,'inStock':False,'oldPrice':250}; psql təsdiqi: `universal|EUR|Yeni Ad|Yeni unvan 5|40.4|49.8|t|f|f|250.00`. Əvvəlki davranış (USD/köhnə telefon/None) təkrarlanmır."
+    },
+    {
+     "id": "listing-patch-vertical-not-updated",
+     "what": "listings.service.ts update() — `categoryId` dəyişəndə artıq `this.categories.assertExists(dto.categoryId)` çağırılır və `data.vertical = category.vertical` yazılır (create yolundakı naxışın eynisi). Data-fix: `update listings l set vertical=c.vertical from categories c where c.id=l.category_id and l.vertical<>c.vertical` → UPDATE 4 (yalnız denormalizasiya sütunu).",
+     "verified": "PATCH ilə transport kateqoriyasından universal kateqoriyaya keçid → cavabda vertical='universal', psql `select vertical...` = universal. Data-fix sonrası drift sorğusu: `select count(*) ... where l.vertical<>c.vertical` → 4-dən 0-a düşdü. `?vertical=` filtri (findAll) hələ 200 qaytarır."
+    },
+    {
+     "id": "sort-popular-unstable-paging",
+     "what": "listings.service.ts findAll() — `orderBy` tək obyektdən `Prisma.ListingOrderByWithRelationInput[]` massivinə çevrildi, hər variantın sonunda unikal `{id:'asc'}` tie-breaker (popular üçün əlavə `{createdAt:'desc'}`). Birinci meyar dəyişməyib. `@@index` ƏLAVƏ EDİLMƏDİ — sxem dəyişikliyi qadağandır (bax notes).",
+     "verified": "1..11 səhifə (limit=20) hər 4 sıralama üzrə gəzildi: əvvəl popular total=113 fetched=113 unique=110 idi; düzəlişdən sonra popular/price_asc/price_desc/new — hamısı unique=113, dublikat və itmiş elan yoxdur."
+    },
+    {
+     "id": "moderation-self-approve-reactivate",
+     "what": "listings.service.ts — modul səviyyəsində `OWNER_STATUS_TRANSITIONS` cədvəli (active→sold|archived, sold→active|archived, archived→active, out_of_stock→archived, expired→active|archived); setStatus artıq `select: {ownerId, status, publishedAt}` oxuyur və cədvəldə olmayan mənbə statusda (review/rejected/blocked/draft) ForbiddenException atır. Eyni status təkrar yazılanda keçid yoxlanmır (idempotent). Admin marşrutu ƏLAVƏ EDİLMƏDİ — admin modulu mənim qrupumda deyil.",
+     "verified": "UI axınları: active→sold 200, sold→active 200, active→archived 200, archived→active 200 (profil «Aktivləşdir» düyməsi sağdır). Bypass testi: psql ilə status='review' edildi → POST /listings/:id/reactivate → HTTP 403 «elan moderasiyadadır…», psql-də status hələ `review`."
+    },
+    {
+     "id": "listing-mutation-response-truncates-images",
+     "what": "listings.service.ts — setStatus və update cavab include-larından `take: 1` götürüldü (create/findById ilə eyniləşdi). Siyahı endpoint-lərində (findSimilar, listByOwner, findAll) `take: 1` toxunulmadan qaldı.",
+     "verified": "3 şəkilli elanda PATCH cavabı → `images in PATCH response: 3` (əvvəl 1 idi), psql count = 3."
+    },
+    {
+     "id": "listing-publishedat-never-set",
+     "what": "listings.service.ts create() — `status:'active'` yanına `publishedAt: new Date()` əlavə edildi (ERP yolu ilə simmetriya). setStatus-da yalnız `status==='active' && listing.publishedAt === null` olduqda doldurulur — təkrar aktivləşdirmə ilk dərc tarixini sıfırlamır. Data-fix: `update listings set published_at=created_at where published_at is null and status='active'` → UPDATE 7.",
+     "verified": "Yeni POST /listings cavabı → publishedAt='2026-09-05T12:37:17.384Z' (əvvəl None). archive→reactivate dövründən sonra psql: `active|2026-09-05 12:37:17.384` — dəyişməyib. Backfill sonrası `published_at is null and status='active'` → 0."
+    },
+    {
+     "id": "listing-similar-no-404",
+     "what": "listings.service.ts findSimilar() — `if (!listing) return []` → `throw new NotFoundException('Elan tapılmadı')`. Mənbə elana `status:'active'` şərti QƏSDƏN əlavə edilmədi (sahib öz arxiv elanının oxşarlarını itirməsin) — şərhdə qeyd olunub.",
+     "verified": "GET /listings/11111111-1111-4111-8111-111111111111/similar → əvvəl 200 {\"data\":[]}, indi HTTP 404. Real elan üçün similar hələ 200 + nəticə qaytarır."
+    },
+    {
+     "id": "listing-slug-url-returns-400",
+     "what": "listings.controller.ts — fayl səviyyəsində ortaq `listingIdPipe = new ParseUUIDPipe({version:'4', exceptionFactory: () => new NotFoundException('Elan tapılmadı')})`; GET /:id və GET /:id/similar onu işlədir. Autentifikasiyalı marşrutlarda (PATCH/sold/archive/reactivate) 400 saxlanıldı — orada «tapılmadı» semantikası yoxdur, dəyişiklik lazımsız risk olardı.",
+     "verified": "GET /api/v1/listings/su-neqliyyati-numune-64 → əvvəl 400 «Validation failed (uuid v 4 is expected)», indi HTTP 404."
+    },
+    {
+     "id": "listing-owner-cannot-read-own-inactive-listing",
+     "what": "YALNIZ BACKEND HİSSƏSİ. Yeni fayl api/src/modules/listings/guards/optional-jwt.guard.ts (route-səviyyəli OptionalJwtAuthGuard — qlobal JwtAuthGuard-a TOXUNULMADI); listings.controller.ts getById `@Public() @UseGuards(OptionalJwtAuthGuard)` + `@CurrentUser() user?` → `findById(id, user?.sub)`; listings.service.ts findById(id, viewerId?) where-i `viewerId ? {id, OR:[{status:'active'},{ownerId:viewerId}]} : {id, status:'active'}` (ownerId:undefined tələsindən qaçmaq üçün şərt açıq yazılıb), baxış sayğacı yalnız `listing.ownerId !== viewerId` olduqda artır.",
+     "verified": "Arxiv elan: anonim GET → 404; sahib token ilə GET → 200; BAŞQA sahibin arxiv elanı həmin tokenlə → 404 (sızma yoxdur). Regressiya: yararsız token («Bearer xxx.yyy.zzz») ilə GET /listings → 200 və GET /listings/<aktiv> → 200 (public marşrut 401 vermir). Baxış sayğacı: sahib baxışı 0→0, anonim baxış 22→23."
+    },
+    {
+     "id": "like-metachar-unescaped",
+     "what": "QİSMƏN (yalnız mənim faylım). listings.service.ts-ə modul səviyyəli `escapeLike()` köməkçisi əlavə edildi (`\\`, `%`, `_` → `\\X`) və findAll-dakı bütün `contains` terminlərinə tətbiq olundu. api/src/search/search.service.ts:285-291 MƏNİM QRUPUMDA DEYİL — orada eyni düzəliş hələ yoxdur (bax skipped/notes).",
+     "verified": "q=__ → əvvəl 113, indi 0; q=%% → 113 → 0; q=iP_one → 4 («iPhone») → 0. Nəzarət: q=iPhone → 4, q=telefon → 9 (dəyişmədi)."
+    },
+    {
+     "id": "one-char-query-returns-all",
+     "what": "QİSMƏN (yalnız mənim faylım). listings.service.ts findAll — 2 simvoldan qısa sorğuda `words` boş qalıb filtrin ÜMUMİYYƏTLƏ qurulmaması aradan qaldırıldı: `const terms = (words.length ? words : [raw]).map(escapeLike)` və `where.OR` həmişə qurulur. `where.id={in:[]}` (həmişə 0 nəticə) variantı RƏDD EDİLDİ — tək hərflə axtarana boş səhifə vermək, tərkibində həmin hərf olan elanları göstərməkdən pisdir. search.service.ts mənim deyil.",
+     "verified": "q=X → əvvəl 113 (bütün kataloq), indi 82 (yalnız tərkibində «x» olanlar); q=zzzzzzz → 0 (dəyişmədi); q=iPhone → 4."
+    },
+    {
+     "id": "invalid-attrs-json-silently-ignored",
+     "what": "listings.service.ts findAll — `catch { /* yanlış JSON → filtr tətbiq olunmur */ }` → `throw new BadRequestException('attrs parametri düzgün JSON deyil')`. BadRequestException onsuz da idxal olunub. DTO-ya custom validator əlavə edilmədi (mesaj servisdə daha dəqiqdir).",
+     "verified": "GET /listings?attrs={bad → əvvəl 200 + total=113 (filtrsiz bütün kataloq), indi HTTP 400. Nəzarət: attrs={\"brand\":\"Apple\"} → 200, total=7 (dəyişmədi)."
+    },
+    {
+     "id": "pricemin-gt-pricemax-no-validation",
+     "what": "dto/query-listings.dto.ts — priceMin/priceMax-a `@Min(0)`. listings.service.ts findAll — tərs aralıq üçün 422 ATILMIR, hədlər yerbəyer edilir (`if (lo != null && hi != null && lo > hi) [lo,hi]=[hi,lo]`), beləliklə paylaşılmış köhnə linklər sınmır. frontend/components/CategoryFilters.tsx UI normalizasiyası MƏNİM QRUPUMDA DEYİL.",
+     "verified": "?priceMin=-100 → əvvəl 200 + total=102 (səssiz 9 elan itirirdi), indi HTTP 422. ?priceMin=1000&priceMax=100 → əvvəl total=0, indi total=71; ?priceMin=100&priceMax=1000 → 71 (eyni nəticə, yəni swap işləyir)."
+    },
+    {
+     "id": "listing-images-patch-ignored",
+     "what": "BACKEND HİSSƏSİ. listings.service.ts update() — `prisma.listing.update` çağırışı `$transaction`-a köçürüldü: sahə yazısı → (yalnız `dto.images !== undefined` olduqda) `listingImage.deleteMany` + `createMany` (sortOrder = massivin sırası) → `findUniqueOrThrow` ilə tam cavab. `!== undefined` yoxlaması kritikdir: images göndərilməyən PATCH şəkillərə toxunmur. frontend/app/elan-yerlesdir/page.tsx:279 (`!editId &&` şərti) MƏNİM QRUPUMDA DEYİL — o götürülənə qədər UI hələ şəkil göndərmir.",
+     "verified": "PATCH {\"images\":[1 şəkil]} → cavabda 1 şəkil, psql: yalnız `.../NEW.jpg|0` (köhnə 3 sətir getdi). Sonra PATCH {\"price\":123} → psql count hələ 1 (qismi PATCH şəkilləri uçurmur). Sonra PATCH {\"images\":[]} → psql count 0. Əvvəl hər üç halda count dəyişmirdi."
+    }
+   ],
+   "skipped": [
+    {
+     "id": "listing-expiry-never-enforced",
+     "reason": "TAPŞIRIQDA AÇIQ İSTİSNA — düzəliş qadağandır. `expiresAt` filtri açılsa lokal kataloqun 92%-i (104/113) dərhal gizlənər; qərar layihə sahibinə aiddir. Həmçinin təklif olunan `@@index([status, expiresAt])` sxem miqrasiyası tələb edir (qayda 5). QEYD: `OWNER_STATUS_TRANSITIONS` cədvəlinə `expired: ['active','archived']` əvvəlcədən salındı ki, gələcəkdə müddət tətbiqi işə düşəndə müddəti bitmiş elan sahibi üçün kilidlənməsin."
+    },
+    {
+     "id": "like-metachar-unescaped (search.service.ts hissəsi)",
+     "reason": "api/src/search/search.service.ts:285-291 mənim qrupuma (api/src/modules/listings/**) aid deyil və paralel agent tərəfindən redaktə olunur (typecheck zamanı orada başqa agentin dəyişikliyi göründü). `GET /api/v1/search?q=__` hələ bütün kataloqu qaytarır — `escapeLike` eyni məntiqlə ora da köçürülməlidir."
+    },
+    {
+     "id": "one-char-query-returns-all (search.service.ts hissəsi)",
+     "reason": "Eyni səbəb: search.service.ts:285 (`w.length > 1`) mənim faylım deyil. `/search?q=X` hələ bütün kataloqu qaytarır, `/listings?q=X` isə artıq düzgün filtrlənir — iki endpoint müvəqqəti fərqli davranır."
+    },
+    {
+     "id": "listing-owner-cannot-read-own-inactive-listing (frontend hissəsi)",
+     "reason": "frontend/app/elan-yerlesdir/page.tsx:212 (`.catch(() => {})` səssiz xəta) və frontend/app/profil/elanlarim/page.tsx:147 («Bax» linki hər statusda) mənim qrupumda deyil. Backend hazırdır, amma faktiki fayda üçün frontend detal səhifəsi/redaktə formu sorğuya Authorization başlığını ötürməlidir — hazırda ötürmür, ona görə istifadəçi hələ 404 görəcək."
+    },
+    {
+     "id": "pricemin-gt-pricemax-no-validation (UI hissəsi)",
+     "reason": "frontend/components/CategoryFilters.tsx min/max input normalizasiyası mənim qrupumda deyil. Backend swap edir, lakin istifadəçi yazdığı tərs aralığı input-larda olduğu kimi görəcək (nəticə isə düzgündür)."
+    },
+    {
+     "id": "listing-images-patch-ignored (UI hissəsi)",
+     "reason": "frontend/app/elan-yerlesdir/page.tsx:279-dakı `if (!editId && photos.length)` şərti mənim qrupumda deyil. Backend artıq `images`-i düzgün emal edir; həmin şərt götürülənə qədər redaktə UI-ı hələ də şəkil göndərmir (yəni «sil → yadda saxla → şəkil qalır» səthdə davam edir)."
+    }
+   ],
+   "typecheck": "Mənim fayllarım təmizdir: `cd api && npx tsc --noEmit -p tsconfig.json` → src/ altında SIFIR xəta (grep \"src/modules/listings\" → 0 sətir). Qalan 2 xəta MƏNİM DEYİL və paralel agentin işidir: prisma/seed.ts(146,9) və (213,9) TS2353 «'isDemo' does not exist in type ListingCreateInput» — api/prisma/schema.prisma + api/prisma/seed.ts eyni anda dəyişdirilib (git status: hər ikisi M), Prisma klienti hələ yenidən generasiya olunmayıb. Mənim ilk typecheck-im (dəyişikliklərimdən dərhal sonra) tam təmiz idi; bu xətalar sonrakı runda peyda oldu.",
+   "notes": "YOXLAMA METODU: Port 5500-dəki server watch rejimində DEYİL və restart edilmədi (qayda 4) — bunun əvəzinə `npx tsc -p tsconfig.build.json --outDir dist-lcheck` ilə izolyasiya edilmiş build yığdım, `PORT=5598` ilə işə saldım, bütün repro-ları orada təkrarladım, sonra prosesi bağlayıb `dist-lcheck` qovluğunu sildim. 5500 sonda hələ də 200 qaytarır.\n\nTEST DATASI: Yoxlama üçün API-nin öz `/auth/register` endpoint-i ilə birdəfəlik istifadəçi (+9945010027926) və 1 test elanı yaradıldı, yoxlama bitəndə HƏR İKİSİ silindi. Demo/seed datasına toxunulmadı — `select count(*) from listings where status='active'` sonda yenə 113.\n\nİCRA EDİLMİŞ DATA-FIX (2 UPDATE, hər ikisi qeyd olunub):\n· `update listings l set vertical=c.vertical from categories c where c.id=l.category_id and l.vertical<>c.vertical` → 4 sətir (denormalizasiya sürüşməsi).\n· `update listings set published_at=created_at where published_at is null and status='active'` → 7 sətir. DİQQƏT: backfill dəyəri (created_at) TƏXMİNİDİR — sitemap `lastmod` və ya hesabat bu sahəyə keçəndə həmin 7 sətrin tarixi real dərc anı deyil.\n\nTƏTBİQ EDİLMƏYƏN TÖVSİYƏLƏR (sxem qadağası, qayda 5):\n· `@@index([status, views, id])` — sort=popular tie-breaker-i 113 sətirdə sərbəstdir, kataloq böyüyəndə lazım olacaq.\n· `@@index([status, expiresAt])` — expiry defekti onsuz da təxirə salınıb.\n\nMÜŞAHİDƏLƏR (düzəldilmədi, sahibinə xəbərdarlıq):\n1. `POST /listings` mağaza yolundan (ERP) fərqli olaraq həmişə `status:'active'` yazır — yəni istifadəçi elanları moderasiyadan HEÇ KEÇMİR. Moderasiya bypass düzəlişi yalnız `review` növbəsinə düşmüş (ERP) elanları qorudu; adi istifadəçi elanı üçün növbə ümumiyyətlə yoxdur. Bu, məhsul qərarıdır.\n2. `DELETE /listings/:id` endpoint-i YOXDUR — elan yalnız arxivlənə bilir. Triage hesabatındakı «DELETE → 404» buna görədir, defekt deyil.\n3. Yeni `OptionalJwtAuthGuard` yanlış/vaxtı keçmiş tokeni 401 yox, «anonim» kimi qəbul edir (public marşrutun köhnə müştəriyə görə qırılmaması üçün) — bu, qərar olaraq fayl şərhində yazılıb.\n4. api/src/modules/auth/strategies/jwt.strategy.ts iş vaxtı paralel agent tərəfindən dəyişdirildi (DB-dən status/rol oxuyan keş əlavə olundu). Mənim guard-ım o dəyişikliklə uyğundur: banlanmış istifadəçinin tokeni public elan səhifəsində sadəcə anonimə çevrilir, 500 vermir."
+  },
+  {
+   "key": "api_search",
+   "fixed": [
+    {
+     "id": "diakritiksiz-axtaris (ƏLAVƏ TAPŞIRIQ)",
+     "what": "YENİ fayl api/src/search/az-text.ts (137 sətir) — normalizeAzQuery/foldAz/escapeLike/azTextVariants/azKeywordOr/azSearchWords/azKeywordAnd ixrac edir. Sözün ASCII-yə qatlanmış formasından ≤4 mövqe üzrə dekart variantları qurulur (menzil→menzil,menzıl,mənzil,mənzıl; seher→8 variant, «şəhər» daxil) və hər variant title/description/category.nameAz üzrə ILIKE OR budağına çevrilir. Büdcədən kənar mövqelərdə İSTİFADƏÇİNİN yazdığı simvol saxlanılır, ona görə orijinal söz həmişə variant dəstindədir — dəyişiklik yalnız nəticə ƏLAVƏ edir, silmir. Tətbiq: api/src/search/search.service.ts:302-306 (fallbackSearch artıq azKeywordAnd() istifadə edir).",
+     "verified": "api/ kökündə müvəqqəti tsx skripti ilə REAL marketplace_dev bazasına qarşı prisma.listing.count(where): mənzil=5, menzil=5 (əvvəl 0), şəhər=1, seher=1 (əvvəl 0), ev=10. Sorğu vaxtı 3-60 ms (113 sətir). Skript sonra silindi (api/ təmizdir)."
+    },
+    {
+     "id": "az-uppercase-case-folding",
+     "what": "api/src/search/search.service.ts:355-357 — understand() artıq `q.toLowerCase()` yox, `normalizeAzQuery(q)` çağırır (NFC + toLowerCase + U+0307 birləşən nöqtəsinin silinməsi). 'MƏNZİL'→'mənzil', 'İphone'→'iphone'. I/ı problemi normalizasiyada YOX, az-text.ts-dəki ILIKE variantlarında həll olunur (TRANSLIT/REGION_TOKENS ASCII açarları qorunsun deyə — riskin göstərdiyi tələ).",
+     "verified": "npx jest src/search → 13/13 passed (yeni it.each testləri: MƏNZİL→'mənzil', İphone→'iphone', MAŞINLARI→'maşinlari'). DB-yə qarşı count: MƏNZİL=5 (əvvəl 0), MAŞINLARI=1 (əvvəl 0), İphone=4 (əvvəl 0); köhnə işləyən hallar dəyişməyib: mənzil=5, maşınları=1, iphone=4."
+    },
+    {
+     "id": "fallback-ignores-brand-model",
+     "what": "api/src/search/az-text.ts:azKeywordOr() — hər söz üçün `{ attributes: { path: ['brand'], string_contains: v } }` və eyni şəkildə 'model' budaqları əlavə olunur. Prisma-nın JSON string_contains-i `mode: 'insensitive'` DƏSTƏKLƏMƏDİYİ üçün diakritik variant əvəzinə registr variantları verilir (apple/Apple/APPLE) — brendlər praktikada ASCII latındır. Metasimvollu (%/_/\\) sözlərdə JSON budaqları buraxılır, çünki string_contains üçün escape davranışı zəmanətli deyil. Yalnız search.service.ts-ə tətbiq olundu; listings.service.ts BAŞQA AGENTİNDİR → notes.",
+     "verified": "DB count: Apple=7, apple=7, APPLE=7 (hər üçü əvvəl 0). Nəzarət: psql `select count(*) from listings where status='active' and attributes->>'brand'='Apple'` → 7 ilə üst-üstə düşür."
+    },
+    {
+     "id": "meili-configured-read-write-asymmetry",
+     "what": "api/src/search/search.service.ts:165 (indexListing) və :182 (removeListing) başına `if (!this.configured) return;` + AZ şərh. Oxu yolu (:249 `if (this.configured)`) və `configured` heuristikası (:80) QƏSDƏN dəyişilmədi. Səbəb şərhdə: konfiqurasiya yoxdursa oxu onsuz da baş vermir, guard olmadan hər publish əbəs `waitForTask`-i gözləyirdi (Meili ayaqda deyilsə 5 s timeout-a qədər).",
+     "verified": "grep ilə bütün çağırıcılar yoxlandı — listings.service.ts:374,513,619 `void this.search.indexListing(...)`, erp.service.ts:240,269,292,306 `await` (qaytarılan dəyər istifadə olunmur, exception atılmır) → erkən return heç bir axını qırmır. Risk şərhindəki docker/self-hosted ssenarisi toxunulmamış qalır: orada MEILI_HOST=http://meilisearch:7700 olur, `configured`=true, yazma davam edir. tsc təmiz, jest 13/13."
+    },
+    {
+     "id": "geo-locative-region-undetected",
+     "what": "api/src/search/search.service.ts:48-60 — yeni REGION_CASE_SUFFIXES sabiti (nın/nin/nun/nün/dan/dən/den/da/də/de/ya/yə/ye/a/ə/e, uzundan qısaya); :340-352 — yeni private matchRegionToken(): əvvəl tam uyğunluq, sonra şəkilçi soyulmuş kök. Uyğunluq YALNIZ soyulmuş forma REGION_TOKENS-də olduqda qəbul edilir + kök ≥3 simvol — adi sözlər təsadüfən region kimi oxunmur. ASCII şəkilçilər də var, ona görə 'bakida'/'gencede' də işləyir.",
+     "verified": "npx jest src/search → yeni it.each: 'Bakıda ev'→baki+cleaned='ev', 'Gəncədə'→gence, 'Şəkidə'→seki, 'bakidan'→baki, 'gencede'→gence, 'qubaya'→quba; false-positive testi 'kirayə evdə'→detectedRegion=null, cleaned dəyişməz. 13/13 passed. Mövcud köhnə testlər ('iphone qebele', 'masin baki') da keçir."
+    },
+    {
+     "id": "geo-unvalidated-param-500",
+     "what": "api/src/modules/geo/geo.controller.ts:1 (ParseUUIDPipe import) və :23-26 — `nearby(@Param('id', ParseUUIDPipe) id: string)`, versiya pinlənmədi. YENİ fayl api/src/modules/geo/utils/slug.ts — `isSafeSlug()` (/^[a-z0-9-]{1,80}$/) ixrac edir ki, listings tərəfi də eyni qaydanı import edə bilsin. api/src/modules/geo/geo.service.ts:4 (import) və :31-32 — districts() DB sorğusundan ƏVVƏL formatı yoxlayır, uğursuzluqda NotFoundException. Xəta mesajında xam dəyər ƏKS OLUNMUR (NUL kimi idarəedici simvollar cavaba düşməsin). listings.service.ts:494 və DTO hissəsi BAŞQA AGENTİNDİR → notes.",
+     "verified": "Müvəqqəti tsx skripti (sonra silindi): ParseUUIDPipe.transform('not-a-uuid') → 400 'Validation failed (uuid is expected)', '00000000-…-000000000000' → keçir (mövcud 200 davranışı qorunur). geo.districts('baki') → 12 rayon (işləyir), geo.districts('baki'+NUL) → 404 (əvvəl 500), geo.districts('YOXDUR') → 404 (dəyişməz). Reqressiya yoxlaması: bazadakı 74 region + 85 rayon slug-unun HAMISI naxışa uyğundur (uyğunsuz siyahısı boş). geo.service.spec.ts keçir."
+    }
+   ],
+   "skipped": [
+    {
+     "id": "searchlog-anonymous-unbounded-writes (qismən — retention/aqreqasiya)",
+     "reason": "Yalnız ucuz hissəsi edildi: search.service.ts:276-279 — indi `cleaned.trim().length >= 3` şərti ilə loglanır (əvvəl `cleaned.trim()` doğru olan hər şey), yəni 1-2 simvolluq zibil sorğular yazılmır. Tapıntının (a) və (b) variantları RƏDD EDİLDİ: (a) `@@unique([query, day])` + upsert — schema.prisma dəyişikliyi və miqrasiya tələb edir, qayda 5 ilə qadağandır (üstəlik mövcud 341 sətirdə dublikatlar var, unikal indeksdən əvvəl təmizləmə lazımdır); (b) 90 günlük retention cron — @nestjs/schedule yeni asılılıqdır və app.module.ts mənim qrupumda deyil. Təklif notes-dadır."
+    },
+    {
+     "id": "meili-configured-read-write-asymmetry (tövsiyə olunan «əlçatanlıq» variantı)",
+     "reason": "Tapıntının «DAHA DOĞRUSU» variantı (client.health() ilə `configured` təyini) TƏTBİQ EDİLMƏDİ. Səbəb ölçüldü: lokal Meili indeksində 56 sənəd var, bazada isə 113 aktiv elan — oxu yolunu Meili-yə keçirsək istifadəçi DƏRHAL natamam nəticə görəcək, çünki initIndex() yalnız `numberOfDocuments === 0` olduqda avtomatik reindeks edir, köhnəlmiş (56 sənədlik) indeks isə əbədi köhnə qalacaq. Bu, işləyən Postgres fallback-ını sındırmaq deməkdir. Əvəzinə simmetrik guard seçildi (bax fixed)."
+    },
+    {
+     "id": "listings.service.ts keyword axtarışı (menzil/Apple/böyük hərf)",
+     "reason": "api/src/modules/listings/listings.service.ts BAŞQA AGENTİNDİR — tapşırıq qaydası 1. `/api/v1/listings?q=menzil` hələ də 0 qaytarır. Həll hazırdır və ixrac olunub (api/src/search/az-text.ts); dəqiq patch notes-dadır, tətbiqi orkestratora qalır."
+    },
+    {
+     "id": "listings.service.ts + query-listings.dto.ts region slug 500",
+     "reason": "`GET /api/v1/listings?region=baki%00` hələ də 500 verir — düzəliş nöqtəsi listings.service.ts:494 və dto/query-listings.dto.ts:16, hər ikisi başqa agentin faylıdır. `isSafeSlug()` helper-i api/src/modules/geo/utils/slug.ts-də hazır ixrac olunub; dəqiq patch notes-dadır."
+    },
+    {
+     "id": "REGION_TOKENS-in 74 regiona genişləndirilməsi",
+     "reason": "Tapıntının orta-müddətli təklifi (lüğəti seed/DB-dəki 74 regionun slug+nameAz+nameRu dəyərlərindən generasiya etmək). Bu, DB-dən asılı runtime yükləmə + kеş deməkdir — sabitləşdirmə fazası üçün YENİ FUNKSİYADIR, qayda «YENİ FUNKSİYA YAZMA» ilə ziddiyyət təşkil edir. Hazırkı 15 region + hal şəkilçisi soyma ölçülmüş defektləri (Bakıda/Gəncədə/Şəkidə) bağlayır."
+    }
+   ],
+   "typecheck": "QISMƏN TƏMİZ — src/ tamamilə təmizdir, qalan 2 xəta MƏNDƏN ƏVVƏL var idi və mənim fayllarıma aid deyil. `cd api && npx tsc --noEmit -p tsconfig.json` → prisma/seed.ts(146,9) və prisma/seed.ts(213,9): TS2353 «'isDemo' does not exist in type ListingCreateInput». Səbəb yoxlandı: `isDemo` schema.prisma:320-də VAR, amma generasiya olunmuş klientdə YOXDUR (`grep -c isDemo node_modules/.prisma/client/index.d.ts` → 0) və `is_demo` sütunu dev bazasında da yoxdur (`psql -d marketplace_dev -tAc \\\"select column_name from information_schema.columns where table_name='listings' and column_name='is_demo'\\\"` → boş). Yəni miqrasiya tətbiq olunmayıb + klient köhnədir; qayda 5-ə görə toxunmadım. Testlər: `npx jest src/search src/modules/geo` → 2 suite / 13 test PASS.",
+   "notes": "BACKEND YENİDƏN BAŞLADILMADI (qayda 4) — buna görə curl ilə http://localhost:5500 HƏLƏ KÖHNƏ kodu qaytarır. Bütün yoxlamalar birbaşa REAL marketplace_dev bazasına qarşı müvəqqəti tsx skriptləri və jest ilə aparıldı; skriptlər silindi (api/ kökü təmizdir). Orkestrator backend-i restart etdikdən sonra HTTP repro-lar da düzəlməlidir.\n\n═══ 1) DƏQİQ PATCH — api/src/modules/listings/listings.service.ts (BAŞQA AGENTİN FAYLI) ═══\n(a) Fayl başındakı importlara əlavə et:\n    import { azKeywordOr, azSearchWords } from '../../search/az-text';\n    import { isSafeSlug } from '../geo/utils/slug';\n\n(b) Sətir 589-601-i (keyword bloku) belə əvəz et:\n    // Ani keyword axtarış (title/description/kateqoriya/brend/model, sözlər OR).\n    // `az-text` diakritiksiz yazılışı («menzil»→«mənzil»), böyük hərfi (I/ı, İ/i)\n    // və LIKE metasimvollarını özü örtür.\n    if (q.q) {\n      const words = azSearchWords(q.q, 2, 6);\n      if (words.length) where.OR = words.flatMap((w) => azKeywordOr(w));\n    }\n  DİQQƏT: `azKeywordOr()` escapeLike-ı DAXİLİNDƏ edir — fayldakı mövcud escapeLike (sətir ~72) bu sözlərə TƏKRAR tətbiq edilməməlidir, əks halda `\\\\` ikiqat olur.\n  Gözlənilən nəticə: /listings?q=menzil 0→5, ?q=seher 0→1, ?q=Apple 0→7, ?q=MƏNZİL 0→5.\n  QEYD: bu blok `where.OR`-u ÜSTÜNDƏN YAZIR. Fayla sonradan başqa `where.OR` təyinatı əlavə olunubsa, ikisini `where.AND.push({ OR: ... })` ilə birləşdirmək lazımdır.\n\n(c) Sətir 494-dən ƏVVƏL (region.findUnique-dən əvvəl) əlavə et:\n    // Format yoxlaması DB-dən əvvəl: `region=baki%00` Postgres-ə çatanda 500 verirdi.\n    if (!isSafeSlug(q.region)) throw new NotFoundException('Region tapılmadı');\n  ALTERNATİV (daha təmiz, `district` ilə paritet — 422 verir):\n    dto/query-listings.dto.ts:16 → @IsOptional() @IsString() @Matches(/^[a-z0-9-]{1,80}$/) region?: string;\n\n═══ 2) PERFORMANS — bilinməli kompromis ═══\nVariant genişləndirməsi ILIKE budaqlarının sayını artırır: sadə söz («menzil») 18 budaq, 4 qeyri-müəyyən mövqeli söz («gence») ≤54 budaq; 5 sözlük sorğu ölçüldü = 138 budaq. Cari 113 sətirdə sorğu 3-60 ms — hiss olunmur. 10k+ elanda `title`/`description` üzrə indeks olmadığı üçün seq scan bahalaşacaq. Uzunmüddətli düzgün həll (MİQRASİYA tələb edir, ona görə etmədim): `listings`-ə normalizasiya olunmuş `search_text` generated sütunu (`translate(lower(title||' '||description||' '||attributes->>'brand'), 'əçğıöşü', 'ecgiosu')`) + `pg_trgm` GIN indeks; sonra az-text.ts-dəki variant genişləndirməsini tək `search_text ILIKE %foldAz(w)%` ilə əvəz etmək olar — həmin halda az-text.ts-in `foldAz()` funksiyası olduğu kimi işlənir.\n\n═══ 3) DAVRANIŞ DƏYİŞİKLİKLƏRİ (gözlənilən, amma qeyd edilməli) ═══\n· LIKE metasimvolları artıq hərfi mənadadır: ölçüldü ki, əvvəl `/search?q=ip%ne` və `q=ipho_e` «iPhone» tapırdı (4 nəticə) — indi 0. Bu, təsadüfi davranış idi, funksiya deyil; listings.service.ts-də artıq `escapeLike` helper-i var, yəni layihə onsuz da bu istiqamətə gedir.\n· `/search` nəticə sayları artacaq (brend/model + diakritika) → search_logs-dakı sıfır-nəticə statistikası azalacaq.\n· `geo/regions/YOXDUR/districts` hələ də 404-dür, amma mesaj artıq slug-ı əks etdirmir (yalnız format səhvi olan yolda).\n\n═══ 4) SEARCH_LOGS RETENTION — orkestrator üçün təklif (mən etmədim) ═══\nMiqrasiyasız variant: admin endpoint-i və ya pg_cron ilə gündəlik `DELETE FROM search_logs WHERE created_at < now() - interval '90 days'` (search_logs_created_at_idx onsuz da var). Miqrasiyalı variant: `@@unique([query, day])` + upsert/increment — əvvəlcə mövcud dublikatların təmizlənməsi lazımdır.\n\n═══ 5) MƏNİM YARATDIĞIM FAYLLAR ═══\n· api/src/search/az-text.ts (yeni, ixrac: normalizeAzQuery, foldAz, escapeLike, azTextVariants, azKeywordOr, azSearchWords, azKeywordAnd)\n· api/src/modules/geo/utils/slug.ts (yeni, ixrac: isSafeSlug)\nDəyişdirdiklərim: api/src/search/search.service.ts, api/src/search/search.service.spec.ts (+10 test), api/src/modules/geo/geo.controller.ts, api/src/modules/geo/geo.service.ts. Öz qrupumdan kənar heç bir fayla toxunmadım; git əmri işlətmədim."
+  },
+  {
+   "key": "api_domain",
+   "fixed": [
+    {
+     "id": "favorite-nonexistent-returns-201",
+     "what": "api/src/modules/favorites/favorites.service.ts:21-48 — add() indi əvvəlcə `listing.findUnique` ilə elanın varlığını yoxlayır (yoxdursa 404 «Elan tapılmadı»), create+favoritesCount increment `$transaction`-a alındı, boş `catch {}` daraldılıb yalnız `Prisma.PrismaClientKnownRequestError` P2002 (unique) udur — qalan xətalar qalxır. `Prisma` və `NotFoundException` importları əlavə olundu.",
+     "verified": "Düzəldilmiş kod ayrıca 5599 portunda işə salındı (canlı 5500 instansı toxunulmadı): POST /listings/00000000-0000-4000-8000-000000000000/favorite → 404 (əvvəl 201); real elan → 201, təkrar çağırış → 201 (idempotent); psql: favorites sətir sayı=1 və listings.favorites_count=1 (ikiqat artım yoxdur); GET /favorites → 200."
+    },
+    {
+     "id": "favorites-check-500-on-bad-uuid",
+     "what": "api/src/modules/favorites/favorites.controller.ts — fayl başına UUID_V4_RE regexi, check() metodunda `.filter(Boolean)` yerinə `.filter((s) => UUID_V4_RE.test(s))`; zibil dəyər Prisma-ya çatmır.",
+     "verified": "GET /favorites/check?ids=abc,def → 200 {\"data\":[]} (əvvəl 500 DatabaseError); qarışıq siyahı ?ids=abc,<real-uuid> → 200 və yalnız real uuid qaytarılır."
+    },
+    {
+     "id": "notifications-capped-30-no-pagination",
+     "what": "api/src/modules/notifications/notifications.controller.ts — `ListNotificationsDto` (@IsOptional limit:int>=1, cursor:uuid4) və `@Query()` əlavə olundu; notifications.service.ts:list(userId, limit=30, cursor?) — kursor sahibliyi yoxlanır (yad kursor → boş massiv), `orderBy: [createdAt desc, id desc]`, `cursor/skip:1`, tavan 50. Cavab QƏSDƏN massiv olaraq saxlanıldı (geriyə uyğunluq).",
+     "verified": "67 bildirişi olan hesabda: GET /notifications → 30, ?limit=5 → 5, ?limit=100 → 50 (tavan), ?limit=abc → 422; kursorla ardıcıl 5-lik səhifələmə skripti 67 element/67 unikal id gətirdi (əvvəl 30-dan o yana keçmək mümkün deyildi); yad kursor → 0 element."
+    },
+    {
+     "id": "chat-no-antispam-notification-flood",
+     "what": "api/src/modules/chat/chat.controller.ts — `POST :id/messages` metoduna `@Throttle({ default: { limit: 30, ttl: 60_000 } })` (auth.controller.ts naxışı). 20 yox, 30 seçildi: tracker IP əsaslıdır (SecureThrottlerGuard), NAT arxasındakı istifadəçiləri kəsməmək üçün. Bildiriş aqreqasiyası TƏTBİQ EDİLMƏDİ (bax notes).",
+     "verified": "Bir söhbətə ardıcıl 34 POST: ilk 30 → 201, sonrakı 4 → 429 (əvvəl 40/40 hamısı 201 idi)."
+    },
+    {
+     "id": "conversations-no-unread-indicator",
+     "what": "api/src/modules/chat/chat.service.ts:listConversations — include-a `_count: { select: { messages: { where: { senderId: { not: userId }, readAt: null } } } }` və cavab map-ində yeni `unreadCount` sahəsi (əlavədir, mövcud sahələr dəyişmir).",
+     "verified": "GET /conversations satıcı tokeni ilə → [('7bb1aa22', unreadCount=31, 'test 30'), ('b0bbbc6e', 36, ...)]; əvvəl elementin açarları arasında unreadCount ümumiyyətlə yox idi. Buyer tərəfdə eyni sorğu 200 qaytarır."
+    },
+    {
+     "id": "reports-no-target-validation-no-dedupe",
+     "what": "api/src/modules/reports/reports.service.ts — öz-özünə şikayət → 400; listingId/userId varlıq yoxlaması → 404; eyni (reporterId + hədəf) üzrə `status:'open'` şikayət varsa mövcud sətir qaytarılır (idempotent, moderasiya növbəsi dublikatla dolmur). reports.controller.ts — `@Throttle({ default: { limit: 10, ttl: 60_000 } })`. Sxem hissəsi (FK + @@unique) edilmədi — migrasiya qadağandır.",
+     "verified": "Mövcud olmayan listingId → 404 (əvvəl 201); öz userId → 400; real elan üçün ardıcıl 2 sorğu → hər ikisi eyni id f0ae4e6e (əvvəl 4 ayrı sətir yaranırdı)."
+    },
+    {
+     "id": "user-rating-never-aggregated",
+     "what": "api/src/modules/reviews/reviews.service.ts — review create/update `$transaction` içinə alındı və eyni tranzaksiyada `review.aggregate` + `user.update({ rating, reviewsCount })` icra olunur (Decimal(3,2) üçün 2 onluğa yuvarlaqlaşdırma). Bildiriş yaratma QƏSDƏN tranzaksiyadan kənarda saxlanıldı. Əlavə: mövcud sətirlər üçün birdəfəlik DATA-FIX icra edildi — `UPDATE users SET rating/reviews_count = reviews üzrə avg/count` (4 sətir yeniləndi, sxem dəyişikliyi yoxdur).",
+     "verified": "Yeni rəy (4★) → psql: rating 0.00→4.00, reviews_count 0→1; eyni istifadəçiyə təkrar rəy (2★, update yolu) → 2.00/1 (faktiki avg ilə eyni). Backfill sonrası bütün 5 istifadəçidə users.rating/reviews_count reviews cədvəlinin faktiki avg/count-u ilə üst-üstə düşür."
+    },
+    {
+     "id": "phone-no-normalization-duplicates",
+     "what": "api/src/modules/auth/auth.service.ts:register — `phone: dto.phone ? (normalizePhone(dto.phone) ?? dto.phone) : null` (E.164). AZ formatına uyğun olmayan nömrədə 422 atmaq RƏDD edildi — hazırkı DTO beynəlxalq nömrəyə icazə verir, qəfil kəsmək işləyən qeydiyyatı sındırardı. login — telefon üçün eyni nömrənin bütün formaları (+994X, 994X, 0X, X, istifadəçinin yazdığı forma) namizəd kimi çəkilir, seçim deterministikdir: dəqiq uyğunluq → E.164 → ən köhnə hesab; email üçün `toLowerCase()` yerinə `normalizeEmail()`.",
+     "verified": "Qeydiyyat '0709998877' → DB-də '+994709998877'; login 0709998877 / +994709998877 / 994709998877 / 709998877 → 4/4 200 (əvvəl yalnız qeydiyyatdakı forma 200, digərləri 401). Telefonu xam formata ('0709998877') qaytardıqdan sonra da 3 formanın hamısı 200 — köhnə sətirlərin giriş yolu qorunur. Yanlış parol → 401, yad nömrə → 401, email girişi → 200."
+    },
+    {
+     "id": "no-access-token-revocation-stale-role",
+     "what": "api/src/modules/auth/strategies/jwt.strategy.ts — `validate()` async oldu, PrismaService inject edildi: user.role/status DB-dən oxunur, `banned|suspended` → 401 «Hesab bloklanıb», payload-un `role`-u DB dəyəri ilə əvəzlənir (RolesGuard artıq köhnə claim-ə baxmır), silinmiş istifadəçi → 401. İsti yol qorunur: 30 saniyəlik yaddaş keşi (tavan 5000 sətir), DB xətasında FAIL-OPEN (xəbərdarlıq loglanır, köhnə claim-lərlə davam) — nasazlıqda bütün istifadəçilərin eyni anda çıxarılmaması üçün. `pending` status login/refresh ilə eyni cür bloklanmır.",
+     "verified": "Fresh token: /auth/me və /favorites → 200. DB-də status='banned' → dərhal 200 (keş), 32s sonra → 401 «Hesab bloklanıb» (əvvəl 15 dəqiqəyə qədər 200 qalırdı). status='active' bərpasından 32s sonra → yenidən 200. Mövcud olmayan sub-lu token → 401 «İstifadəçi tapılmadı»."
+    }
+   ],
+   "skipped": [
+    {
+     "id": "favorites-contains-dead-listings",
+     "reason": "Defekt təsdiqləndi, amma tövsiyə olunan (və risk sahəsində «üstündür» deyilən) düzəliş frontend/app/profil/sevimliler/page.tsx-dədir — mənim qrupuma aid deyil, paralel agent redaktə edir. Backend variantı (`where: { listing: { status:'active' } }`) risk sahəsində açıq şəkildə pislənib: istifadəçinin sevimlisini səssizcə yox edir. Toxunmadım."
+    },
+    {
+     "id": "favorite-nonexistent-listing-false-success",
+     "reason": "Dublikat element — `favorite-nonexistent-returns-201` ilə eyni fayl və eyni sətirlərdir, onunla birlikdə bağlandı. Ayrıca düzəliş edilmədi."
+    },
+    {
+     "id": "silent-log-swallowing",
+     "reason": "Fayllar qrupumdan kənardadır: api/src/prisma/prisma.service.ts və api/src/app.module.ts (sahə: api/src/modules/**). Qlobal interceptor əlavə etmək bütün modullara təsir edir və paralel işləyən agentlərin faylı ilə toqquşardı."
+    },
+    {
+     "id": "docker-image-ships-sources",
+     "reason": "api/Dockerfile qrupuma aid deyil (api/src/modules/** xaricində) və deploy artefaktına təsir edir. 2-ci bənd (`--omit=dev`) risk sahəsində «ən riskli» kimi qeyd olunub — boot-dakı `prisma migrate deploy` sınar."
+    },
+    {
+     "id": "remotepatterns-vs-erp-hosts",
+     "reason": "Qalan real boşluğun 1-ci addımı frontend/app/elanlar/[id]/ListingDetailClient.tsx-dədir (mənim faylım deyil). Kök səbəb (ERP şəkillərinin MediaService ilə mirror edilməsi) YENİ FUNKSİYADIR, SSRF müdafiəsi + fon işi tələb edir və effort L-dir — sabitləşdirmə tapşırığının hüdudundan kənar."
+    },
+    {
+     "id": "media-orphan-no-quota",
+     "reason": "Fayllar api/src/media/** altındadır — sahə sərhədim api/src/modules/**-dır. Üstəlik səhv silmə məntiqi canlı elan şəkillərini uçura bilər (risk sahəsində göstərilib), effort L və hazırkı zərər Render efemer diski sayəsində maskalanır."
+    }
+   ],
+   "typecheck": "`cd api && npx tsc --noEmit -p tsconfig.build.json` (src/** — mənim dəyişdiyim bütün fayllar) → TƏMİZ, exit 0. `npx tsc --noEmit -p tsconfig.json` isə 2 xəta verir, hər ikisi prisma/seed.ts:146 və :213 — «'isDemo' does not exist in type ListingCreateInput». Bu MƏNİM dəyişikliyimlə bağlı deyil: schema.prisma:320-də `isDemo` sahəsi var, node_modules/.prisma/client-də isə yoxdur (generated client köhnədir; `grep -c isDemo` → 0). Yəni paralel agent sxemi dəyişib, `prisma generate` isə hələ işlədilməyib. Client-i yenidən generasiya ETMƏDİM — başqa agentin yarımçıq sxem işi ilə yarışmamaq üçün. İşim başlayanda tsc başqa bir kənar xəta göstərirdi (listings/guards/optional-jwt.guard.ts — istifadə olunmayan import), o, indi yoxa çıxıb — yəni kənar fayllar həqiqətən paralel dəyişir.",
+   "notes": "DOĞRULAMA METODU: canlı 5500 instansı `node dist/main` kimi işləyir (watch rejimi YOXDUR), ona görə mənbə dəyişiklikləri ona təsir etmir və restart qadağandır. Yoxlama üçün kodu ayrıca qovluğa (api/dist-fixcheck) kompilyasiya edib PORT=5599-da İKİNCİ instans qaldırdım, bütün repro-ları orada icra etdim, sonra prosesi dayandırıb qovluğu sildim. 5500 PID 18992 dəyişməyib, /health → 200.\n\nTAM BAĞLANMAYAN HİSSƏLƏR (qəsdən):\n1. notifications-capped-30 — backend səhifələməsi hazırdır, lakin frontend/app/profil/bildirisler/page.tsx-də «Daha çox» düyməsi başqa qrupun faylıdır. Cavab formatını `{data, meta}`-ya çevirmədim: NotificationBell və bildirişlər səhifəsi eyni anda yenilənməli olardı, əks halda siyahı boşalardı. Klient «daha var?»-ı `nəticə.length === limit` ilə anlaya bilər.\n2. chat-no-antispam — yalnız @Throttle qoyuldu; bildiriş AQREQASİYASI edilmədi, çünki risk sahəsində göstərildiyi kimi o, unread-count semantikasını dəyişir (sayğac `notification` sətirləri üzərindən hesablanır — aqreqasiya sayı süni azaldardı) və NotificationBell davranışını sınaya bilərdi.\n3. conversations-no-unread-indicator — backend `unreadCount` qaytarır; nişanın göstərilməsi (mesajlar səhifəsi) və NotificationBell-in `POST /notifications/:id/read` çağırışı frontend qrupunun işidir.\n4. reports — yalnız xidmət səviyyəli yoxlamalar; FK relation + @@unique migrasiya tələb etdiyi üçün edilmədi (16 orphan sətir onsuz da əvvəlcə təmizlənməlidir).\n5. no-access-token-revocation — ban/suspend və rol drift-i bağlandı (≤30s gecikmə ilə), lakin `POST /auth/logout` hələ də access tokeni öldürmür: bunun üçün `User.tokenVersion` sütunu, yəni migrasiya lazımdır.\n\nPERFORMANS QEYDİ: jwt.strategy indi hər autentifikasiya olunmuş sorğuda potensial 1 DB oxunuşu edir, amma 30 saniyəlik keş arxasında — praktikada istifadəçi başına dəqiqədə ~2 sorğu. Render free instansda bu ölçülməlidir; keşi söndürmək (TTL=0) ciddi yavaşlama deməkdir. Keş proses daxilidir — çox instanslı deploy-da hər instans öz keşini saxlayır (ban gecikməsi yenə ≤30s).\n\nDATA DƏYİŞİKLİYİ (bir dənə, qeyd olunur): `UPDATE users SET rating/reviews_count` — reviews cədvəlindən hesablanan faktiki dəyərlərlə backfill, 4 sətir. Heç nə silinmədi, demo data toxunulmadı.\n\nTEST DATASI YARADILDI (lokal marketplace_dev): fix_tester_9911@360tap.az və «Phone Norm» (+994709998877) istifadəçiləri, 1 sevimli, 2 şikayət sətri, 1 söhbət + ~31 mesaj/bildiriş (triage_misc test hesabına), 1 rəy. Ban testi zamanı fix_tester statusu müvəqqəti `banned` edilib və sonra `active`-ə QAYTARILIB (psql ilə təsdiqləndi).\n\nXƏBƏRDARLIQ (digər agentlər üçün): scratchpad qovluğu paylaşılır — mənim yazdığım `tok.txt` faylının üzərinə başqa agent yazmışdı və 15 dəqiqə yanlış «401» diaqnozuna səbəb oldu (token artıq silinmiş istifadəçiyə aid idi). İşimi `apidomain_tok.txt` adlı ayrıca fayla keçirdim."
+  },
+  {
+   "key": "api_infra",
+   "fixed": [
+    {
+     "id": "oversized-body-500-instead-413",
+     "what": "api/src/common/filters/all-exceptions.filter.ts — yeni `BODY_PARSER_ERRORS` ağ siyahısı (fayl başında, 21-59) + `toResponse`-da «naməlum xəta» budağından ƏVVƏL yeni branch. Express body-parser xətaları (`err.type`) sabit AZ mətnli cavaba xəritələnir: entity.too.large/parameters.too.many→413, entity.parse.failed/request.size.invalid/request.aborted→400, charset/encoding.unsupported→415. Mesaj HEÇ VAXT exception-dan götürülmür (sızma yoxdur); siyahıda olmayan `type` sahəsi olan xətalar əvvəlki kimi 500 qalır — bu, `risk` sahəsindəki «çox geniş qayda» xəbərdarlığına cavabdır.",
+     "verified": "api/ içində ts-node ilə `AllExceptionsFilter.toResponse` birbaşa çağırıldı (müvəqqəti skript, sonra silindi): entity.too.large → 413 \"Payload Too Large\" \"Sorğu gövdəsi 8 MB-dan böyük ola bilməz\"; entity.parse.failed → 400; NEQATİV hal — `type:'some.library.error'`, `status:402`, mesajında «secret token» olan xəta → 500 \"Daxili server xətası\" (sızma yoxdur). Reproduksiya əvvəlcə təsdiqləndi: 9 MB `big.json` POST /api/v1/listings → 500."
+    },
+    {
+     "id": "body-too-large-500",
+     "what": "Dublikat — `oversized-body-500-instead-413` ilə eyni sətirlərdə bağlandı. Əlavə olaraq tapıntının tələb etdiyi `entity.parse.failed` → 400 xəritələnməsi də həmin ağ siyahıya salındı.",
+     "verified": "Canlı ölçmə: pozuq JSON (`{bad json`) → HTTP 400 (Nest-in öz `mapExternalException`-ı SyntaxError-u onsuz da 400 edir); 9 MB JSON → hazırda 500, düzəlişdən sonra ts-node yoxlaması 413 verir. İki test halı bir yerdə yoxlandı."
+    },
+    {
+     "id": "prisma-p2023-null-byte-500",
+     "what": "api/src/common/filters/all-exceptions.filter.ts — (a) `fromPrisma`-ya dar `case 'P2023'` → 400 «Parametr formatı yanlışdır»; (b) `toResponse`-a `PrismaClientUnknownRequestError` + `/code: \"22021\"/` şablonu → 400 «Parametrdə icazəsiz simvol var» (pg NUL bayt). Hər iki branch qəsdən dardır: digər Prisma kodları və digər unknown xətalar 500 olaraq qalır. Şərhdə P2023-ün genuin data korlanmasında da atıla biləcəyi və əsl həllin ParseUUIDPipe olduğu yazıldı.",
+     "verified": "Reproduksiya təsdiqləndi (düzəlişdən əvvəl): `/api/v1/geo/districts/abc/nearby` → 500 DatabaseError; `/api/v1/listings?region=baki%00` → 500. Düzəlişdən sonra ts-node ilə: P2023→400, 22021→400, P2025→404 (REGRESSİYA YOX), P9999→500, digər unknown Prisma xətası→500. 22021 şablonu api-run11.log:212-dəki real xəta mətninə uyğunlaşdırıldı."
+    },
+    {
+     "id": "uploads-cache-control-zero",
+     "what": "api/src/main.ts:46-67 — `app.useStaticAssets(mediaDir, { prefix:'/uploads/', maxAge:'365d', immutable:true, etag:true, setHeaders:… })`. Fayl adları `randomUUID()`.webp olduğu üçün invalidasiya riski yoxdur; şərhdə bu əsaslandırıldı. (find_sec.json-dakı 3 eyni id bir düzəlişlə bağlandı.)",
+     "verified": "Əvvəl: `curl -D - :5500/uploads/12f175df-….webp` → `Cache-Control: public, max-age=0`. Sonra: eyni express.static opsiyaları ilə təcrid olunmuş test serveri (boş portda, işləyən serverlərə toxunmadan) → `cache-control = public, max-age=31536000, immutable`, `etag = W/\"3b0-1a06beb0be1\"`, `content-type = image/webp`, status 200."
+    },
+    {
+     "id": "helmet-not-applied-to-uploads",
+     "what": "api/src/main.ts — eyni `useStaticAssets` çağırışında `setHeaders` ilə YALNIZ iki başlıq: `X-Content-Type-Options: nosniff` və `Cross-Origin-Resource-Policy: cross-origin`. Rədd edilən alternativ (şərhdə yazıldı): helmet-i statikdən əvvələ köçürmək — onda şəkillərə CSP/COOP da düşür və gələcəkdə PDF/HTML kimi fayl tipi əlavə olunanda davranış gözlənilmədən dəyişir. helmet sırası DƏYİŞMƏDİ, yəni mövcud endpoint başlıqlarına təsir yoxdur.",
+     "verified": "Təcrid olunmuş express.static testi: `x-content-type-options = nosniff`, `cross-origin-resource-policy = cross-origin` (əvvəl heç biri yox idi). Canlı API-də helmet sırası dəyişmədiyi üçün `/health` başlıqları toxunulmamışdır."
+    },
+    {
+     "id": "cors-localhost-in-production",
+     "what": "1) render.yaml:125-131 — `CORS_ORIGINS` dəyərindən `,http://localhost:5401` çıxarıldı, üstünə niyəsini və qırılan developer axınını izah edən şərh yazıldı. 2) api/src/config/configuration.ts:62-72 — `.split(',')` sonrası `.map(o => o.trim()).filter(Boolean)` (boşluqlu siyahıda origin səssizcə uyğun gəlmirdi). Fikirləşilib RƏDD EDİLƏN hissə: production-da default vermək əvəzinə xəta atmaq — artıq lazımsızdır, çünki env.validation.ts:19 `CORS_ORIGINS`-i məcburi edir (`skipMissingProperties:false`), yəni fallback praktikada əlçatmazdır; xəta atmaq yalnız canlı API-nin boot-unu sındırma riski əlavə edərdi.",
+     "verified": "Reproduksiya təsdiqləndi (kod + konfiq oxundu). Kod tərəfi: `npx tsc` konfiq faylında xəta yoxdur. render.yaml dəyişikliyi deploy tələb edir — mən deploy etmədim; canlı Render mühit dəyişəni dashboard-dan da təyin oluna bildiyi üçün operator onu sinxronlaşdırmalıdır (notes-a yazıldı). `curl :5500/api/v1/categories` → 200 (işləyən server toxunulmadı)."
+    },
+    {
+     "id": "queue-redis-credentials-dropped",
+     "what": "api/src/queue/queue.module.ts:9-22 — host/port çıxarışı əvəzinə tam URL: `{ connection: { url: config.get('redisUrl') ?? 'redis://localhost:6379' } }`. Beləliklə username/password və `rediss://` TLS itmir.",
+     "verified": "BullMQ 5.78.0-ın `url` dəstəyi mənbədə yoxlandı: node_modules/bullmq/dist/cjs/classes/redis-connection.js:182-183 → `const { url, ...rest } = this.opts; url ? new IORedis(url, rest) : new IORedis(rest)`; tip isə redis-options.d.ts:5 `url?: string`. `npx tsc` — bu fayl üzrə xəta yoxdur. Runtime təsiri sıfırdır: `grep -rn 'registerQueue|InjectQueue|@Processor' api/src` → 0 nəticə (heç bir növbə qeyd olunmayıb)."
+    },
+    {
+     "id": "env-templates-incomplete",
+     "what": "1) api/.env.example:34-35 — `GROQ_VISION_MODEL` əlavə olundu (configuration.ts:100 onu oxuyurdu, şablonda yox idi). 2) api/.env.production.example — GROQ_API_KEY/GROQ_MODEL/GROQ_VISION_MODEL, MAIL_* (Resend), SMS_*, PUBLIC_URL blokları əlavə olundu (əvvəl fayl MEDIA_BASE_URL-də bitirdi, halbuki kod bu dəyişənləri oxuyur). 3) frontend/.env.example YARADILDI: API_ORIGIN (production-da məcburi olduğu və təyin olunmasa localhost:5500-ə düşdüyü barədə xəbərdarlıqla), NEXT_PUBLIC_API_URL, NEXT_PUBLIC_SITE_URL, NEXT_PUBLIC_MEILI_HOST/SEARCH_KEY, NEXT_PUBLIC_GOOGLE_VERIFY, NEXT_PUBLIC_YANDEX_VERIFY, NEXT_PUBLIC_SOCIAL_*, E2E_*.",
+     "verified": "Dəyişən siyahısı təxmin deyil, koddan çıxarıldı: `grep -rhoE 'process\\.env\\.[A-Z0-9_]+' frontend` → 14 dəyişən, hamısı şablonda var (tapıntının qeyd etmədiyi NEXT_PUBLIC_SOCIAL_* və E2E_* daxil; tapıntıdakı `NEXT_PUBLIC_MEILI_KEY` adı səhv idi — real ad `NEXT_PUBLIC_MEILI_SEARCH_KEY`). `git check-ignore frontend/.env.example` → rc=1, yəni fayl git-ə düşür (nümunə kimi işini görür). `grep -n GROQ api/.env.example` → 32,33,35."
+    }
+   ],
+   "skipped": [
+    {
+     "id": "env-templates-incomplete (3-cü bənd: build gate)",
+     "reason": "«next.config.ts və lib/server-fetch.ts-də production-da API_ORIGIN yoxdursa build-i xəta ilə dayandır» hissəsi tətbiq EDİLMƏDİ. İki səbəb: (a) hər iki fayl frontend qrupuna aiddir və paralel redaktə olunur — mənim sahə siyahımda deyil; (b) tapıntının öz `risk` sahəsi bunu təhlükəli sayır: Vercel-də API_ORIGIN təyin olunmayıbsa növbəti deploy tamamilə sınar. Vercel mühit dəyişənlərini əvvəlcə yoxlamaq lazımdır, mənim isə bu sessiyada Vercel girişim yoxdur. Sənədləşdirmə hissəsi (frontend/.env.example-də böyük hərfli xəbərdarlıq) tətbiq olundu."
+    },
+    {
+     "id": "prisma-p2023-null-byte-500 (2-ci bənd: giriş validasiyası)",
+     "reason": "«geo.controller.ts-də ParseUUIDPipe» və «query-listings.dto.ts-də @Matches(/^[a-z0-9-]{1,64}$/)» hissəsi tətbiq EDİLMƏDİ — hər iki fayl api/src/modules/ altındadır, mənim sahəmə (main.ts, common/**, config/**) daxil deyil və hazırda başqa agent tərəfindən redaktə olunur (tsc çıxışında həmin qovluqda dəyişən xətalar görünür). Üstəlik tapıntının `risk` sahəsi düzgün xəbərdarlıq edir: @Matches regexi bazadakı BÜTÜN region/kateqoriya slug-larına qarşı əvvəlcədən yoxlanmalıdır, əks halda işləyən filtrlər 422 verər. Defektin cavab kodu tərəfi filtr səviyyəsində (P2023→400, pg 22021→400) onsuz da bağlandı."
+    }
+   ],
+   "typecheck": "Mənim fayllarım TƏMİZ. `cd api && npx tsc --noEmit -p tsconfig.json` bütün layihə üzrə 3 xəta verir, lakin HAMISI kənar qrupun paralel redaktə etdiyi fayllardadır və mənim dəyişikliklərimlə əlaqəsi yoxdur (iki ardıcıl işə salma arasında dəyişdilər — yəni fayllar hazırda başqası tərəfindən yazılır): src/modules/listings/guards/optional-jwt.guard.ts(1,10) TS6133 'ExecutionContext'; src/modules/listings/listings.controller.ts(13,3) TS6133 'UseGuards'; src/modules/listings/listings.controller.ts(17,1) TS6133 'OptionalJwtAuthGuard'; sonrakı işə salmada həmçinin src/search/search.service.ts(8,10) TS6133 'azKeywordAnd'. Öz fayllarımı təcrid etmək üçün yalnız main.ts + common/** + config/** + queue/** daxil edən müvəqqəti tsconfig ilə yenidən yoxladım — bu dörd sahədə SIFIR xəta.",
+   "notes": "1) DİQQƏT — düzəlişlər HƏLƏ CANLI DEYİL: işləyən backend `node dist/main` prosesidir (watch rejimi yox, PID 18992), yəni köhnə bild-i icra edir. Qaydaya görə serveri restart etmədim və `nest build` də işə salmadım (hazırda kənar qrupun faylları TS6133 xətası verdiyi üçün bild onsuz da uğursuz olardı). Ona görə main.ts və filtr dəyişikliklərini canlı port üzərində deyil, təcrid olunmuş yoxlamalarla təsdiqlədim: (a) filtr məntiqi ts-node ilə birbaşa `toResponse` çağırışı, (b) statik başlıqlar eyni express.static opsiyaları ilə boş portda ayrıca test serveri. Növbəti bild+restartdan sonra real reproları təkrarlamaq tövsiyə olunur: 9 MB JSON POST → 413, `/geo/districts/abc/nearby` → 400, `/uploads/*.webp` → `max-age=31536000, immutable` + nosniff + CORP.\n\n2) Reproduksiya zamanı tapıntı siyahısında OLMAYAN bir davranış aşkarlandı və QƏSDƏN toxunulmadı: pozuq JSON (`{bad json`) hazırda 400 ilə birlikdə body-parser-in XAM mesajını qaytarır — `\"Expected property name or '}' in JSON at position 1 (line 1 column 2)\"`. Səbəb Nest-in öz `mapExternalException` funksiyasıdır (SyntaxError+body → BadRequestException(err.message)), bizim filtrimiz deyil. Həssas məlumat sızmır (yalnız parser mətni), amma AZ dilli sabit mesaj siyasətinə ziddir. Bunu susdurmaq üçün filtrdə `exception instanceof BadRequestException && SyntaxError` yoxlaması lazım gələrdi — bu, mövcud validasiya (422) mesajlarına təsir riski daşıdığı üçün ayrıca qərar tələb edir.\n\n3) render.yaml dəyişikliyi TƏK BAŞINA canlı CORS-u dəyişmir: Render mühit dəyişəni dashboard-dan da təyin edilmiş ola bilər (blueprint sync olmadan). `http://localhost:5401`-in canlıdan silinməsi üçün operator ya blueprint-i yenidən tətbiq etməli, ya da dashboard-da CORS_ORIGINS dəyərini əl ilə düzəltməlidir. Bundan sonra lokal frontend-i BİRBAŞA canlı API-yə bağlayan debug axını brauzerdə CORS ilə bloklanacaq (Vercel proxy/SSR yolu təsirlənmir).\n\n4) Heç bir git əmri işlədilmədi, server restart edilmədi, miqrasiya yaradılmadı, demo data və ödəniş/admin sahələrinə toxunulmadı. Yoxlama üçün api/ qovluğunda yaradılan iki müvəqqəti skript (zz-filter-check.ts, zz-static-check.js) dərhal silindi — `git status` yalnız 7 dəyişdirilmiş + 1 yeni faylı göstərir (hamısı mənim sahəmdə). İşin sonunda `curl :5500/api/v1/categories` → 200 və `/health` → 200 (canlı sistem toxunulmamışdır).\""
+  },
+  {
+   "key": "fe_listings",
+   "fixed": [
+    {
+     "id": "car-brand-model-filter (ƏLAVƏ TAPŞIRIQ)",
+     "what": "Yeni modul frontend/lib/attribute-taxonomy.ts:1-101 — `resolveAttributeOptions(categorySlug, attr, getValue)` + `dependentAttributeKeys(key)`. Marka→model yeganə real taksonomiya asılılığımız kimi orada sənədləşdirilib; sxem `options` verirsə O ÜSTÜNDÜR (backend seed-i sessiya ərzində brand üçün 63 marka doldurdu), taksonomiya yalnız boşluğu tamamlayır. İstifadə: (a) CategoryFilters.tsx:86-110 `selects` artıq `(a.options?.length ?? 0) > 0` şərti ilə süzülmür — siyahısı olmayan select taksonomiyadan dolur, valideyndən asılı olan (`model`) `blockedBy` ilə DEAKTİV göstərilir («Əvvəlcə «Marka» seçin»), gizlədilmir; BarSelect/PanelSelect-ə `disabled` prop-u əlavə olundu (CategoryFilters.tsx:411-441, 520-548). (b) CategoryFilters.tsx:73-82 `setAttr` marka dəyişəndə `a_model`-i URL-dən silir. (c) FilterChips.tsx:62-70 `a_brand` çipi silinəndə `a_model` də silinir. (d) Elan forması: ListingAttributes.tsx:2 import, :123-133 yeni `categorySlug` prop-u, :186-232 AttributeField artıq bütün `values`-i alır və `model` siyahısını seçilmiş markadan qurur; marka seçilməyibsə deaktiv select + izah. (e) elan-yerlesdir/page.tsx:428-437 marka dəyişəndə model dəyəri state-dən silinir. CategoryFilters-ə HEÇ BİR avtomobilə xas «if» yazılmadı — bütün bilik modulda.",
+     "verified": "1) İzolyasiya testi (npx tsx, scratchpad/taxtest.ts): avtomobiller/brand(options=null)→ready(63) «Acura/Alfa Romeo/Aston Martin»; brand(options var)→null (sxem üstündür); model(marka yox)→needs:brand; model(brand=BMW)→ready(24) «1 Series/2 Series/3 Series»; model(brand=Naməlum)→null (sərbəst mətnə düşür); mobil-telefonlar/brand və /model→null (telefon kateqoriyası TOXUNULMUR); avtomobiller/fuel→null. 2) `dependentAttributeKeys('brand')=['model']`, `('model')=[]`. 3) Backend kontraktı: `GET /categories/avtomobiller/attributes` → brand(select,63 option), model(select,options=null); `sanitizeAttributes→coerceAttributeValue` (listings.service.ts) options boş olan select-i sərbəst mətn kimi qəbul edir, yəni model dəyəri 422 vermir. 4) Filtr ucdan-uca: `GET /listings?category=avtomobiller&attrs={\"brand\":\"Toyota\"}` → total=1 (filtrsiz 8). 5) tsc --noEmit təmiz."
+    },
+    {
+     "id": "search-page-ignores-filters",
+     "what": "app/elanlar/page.tsx: `hasFilters` hesablanır (:295-298), `buildListingParams()` (:338-368) həm browse, həm «q + filtr» budağı üçün ORTAQ sorğu qurucusudur və `q`-ni də daxil edir. Budaq şərti `if (sp.q)` → `if (sp.q && !hasFilters)` (:370): filtr varsa Meili→AI→/search zənciri KEÇİLİR və birbaşa `/listings?q=…&region=…&priceMin=…&sort=…` çağırılır; filtr yoxdursa zəncir toxunulmaz qalır (typo dözümü/AI itmir). Nəticə mənbəyi `listSource: 'listings'|'search'|'static'` ilə izlənir (:279) və «daha çox» səhifələməsi ona görə qurulur (:625-645) — q+filtr halında InfiniteListings default `/api/listings` endpoint-i və filtrli `baseQuery` alır, yəni scroll filtri itirmir. Filtr paneli + çiplər artıq q rejimində də render olunur (:526 `{(!sp.q || hasFilters) && …}`), `catAttrs` isə eyni budaqda çəkildiyi üçün q+category halında atribut selectləri boş qalmır. «🤖 AI axtarışı» nişanı yalnız real AI/Meili nəticəsində göstərilir (:459-466), boş nəticə mətni də filtr halına uyğunlaşdırıldı (:611-613).",
+     "verified": "Backend kontraktı curl ilə təsdiqləndi (yeni sorğu formasının doğru nəticə verdiyi): `/listings?q=telefon&region=gence&priceMin=100000` → total=0 (filtrsiz `q=telefon` → 9), yəni səhifə artıq filtrsiz cavab göstərə bilməz. `/listings?q=ev` → 7, `/listings?q=ev&region=qebele` → 0. tsc --noEmit təmiz, eslint-də bu fayl üzrə yeni xəta yoxdur. QEYD: :5401 dev serveri sessiya ərzində sönülü olduğu üçün HTTP repro-su təkrar oxuna bilmədi (bax notes)."
+    },
+    {
+     "id": "geo-region-dropped-with-query",
+     "what": "Eyni düzəlişlə bağlandı (search-page-ignores-filters): `sp.region` artıq `buildListingParams()`-a düşür (app/elanlar/page.tsx:343) və `q` ilə birlikdə `/listings`-ə gedir. Ayrıca `searchQuery`-yə region yapışdırılmadı — audit-in tövsiyəsi ilə iki ayrı düzəliş edilmədi. Region çipi də artıq q rejimində görünür (:526), yəni «boş səhifə, səbəbi bilinmir» halı aradan qalxdı.",
+     "verified": "`/listings?q=ev` → total=7, `/listings?q=ev&region=qebele` → total=0 — yəni frontend indi backend ilə eyni nəticəni göstərəcək (əvvəl hər iki URL 7 kart verirdi). tsc təmiz."
+    },
+    {
+     "id": "geo-region-h1-raw-slug",
+     "what": "app/elanlar/page.tsx: `GET /geo/regions` (`next: { revalidate: 86400 }`) paralel sorğu kimi əlavə olundu (:309), nəticə `regions` massivinə çevrilir və API əlçatmaz olanda köhnə 7 elementlik `REGIONS` FALLBACK qalır (:400-404). h1 (`regionName` :414), filtr panelinin region select-i (:531 `regions={regions}`) və çip etiketləri (`regionLabels` :437) indi EYNİ mənbədən qidalanır. Sabit `REGIONS` massivinin üstünə niyə fallback olduğu şərh edildi (:108-118).",
+     "verified": "`GET /api/v1/geo/regions` → 74 region; yoxlanmış slug→ad cütləri: xacmaz→Xaçmaz, shamaxi→Şamaxı, naxcivan→Naxçıvan, mingecevir→Mingəçevir, zaqatala→Zaqatala — yəni h1 artıq ASCII slug göstərə bilməz. tsc təmiz. QEYD: app/page.tsx-dəki İKİNCİ region siyahısı MƏNİM QRUPUMDA DEYİL, toxunulmadı."
+    },
+    {
+     "id": "numeric-attr-equality-type-mismatch",
+     "what": "app/elanlar/page.tsx:312-336 — çevrilmə KOR-KORANƏ deyil, atribut SXEMİNƏ bağlıdır: yalnız `type === 'number'` olan açarlar `Number(v)`-ə çevrilir (`numberAttrKeys`), select dəyərləri (məs. tam rəqəmdən ibarət «512») olduğu kimi qalır. Sxem yalnız belə bir filtr HƏQİQƏTƏN varsa gözlənilir (`needsAttrTypes`), özü də ARTIQ BAŞLADILMIŞ promise gözlənildiyi üçün əlavə HTTP sorğusu və waterfall yaranmır; kateqoriya yoxdursa köhnə davranış (string) saxlanılır.",
+     "verified": "Backend: `attrs={\"year\":2020}` → total=1, `attrs={\"year\":\"2020\"}` → total=0 — çevrilmənin niyə lazım olduğu təsdiqləndi. Riskli hal yoxlandı: `a_brand=Toyota` → `Number('Toyota')`=NaN → sxem gözlənilmir, dəyər string qalır; `attrs={\"brand\":\"Toyota\"}` → total=1 (select filtri sınmadı). tsc təmiz."
+    },
+    {
+     "id": "listing-view-counter-double-count",
+     "what": "app/elanlar/[id]/page.tsx:1 `import { cache, Suspense } from 'react'`, :107-128 `getListing` artıq `cache(...)` ilə sarılıb. `cache: 'no-store'` SAXLANILDI (shell-flush/404 qərarı ondan asılıdır) — cache() yalnız eyni request scope-unda dedup edir. Şərhdə ölçmə və uzunmüddətli həll (POST /listings/:id/view) qeyd olundu.",
+     "verified": "Kodda `getListing` yalnız iki yerdən çağırılır (generateMetadata :39 və səhifə :219) və hər ikisi indi eyni promise-i paylaşır. tsc --noEmit təmiz. Sayğacın canlı ölçülməsi :5401 sönülü olduğu üçün mümkün olmadı (bax notes); backend tərəfdə `views: { increment: 1 }` dəyişdirilmədi — bu, api/ qrupudur."
+    },
+    {
+     "id": "detail-ssr-double-fetch",
+     "what": "DUBLİKAT — `listing-view-counter-double-count` ilə eyni tək düzəliş bağlayır (app/elanlar/[id]/page.tsx:123 `cache()`). Ayrıca kod dəyişikliyi edilmədi.",
+     "verified": "Yuxarıdakı ilə eyni: tsc təmiz, `no-store` semantikası pozulmadı."
+    },
+    {
+     "id": "gallery-raw-img-unoptimized",
+     "what": "components/Gallery.tsx tam yenidən quruldu: `next/image` + `safeImageUrl()` süzgəci. Hero (:54-68) `fill` + `sizes=\"(max-width: 1024px) 100vw, 900px\"` + `priority` (LCP), thumbnail (:113-127) `width=144 height=108 loading=\"lazy\"` (72×54 CSS px, 2x ekran). KRİTİK QƏRAR: allowlist-dən KƏNAR host üçün xam `<img>` saxlanıldı (eslint-disable şərhi ilə birlikdə) — `next/image` belə URL-də istisna atır və bütün detal səhifəsini çökdürür; şəklin itməsindənsə optimallaşmamış göstərilməsi seçildi. Səbəb fayl başlığında sənədləşdirildi.",
+     "verified": "tsc --noEmit təmiz; eslint bu fayl üzrə xəta/xəbərdarlıq vermir (`no-img-element` yalnız qəsdən saxlanılmış fallback-larda susdurulub). `lib/image-hosts.ts` allowlist-i `next.config.ts → images.remotePatterns` ilə eynidir (localhost:5400/5500 /uploads, picsum, unsplash, *.onrender.com), yəni mövcud demo şəkilləri (picsum) optimizatordan keçir."
+    },
+    {
+     "id": "media-no-resize-fullres-delivery (QİSMƏN)",
+     "what": "Defektin göstərdiyi fayl (app/elanlar/[id]/ListingDetailClient.tsx) ÖLÜ KODDUR — `grep -rn 'ListingDetailClient' app components lib` sıfır import verir; canlı detal səhifəsi `Gallery.tsx`-i işlədir. Ona görə real çatdırılma yolu `gallery-raw-img-unoptimized` düzəlişi ilə bağlandı: hero və thumbnail zolağı artıq `next/image` optimizatorundan keçir (thumbnail üçün 144px variant, tam ölçülü fayl yox).",
+     "verified": "`grep -rn 'ListingDetailClient|ListingsClient' frontend/app frontend/components frontend/lib` → yalnız faylların özü (heç bir import yoxdur). Canlı səhifədə (app/elanlar/[id]/page.tsx:355) yeganə şəkil komponenti `<Gallery>`-dir. tsc təmiz. Ölü faylı SİLƏ BİLMƏDİM — `rm` əməliyyatı icazə klassifikatoru tərəfindən bloklandı (bax notes)."
+    },
+    {
+     "id": "recently-viewed-never-recorded",
+     "what": "Yeni klient komponenti app/elanlar/[id]/TrackRecentView.tsx (öz qovluğumda — `components/` altına yeni fayl atmaqdansa route-a bağlı saxlandı): `useEffect` ilə `pushRecent()` çağırır, try/catch-lə (private rejim/kvota) örtülüb, heç nə render etmir. app/elanlar/[id]/page.tsx:13 import, :350-360 mount — id/başlıq/qiymət/valyuta/cover/region ötürülür. `lib/recent.ts` DƏYİŞDİRİLMƏDİ (mənim qrupumda deyil, yalnız import olunur).",
+     "verified": "`lib/recent.ts:23 pushRecent(item: Omit<RecentItem,'viewedAt'>)` imzası ilə uzlaşma tsc ilə yoxlandı (exactOptionalPropertyTypes səbəbi ilə cover/city şərti spread ilə verilir) → tsc --noEmit təmiz. Oxuyan tərəf (/profil/baxilanlar) eyni `avito_recent_listings` açarını oxuyur, dəyişdirilmədi."
+    },
+    {
+     "id": "save-search-button-unreachable",
+     "what": "İki hissə: (1) components/SaveSearchButton.tsx:16-28 — köhnə Express lüğəti (`city`/`min_price`/`max_price`/`attr_`) real lüğətlə əvəzləndi: `q`, `a_*` prefiksi və `['region','district','category','vertical','priceMin','priceMax','condition']`; `isFilterKey()` tək funksiyaya çıxarıldı və üç yerdə (görünmə şərti, saxlanılan query, modal siyahısı) işlədilir. (2) app/elanlar/page.tsx:594-609 — düymə `{!sp.q && …}` blokundan ÇIXARILDI; başlıq sətri artıq şərtsizdir, h2 («Ən yenilər»/«Xəritədə») isə q rejimində gizlənir və layout üçün boş `<span/>` qoyulur (`justify-between` pozulmasın).",
+     "verified": "tsc --noEmit təmiz. Lüğət `app/elanlar/page.tsx`-in URL qurucusu ilə sətir-sətir tutuşduruldu (region/category/vertical/priceMin/priceMax/sort + `a_` prefiksi). Saxlanan `query` obyekti indi `page`/`view`/`sort`-u ATIR — `/profil/saxlanmis/page.tsx:38-44` query açarlarını olduğu kimi URL-ə köçürdüyü üçün bu dəyişiklik həmin səhifəni sındırmır, əksinə «page=3»-də donmuş axtarışın qarşısını alır. HTTP `grep -c 'Axtarışı saxla'` reprosu :5401 sönülü olduğu üçün təkrarlana bilmədi."
+    },
+    {
+     "id": "geo-savesearch-region-hidden",
+     "what": "DUBLİKAT — `save-search-button-unreachable` ilə eyni kök səbəb və eyni tək düzəliş (SaveSearchButton.tsx:16-28 + app/elanlar/page.tsx:594-609). `region`/`priceMin`/`priceMax` artıq tanınır. Əlavə: modal-dakı «Saxlanılacaq filtrlər» siyahısı və default ad təklifi də yeni açarlara keçirildi (`filters.region`, `filters.priceMin/priceMax` — əvvəl `city`/`min_price` oxuyurdu və həmişə boş çıxırdı).",
+     "verified": "Eyni: tsc təmiz; hər üç istifadə nöqtəsi `isFilterKey()`-dən keçir, yəni lüğət bir yerdən dəyişir."
+    },
+    {
+     "id": "contract-savesearch-filter-vocabulary",
+     "what": "DUBLİKAT — yuxarıdakı iki bənd ilə eyni düzəliş. Ayrıca dəyişiklik edilmədi (audit-in tələbi: bir commit-də).",
+     "verified": "Eyni."
+    },
+    {
+     "id": "listing-form-validation-contract-mismatch",
+     "what": "app/elan-yerlesdir/page.tsx: `TITLE_MIN=10 / TITLE_MAX=120 / DESC_MIN=20 / DESC_MAX=5000` sabitləri əlavə olundu (:39-52, DTO ilə eyni mənbə kimi sənədləşdirildi); yoxlama :288-292-də 3/10 → 10/20 oldu və mesajlar backend mətni ilə HƏRFƏN eynidir. Qiymət maskası: `maskAmount()` (:60-71) rəqəm + tək nöqtə + ən çox 2 onluq rəqəm buraxır, «10.» ara vəziyyəti QƏSDƏN icazəlidir; `price`/`oldPrice` sahələri ona keçirildi (:470, :489). Göndərişdə `Number.isFinite` qapısı əlavə olundu (:305-308, :319-320) — tək «.» girişi əvvəl `NaN → JSON null → 422` verirdi.",
+     "verified": "maskAmount node ilə cədvəl şəklində sınandı: '10.999'→'10.99', '10.'→'10.' (Number=10), '10.9'→'10.9', '1.2.3'→'1.2', '0.005'→'0.00', '999999.99'→dəyişmir, '.'→'.' (Number=NaN → submit-də atılır), 'abc'→''. Backend hədləri təsdiqləndi: create-listing.dto.ts Length(10,120)/Length(20,5000), `@IsNumber({maxDecimalPlaces:2})`. tsc təmiz. QEYD: DTO-ya azərbaycanca qiymət mesajı ƏLAVƏ EDİLMƏDİ — api/ mənim qrupum deyil."
+    },
+    {
+     "id": "contract-create-listing-validation-gap",
+     "what": "Eyni düzəliş (yuxarı) + audit-in istədiyi CANLI SAYĞAC: yeni `CharCounter` komponenti (:646-658) başlıq və təsvir sahələrinin altına qoyuldu (:399-424) — minimuma çatmayanda «daha N simvol · 7/120» qırmızı göstərilir, `maxLength` isə sabitlərdən gəlir. `aria-live` qəsdən verilmədi (hər hərfdə ekran oxuyucusunu danışdırmamaq üçün) — səbəb şərhdə var.",
+     "verified": "tsc təmiz. `psql -d marketplace_dev -c \"select count(*) from listings where char_length(title)<10\"` ilə redaktə riski üçün baxılmalı olan hal audit-də göstərilmişdi; kod dəyişikliyi yalnız KLİYENT qapısını sərtləşdirir, backend onsuz da eyni həddi tətbiq edir, ona görə hazırda keçən heç bir elan bloklanmır."
+    },
+    {
+     "id": "upload-413-english-no-client-check",
+     "what": "app/elan-yerlesdir/page.tsx:54-59 `MAX_IMAGE_BYTES = 8*1024*1024` sabiti (media.controller.ts ilə sinxron saxlanmalı olduğu şərhdə yazıldı), :264-271 `onPhotos` döngüsünün əvvəlində ölçü yoxlanır: həddi aşan fayl serverə ÜMUMİYYƏTLƏ göndərilmir, azərbaycanca xəta verilir və `continue` ilə qalan şəkillərin yüklənməsi davam edir.",
+     "verified": "Backend limiti oxundu (api/src/media/media.controller.ts `limits: { fileSize: 8*1024*1024 }`) — rəqəmlər eynidir. tsc təmiz. Mövcud uğurlu yükləmə axını dəyişmədi (yalnız əlavə şərt)."
+    },
+    {
+     "id": "seo-jsonld-product-qusurlu",
+     "what": "app/elanlar/[id]/page.tsx:315-352 — `l.price == null` olduqda Product JSON-LD ÜMUMİYYƏTLƏ emit olunmur (`jsonLd = … : null`, :370 `{jsonLd && <script …/>}`); Google offers/review/aggregateRating-siz Product-ı xəta kimi qeyd edir və aktiv elanların 11-i qiymətsizdir. Zənginləşdirmə: `offers.url` (SITE.url-dan qurulur, sabit domen yazılmadı) və `itemCondition` (schema.org sabitlərinə xəritələnmiş, yalnız tanınan 4 dəyər). `jsonLdScript()` XSS müdafiəsi TOXUNULMADI.",
+     "verified": "tsc təmiz. `lib/seo.ts` DƏYİŞDİRİLMƏDİ (mənim qrupumda deyil) — ölü `jsonLdProduct/ItemList/FAQ` helper-lərinə keçid edilmədi, çünki fərqli sahə dəsti daha böyük SEO riski daşıyır (audit-in özü minimal variantı tövsiyə edir)."
+    },
+    {
+     "id": "saved-search-notify-dead (DƏRHAL hissə)",
+     "what": "components/SaveSearchButton.tsx:55-57 və :102-104 — yerinə yetirilməyən vəd götürüldü: «Axtarış saxlanıldı! Yeni elan gələndə xəbər tutacaqsınız.» → «Axtarış saxlanıldı — profilinizdən izləyə bilərsiniz.»; modal mətni «Yeni uyğun elan gələndə email ilə xəbər tutacaqsınız.» → «Saxlanmış axtarışlarınızı profilinizdən bir kliklə açacaqsınız.». `notify: true` payload-da SAXLANILDI (backend sahəni onsuz da yazır; matcher qurulanda istifadəçi seçimi itməsin).",
+     "verified": "Backend-də mexanizmin YOXLUĞU təkrar təsdiqləndi: `grep -rn 'notifications.create' api/src` → yalnız chat.service.ts və reviews.service.ts; `grep -rn '@Cron|ScheduleModule' api/src` → boş. tsc təmiz. TAM həll (matcher + e-poçt) api/ qrupudur — edilmədi."
+    }
+   ],
+   "skipped": [
+    {
+     "id": "listing-draft-status-unreachable",
+     "reason": "İKİ SƏBƏB. (1) SAHİBLİK: qoşulacaq kod `frontend/lib/draft.ts` və `frontend/components/DraftRestoreBanner.tsx`-dədir — hər ikisi mənim qrup siyahımda YOXDUR, paralel agent onları redaktə edə bilər. (2) RİSK/DƏYƏR: severity LOW, effort M, amma düzəliş `elan-yerlesdir` formasının bütün state axınına debounce yazma + bərpa bannerinin tetiklənmə şərtləri deməkdir; `clearDraft()` çağırış nöqtəsi səhv seçilsə istifadəçi qəsdən təmizlədiyi formanın köhnə məzmununu geri alır — yəni HAZIRDA İŞLƏYƏN forma axını risk altına düşür. `draft` enum dəyəri sxemdədir (api/prisma) və miqrasiya qadağandır. Reproyu təsdiqlədim: `grep -rn 'DraftBanner|DraftRestoreBanner|lib/draft|saveDraft|loadDraft|clearDraft' app components lib` → öz fayllarından başqa SIFIR nəticə, yəni defekt hələ də real."
+    },
+    {
+     "id": "seo-sitemap-canonical-ziddiyyeti",
+     "reason": "İKİ SƏBƏB. (1) SAHİBLİK: ziddiyyətin bir tərəfi `frontend/app/sitemap.ts`-dədir (mənim qrupumda deyil), ona görə yalnız YARISINI dəyişə bilərəm — canonical-ı dəyişib sitemap-ı olduğu kimi qoymaq ziddiyyəti aradan qaldırmır, sadəcə istiqamətini çevirir. (2) Bu, kod defekti deyil, SƏNƏDLƏŞDİRİLMƏMİŞ SEO SİYASƏTİ qərarıdır: 189 fasetli URL-i self-canonical etmək eyni anda unikal title/description tələb edir, əks halda dublikat problemi canonical-dan indeksə köçür. Auditin öz risk sahəsi bunu «orta-yüksək» qiymətləndirir. Qərar sahibi insan olmalıdır. Repro təsdiqləndi (kod oxundu): VERTICAL_SEO yalnız 2 slug tanıyır, qalan hər şey `path: '/elanlar'` alır."
+    },
+    {
+     "id": "listing-form-validation-contract-mismatch (DTO hissəsi)",
+     "reason": "Auditin təklif etdiyi `@IsNumber({maxDecimalPlaces:2},{message:'Qiymət ən çox 2 onluq rəqəm ola bilər'})` dəyişikliyi `api/src/modules/listings/dto/create-listing.dto.ts`-dədir — api/ MƏNİM QRUPUM DEYİL (paralel agent həmin fayllarda işləyir: git status-da 20+ api faylı dəyişikdir). Frontend maskası ilə istifadəçi artıq bu 422-ni görmür, amma xam ingiliscə mesaj API səviyyəsində qalır."
+    },
+    {
+     "id": "media-no-resize-fullres-delivery (backend thumb hissəsi)",
+     "reason": "`api/src/media/media.service.ts`-ə `thumbUrl` variantı əlavə etmək DB sxem dəyişikliyi + mövcud 291 media sətri üçün backfill tələb edir — həm api/ qrupudur, həm də miqrasiya yaratmaq açıq qadağandır. Çatdırılmanın frontend hissəsi (next/image optimizatoru) düzəldildi və 72×54 thumbnail üçün artıq tam ölçülü fayl endirilmir, ona görə praktiki təsirin böyük hissəsi onsuz da bağlandı."
+    },
+    {
+     "id": "saved-search-notify-dead (TAM həll)",
+     "reason": "Matcher + notifications + e-poçt inteqrasiyası bütövlükdə `api/src/modules/listings|saved-searches|messaging` altındadır — MƏNİM QRUPUM DEYİL. Üstəlik bu, YENİ ALT-SİSTEMDİR (tapşırıq «yeni funksiya yazma» deyir) və elan yaradılış yolunu bahalaşdırır. UI-dakı yalan vəd götürüldü ki, istifadəçi yerinə yetirilməyəcək şey gözləməsin."
+    },
+    {
+     "id": "ölü faylların silinməsi (ListingDetailClient.tsx)",
+     "reason": "Audit `app/elanlar/[id]/ListingDetailClient.tsx`-in silinməsini tövsiyə edir və faylın ölü olduğunu təsdiqlədim (sıfır import; idxal etdiyi `CompareWithSimilar` isə `app/muqayise/page.tsx`-də ayrıca istifadə olunur, yəni orfan qalmır). `rm` əmri Claude Code icazə klassifikatoru tərəfindən BLOKLANDI. Fayl yerində qalır; runtime-a təsiri yoxdur (heç yerdən import olunmur), yalnız gələcək işi çaşdırma riski davam edir. Eyni vəziyyət `app/elanlar/ListingsClient.tsx` üçün də keçərlidir."
+    }
+   ],
+   "typecheck": "təmiz — `cd frontend && npx tsc --noEmit` → EXIT=0, heç bir çıxış yoxdur (baseline də təmiz idi, yəni yeni tip borcu gətirmədim). Əlavə: `npm run lint` → 3 xəta var, LAKİN hamısı MƏNİM TOXUNMADIĞIM fayllardadır (app/muqayise/page.tsx — 2× no-html-link-for-pages; e2e/fixtures.ts — rules-of-hooks) və dəyişikliklərimdən ƏVVƏL də mövcud idi. Mənim 10 faylımda yalnız köhnədən qalma `no-explicit-any` xəbərdarlıqları var, yeni xəta yoxdur.",
+   "notes": "1) ƏN VACİB MƏHDUDİYYƏT — CANLI YOXLAMA MÜMKÜN OLMADI: iş başlayanda tapşırıqda «Frontend http://localhost:5401 İŞLƏYİR» yazılmışdı, amma sessiya ərzində həmin port SÖNÜLÜ idi (`curl localhost:5401` → 000; localhost:5500/health → 200; 5401-də dinləyən proses yoxdur — `ps` yalnız BAŞQA layihənin (360tools.az) next-server-ini göstərir). Serveri qaydalar üzrə (§4) qaldırmadım, ona görə auditdəki `curl http://localhost:5401/...` reproları TƏKRAR OXUNA BİLMƏDİ. Bunun əvəzinə hər düzəliş üçün: (a) mənbə kodun oxunması, (b) backend kontraktının curl ilə ölçülməsi, (c) təcrid olunmuş məntiq testi (npx tsx / node), (d) tsc + eslint istifadə etdim. Səhifə səviyyəsində vizual reqressiya (məs. yeni «Axtarışı saxla» başlıq sətrinin layout-u, deaktiv Model select-inin görünüşü) HƏLƏ GÖZLƏ YOXLANMAYIB — server qalxanda ilk baxılası yer budur.\n\n2) SESSİYA ƏRZİNDƏ DATA DƏYİŞDİ: işə başlayanda `GET /categories/avtomobiller/attributes` → `brand.options = null` idi (auditin ölçdüyü hal). Orta yerdə paralel seed/backend agenti bazaya 63 marka yazdı və indi `brand.options` DOLUDUR, `model` isə hələ də NULL. Taksonomiya modulu məhz buna görə «sxem üstündür, taksonomiya boşluğu doldurur» prinsipi ilə yazılıb — yəni seed geri qayıtsa da, irəli getsə də marka filtri işləyəcək, model isə hər halda markadan qurulacaq (o, sabit siyahı ola bilməz).\n\n3) MODEL FİLTRİ DEMO DATADA 0 NƏTİCƏ VERƏCƏK — bu, KOD DEFEKTİ DEYİL: `select attributes->>'brand', attributes->>'model' from listings where attributes ? 'brand'` → 30 sətirin HAMISINDA `model` BOŞDUR (brand isə dolu: Apple 13, Samsung 4, Toyota 1, Mercedes-Benz 1, Kia 1, LADA 1 …). Yəni filtr indi mövcuddur və işləyir, sadəcə uyğun elan yoxdur. Marka filtri ucdan-uca sınandı: `/listings?category=avtomobiller&attrs={\\\"brand\\\":\\\"Toyota\\\"}` → 1 (filtrsiz 8).\n\n4) DAVRANIŞDA GÖRÜNƏN DƏYİŞİKLİK (gözlənilən, amma xəbərdarlıq üçün): (a) region seçicisi artıq 8 yox, 75 elementlidir (bütün AZ + 74 region) — native `<select>` olduğu üçün sürüşür, layout pozulmur; (b) mətn axtarışında filtr aktivdirsə nəticələr `/listings`-dən gəlir, yəni Meili typo-dözümü və AI semantikası HƏMİN halda işləmir (audit-in tələb etdiyi mübadilə — filtrsiz axtarışda zəncir toxunulmazdır); (c) `/elanlar` hər render-də əlavə bir `/geo/regions` sorğusu edir, amma `revalidate: 86400` ilə keşlənir və server-fetch timeout müdafiəsi altındadır.\n\n5) TOXUNDUĞUM FAYLLAR (hamısı öz qrupumda): frontend/lib/attribute-taxonomy.ts (YENİ), frontend/app/elanlar/[id]/TrackRecentView.tsx (YENİ), frontend/app/elanlar/page.tsx, frontend/app/elanlar/[id]/page.tsx, frontend/app/elan-yerlesdir/page.tsx, frontend/components/{Gallery,CategoryFilters,ListingAttributes,SaveSearchButton,FilterChips}.tsx. `lib/transport-data.ts` OXUNDU, dəyişdirilmədi (63 markalıq CAR_BRANDS artıq ölü `TransportFullFilter`-dən başqa canlı filtr və formadan da istifadə olunur). api/, lib/seo.ts, lib/recent.ts, app/sitemap.ts, app/page.tsx — TOXUNULMADI.\n\n6) YENİ FAYL YERİ HAQQINDA QƏRAR: `TrackRecentView` qəsdən `components/` altına yox, `app/elanlar/[id]/` altına qoyuldu — `components/` qovluğunda mənim sahibliyim yalnız adı çəkilmiş 9 faylladır, yeni fayl orada paralel agentlə toqquşma riski yaradardı. `lib/attribute-taxonomy.ts` isə mövcud olmayan yeni fayldır, ona görə toqquşma riski yoxdur; auditin «CategoryFilters içinə avtomobilə xas if yığma, ayrıca köməkçi modul yaz» tələbi məhz belə ödənildi."
+  },
+  {
+   "key": "fe_profile",
+   "fixed": [
+    {
+     "id": "profile-dashboard-fake-widgets",
+     "what": "frontend/app/profil/page.tsx — LoyaltyPoints/AchievementBadges/SmartAlerts/ReferralProgram import-ları (köhnə :8-11) və render blokları (köhnə :63-73) silindi; yerinə səbəbi izah edən AZ şərh qoyuldu. TrustScore saxlanıldı (user sahələrindən hesablanır, uydurma deyil) və tək qaldığı üçün `grid md:grid-cols-3` → `md:max-w-md` wrapper-ə keçirildi. Komponent faylları (components/) SİLİNMƏDİ — sahibim deyil və real endpoint gələndə geri qaytarıla bilər.",
+     "verified": "grep -rn 'LoyaltyPoints|AchievementBadges|ReferralProgram|SmartAlerts' app components → yalnız komponentlərin öz faylları; curl -s localhost:5401/profil | grep -c 'Sadiqlik xalları|TAP-MAQ-2026|Smart bildirişlər|Nailiyyətlər' → 0; HTTP 200"
+    },
+    {
+     "id": "dashboard-kpi-hardcoded-zero",
+     "what": "frontend/app/profil/page.tsx — useEffect indi Promise.all ilə PARALEL `/listings/me/list`, `/favorites`, `/conversations` çağırır, hər birində AYRICA .catch(()=>null); stats state-ə `favorites` və `conversations` əlavə olundu. KPI-lar: `value={0}` → `value={stats.favorites}` / `value={stats.conversations}`. «Mesajlar» etiketi «Söhbətlər» edildi — chat.service.listConversations oxunmamış sayı qaytarmır, yalnız söhbətləri.",
+     "verified": "api/src/modules/favorites/favorites.controller.ts:21 GET /favorites və chat.controller.ts:22 @Controller('conversations') mövcuddur; curl localhost:5500/api/v1/{favorites,conversations} → 401 (auth tələb edir, marşrut var, 404 deyil). npx tsc --noEmit → EXIT=0; curl localhost:5401/profil → 200"
+    },
+    {
+     "id": "contract-profile-dashboard-hardcoded-zero",
+     "what": "dashboard-kpi-hardcoded-zero ilə eyni defektin dublikatı — eyni düzəlişlə bağlandı (paralel sorğular + fərdi catch tövsiyəsi tam tətbiq olundu).",
+     "verified": "Bax dashboard-kpi-hardcoded-zero: tsc təmiz, /profil 200"
+    },
+    {
+     "id": "compare-page-storage-key-mismatch",
+     "what": "frontend/app/muqayise/page.tsx — lokal `const KEY='tap_car_compare'` silindi; oxu/yazı tamamilə `@/lib/compare` helper-lərinə verildi (getCompare/addCompare/removeCompare). Birbaşa localStorage.setItem çağırışı götürüldü (əks halda obyekt formatı id-massivinə çevrilib CompareBar-ı sındırardı). `?id=` query-si dəstəkləndi: elan siyahıda yoxdursa API-dən çəkilib addCompare ilə əlavə olunur (CompareWithSimilar.tsx:7 belə link qurur). useSearchParams QƏSDƏN işlədilmədi (Next 15 Suspense bailout riski) — useEffect içində window.location.search oxunur.",
+     "verified": "grep -rn 'tap_car_compare' frontend → heç nə; lib/compare.ts toxunulmadı (CompareBar/ListingCard/ListingDetailClient eyni API-ni işlədir); curl localhost:5401/muqayise → 200, /muqayise?id=<uuid> → 200; tsc EXIT=0"
+    },
+    {
+     "id": "contract-compare-storage-key-mismatch",
+     "what": "Eyni defektin dublikatı + sahə adları: FIELDS-də `city_name` → `regionName`, `['attributes','engine']` → `['attributes','engine_volume']`; kart şəkli `it.media?.[0]?.url` → `it.images?.[0]?.url`; boş vəziyyətdəki və «+ əlavə et» sütunundakı `/neqliyyat` linkləri `/elanlar?category=neqliyyat` ilə əvəzləndi (308 hop-un qarşısı alındı).",
+     "verified": "GET /api/v1/listings/<id> kök açarları: regionName, images, favoritesCount VAR; city_name/media YOX. psql -d marketplace_dev -tAc \"select distinct key from category_attributes where key ilike '%engine%'\" → engine_volume. curl /muqayise | grep 'elanlar?category=neqliyyat' → 2 uyğunluq"
+    },
+    {
+     "id": "listing-stats-random-demo",
+     "what": "frontend/app/profil/elanlarim/[id]/stats/page.tsx — 14 günlük Math.random() massivi, ondan asılı `max` və bütün bar-chart bloku silindi; yerinə «Gündəlik statistika hazırlanır» boş vəziyyəti (BarChart3 ikonu). KPI açarları API ilə uyğunlaşdırıldı: `favorites_count` → `favoritesCount`; mövcud olmayan ölçmələr («Mesajlar» literal 0, `phone_clicks`) KPI siyahısından çıxarıldı, grid 4 → 2 sütun. Elan şəkli `listing.media?.[0]` → `listing.images?.[0]`. İstifadəsiz MessageCircle/Phone import-ları təmizləndi.",
+     "verified": "grep 'Math.random' app/profil/elanlarim/[id]/stats/page.tsx → yoxdur; GET /listings/<id> cavabında views və favoritesCount real dəyər verir (views:16); curl localhost:5401/profil/elanlarim/<id>/stats → 200; tsc EXIT=0"
+    },
+    {
+     "id": "contract-listing-stats-fabricated",
+     "what": "listing-stats-random-demo ilə eyni defekt — eyni düzəlişlə bağlandı; risk qeydindəki `max` istinadı da qrafiklə birlikdə silindi (TS xətası qalmadı).",
+     "verified": "npx tsc --noEmit → EXIT=0"
+    },
+    {
+     "id": "cart-page-orphan-and-fake-checkout",
+     "what": "frontend/app/profil/sebet/page.tsx:39-42 — `toast.success('Sifariş yaradıldı (demo)')` → `toast.info('Sifariş sistemi hazırlanır — sifarişiniz hələ qeydə alınmır...')` və səbəti boşaldan `update([])` ÇAĞIRIŞI SİLİNDİ (təsdiqlənməmiş sifarişdə istifadəçi datası itməməlidir). Düymənin altına daimi izah sətri əlavə edildi.",
+     "verified": "toast Ctx-də `info` metodu var (lib/toast.tsx:17); POST /api/v1/cart və /orders backend-də yoxdur (marşrut siyahısında mövcud deyil) — düymə real axına bağlanmadı; curl localhost:5401/profil/sebet → 200; tsc EXIT=0"
+    },
+    {
+     "id": "settings-save-persists-nothing",
+     "what": "frontend/app/profil/ayarlar/page.tsx — heç nə saxlamayan «Yadda saxla» düyməsi silindi (yerinə «seçimlər dəyişdiyiniz anda saxlanılır» qeydi); işləməyən 5 state (notifEmail/notifPush/notifSms/phonePublic/savedSearchAlerts) və onların «Bildirişlər»/«Məxfilik» switch-ləri çıxarılıb tək «Bildirişlər və məxfilik — hazırlanır» izah bloku ilə əvəzləndi. İstifadəsiz qalan Switch komponenti, Shield/DollarSign/User ikonları və useToast import-u təmizləndi. Tema/Sıxlıq/Dil/Valyuta TOXUNULMADI — onların real oxuyanı var.",
+     "verified": "grep -rn 'tap_lang|tap_currency|tap_density|avito_theme' app components lib → lib/i18n.tsx, lib/currency.ts, components/DensityToggle.tsx, app/layout.tsx:88 (yəni bu dördü həqiqətən işləyir); curl /profil/ayarlar | grep -c 'Yadda saxla' → 0; HTTP 200; tsc EXIT=0"
+    },
+    {
+     "id": "contract-settings-no-persistence",
+     "what": "settings-save-persists-nothing ilə eyni defekt — eyni düzəlişlə bağlandı.",
+     "verified": "npx tsc --noEmit → EXIT=0; curl localhost:5401/profil/ayarlar → 200"
+    }
+   ],
+   "skipped": [],
+   "typecheck": "təmiz — cd /Users/mr.maqa/Projects/360tap.az/frontend && npx tsc --noEmit → EXIT=0 (çıxış boş). api/ altında heç bir fayl dəyişmədiyi üçün backend tsc işlədilmədi.",
+   "notes": "Prinsipial qərar — bildiriş/məxfilik açarlarını localStorage-a yazmadım (defekt siyahısındakı «minimum» tövsiyəsindən imtina etdim). Səbəb: bu beş açarın hamısı SERVER tərəfli davranışa aiddir (e-poçt/SMS göndərişi, saxlanılmış axtarış xəbərdarlığı, elan cavabında contactPhone maskalanması). Brauzerdə saxlamaq açarı işlək etmir, sadəcə davamlı görünüş verir — istifadəçi «e-poçt bildirişlərini söndürdüm» / «telefonum gizlidir» zənn edir, halbuki heç nə dəyişmir. Bu, qrup təlimatındakı «uydurma rəqəmi başqa uydurma ilə əvəz etmə» qaydasının funksiya versiyasıdır. Backend hazır olanda blok geri qaytarılmalıdır (şərhlərdə yazılıb).\n\nMiqrasiya/backend işi görülmədi (qayda 5 + qrup sərhədi): GET /listings/:id/stats endpoint-i, listing_stat_daily yazıcısı, UserSettings modeli və PATCH /users/me — hamısı sxem/backend dəyişikliyi tələb edir. Frontend tərəfdə hər üç yer indi dürüst boş vəziyyət göstərir.\n\nSahibim OLMAYAN, amma diqqət tələb edən tapıntılar (toxunmadım):\n· components/{LoyaltyPoints,AchievementBadges,ReferralProgram,SmartAlerts}.tsx — hələ də literal uydurma data saxlayır, sadəcə artıq heç yerdən import olunmur (ölü kod). Silinməsi və ya prop-məcburi refaktoru başqa qrupun/sonrakı işin payıdır.\n· components/{EmailDigest,PushSubscribe,TelegramBotConnect,AutoReplyBot,SellerVerification}.tsx — /profil/ayarlar «İnteqrasiyalar» bölməsində render olunur, hamısında `api(` çağırışı SIFIRDIR; məsələn EmailDigest.tsx:11 yalnız «Həftəlik xülasəyə abunə oldunuz» toast-u atır. Eyni sinif problemdir (saxta uğur), amma fayllar mənim qrupumda deyil — defekt siyahısında da yox idi, ona görə bölməni olduğu kimi saxladım.\n· components/TrustScore.tsx snake_case user sahələri oxuyur (is_verified, phone_verified, listings_count) — API camelCase verirsə bal həmişə 50/bronze çıxa bilər. Uydurma deyil (formula realdır), amma sahə adı uyğunsuzluğu ehtimalı var; mənim faylım olmadığı üçün toxunmadım.\n\nSəbət qeydi: MessageSeller.tsx-dəki «Səbətə at» düyməsi yalnız hasDelivery && price != null olan elanlarda görünür, yəni səbətə real məhsul düşə bilir — məhz buna görə `update([])` silinməsi vacib idi (istifadəçi datası itmirdi).\n\nGit əmri işlədilmədi, server restart edilmədi, frontend build çağırılmadı, DB-də UPDATE edilmədi (yalnız SELECT: category_attributes açar yoxlaması)."
+  },
+  {
+   "key": "fe_seo",
+   "fixed": [
+    {
+     "id": "seher-og-image-empty",
+     "what": "frontend/app/seher/[city]/opengraph-image.tsx:19 → div-ə `display: 'flex'` əlavə edildi (satori iki uşaq düyünü olan div üçün açıq display tələb edir). Yuxarısına AZ dilində şərh qoyuldu: niyə flex, niyə string-birləşdirmə alternativi rədd edildi, və `textTransform: 'capitalize'`-in günahsız olduğu qeydi.",
+     "verified": "next/og ilə təcrid olunmuş render (frontend/node_modules-dan `next/dist/server/og/image-response.js`, müvəqqəti skript işlədikdən sonra silindi): ƏVVƏLKİ stil → FAIL «Expected <div> to have explicit \"display: flex\"...»; YENİ stil → OK bytes=164814. tsc təmiz."
+    },
+    {
+     "id": "next-image-wildcard-onrender",
+     "what": "frontend/next.config.ts images.remotePatterns: `*.onrender.com` jokeri və ölü `localhost:5400` qeydi silindi; `tap360-api.onrender.com`-a `pathname: '/uploads/**'` əlavə olundu; `minimumCacheTTL: 86_400` əlavə olundu. frontend/lib/image-hosts.ts-dəki ALLOWED_IMAGE_SOURCES eyni şəkildə güzgüləndi (fayl özü bu iki siyahının sinxron olmasını tələb edir).",
+     "verified": "safeImageUrl() üzərində birbaşa yoxlama (müvəqqəti tsx skripti, sonra silindi): picsum/unsplash İCAZƏ, tap360-api/uploads/a.jpg İCAZƏ, tap360-api/evil.jpg BLOK, zzz-triage.onrender.com BLOK, localhost:5400 BLOK, 169.254.169.254 BLOK. Lokal bazada onrender.com hostlu heç bir şəkil yoxdur: `psql -At -c \"select substring(url from '^[a-z]+://[^/]+'), count(*) from listing_images group by 1\"` → picsum 261, example.com 13, localhost:5500 9, cdn.example.com 5 (onrender YOX). tsc təmiz."
+    },
+    {
+     "id": "next-image-open-proxy",
+     "what": "QİSMƏN tətbiq olundu (təhlükəsiz hissəsi): `*.onrender.com` jokeri silindi (açıq proxy-nin əsas qapısı), tap360-api-yə `/uploads/**` yol məhdudiyyəti qoyuldu, `minimumCacheTTL` 60 san → 86 400 san qaldırıldı (eyni şəklin təkrar-təkrar billable transformasiyası kəskin azalır). picsum/unsplash hostlarının production-da bağlanması QƏSDƏN edilmədi — ayrıca `skipped` bəndinə bax.",
+     "verified": "Yuxarıdakı safeImageUrl matrisi + next.config.ts-in oxunuşu. Joker artıq yoxdur, ona görə ixtiyari `*.onrender.com` alt-domeni üçün 504-lük upstream gözləməsi mümkün deyil. tsc təmiz."
+    },
+    {
+     "id": "seo-hreflang-404-ve-uyumsuz",
+     "what": "frontend/app/layout.tsx: `alternates.languages` bloku (az-AZ→ana səhifə, ru-RU→/ru 404, en-US→/en 404) tamamilə silindi; `openGraph.alternateLocale: ['ru_RU','en_US']` silindi. Yerinə AZ dilində şərh: nə silindi, niyə, ru/en real qurulanda hreflang-ın necə (hər səhifə öz yolu + x-default, həm də buildMetadata-da) bərpa olunmalı olduğu, və «bura canonical GERİ QOYULMAMALIDIR» xəbərdarlığı.",
+     "verified": "curl ilə təsdiq: https://360tap.az/ru → 404, /en → 404 (yəni silinən hreflang-lar mövcud olmayan səhifələri göstərirdi). Faylda `canonical` əlavə edilmədi — `grep -n canonical app/layout.tsx` yalnız mövcud izahat şərhini tapır. tsc təmiz."
+    },
+    {
+     "id": "seo-og-image-ve-logo-404",
+     "what": "1) frontend/lib/seo.ts:30 — `og-default.png` fallback-i çıxarıldı (`const image = p.image`), `openGraph.images` və `twitter.images` yalnız şəkil VERİLƏNDƏ təyin olunur; şəkilsiz hallarda Next-in işləyən fayl-konvensiyalı `app/opengraph-image.tsx`-i qüvvədə qalır. 2) frontend/app/layout.tsx — root `openGraph.images: [/og-default.png]` sətri silindi (eyni səbəb). 3) frontend/lib/seo.ts — `jsonLdOrganization()`-dan `logo` sahəsi müvəqqəti çıxarıldı (SITE.logo → /logo.png 404 idi); SITE.logo sabiti izahatlı şərhlə saxlanıldı ki, real fayl gələndə bir yerdən bərpa olunsun.",
+     "verified": "Davranış modeli canlı nəzarət qrupu ilə təsdiqləndi: `app/biznes/page.tsx` metadata-sında openGraph YOXDUR və canlıda og:image=/opengraph-image (200) alır — yəni fayl-konvensiyası config verilmədikdə işə düşür; ana səhifə isə buildMetadata-nın images-i ucbatından 404-lük /og-default.png alırdı. 404-lər curl ilə təkrarlandı: /og-default.png, /logo.png → 404; /opengraph-image → 200. `ls frontend/public` → boş. tsc təmiz."
+    },
+    {
+     "id": "robots-admin-root-not-disallowed",
+     "what": "frontend/app/robots.ts:11 — `'/admin/'` → `'/admin'`, `'/profil/'` → `'/profil'` (robots-da dəyər prefiksdir, sondakı «/» kök yolun özünü kənarda qoyurdu). Səbəbi izah edən AZ şərh əlavə olundu. `'/api/'` toxunulmadı — /api altında səhifə marşrutu yoxdur, əlavə dəyişiklik lazımsız risk olardı. Təklif olunan opsional `dynamic = 'force-dynamic'` TƏTBİQ EDİLMƏDİ (bax skipped).",
+     "verified": "Fayl saf funksiyadır və çıxışı sətir-bə-sətir oxundu (`sed -n '4,25p' app/robots.ts`). Frontend dev serveri bu sessiya ərzində 5401-də İŞLƏMİRDİ, ona görə /robots.txt curl ilə yenidən yoxlana bilmədi; qayda 4-ə görə server qaldırılmadı. tsc təmiz."
+    },
+    {
+     "id": "seo-sitemap-elan-limiti-50",
+     "what": "frontend/app/sitemap.ts — tək `?limit=50` sorğusu `fetchAllListings()` dövrü ilə əvəz olundu: `?limit=50&page=N`, `meta.hasMore` ilə dayanma, LISTINGS_MAX_PAGES=40 (2 000 elan) sərt hədd, LISTINGS_BUDGET_MS=20 000 ümumi vaxt büdcəsi, `fetchJson` null qaytaranda dövr dayanır və TOPLANMIŞ URL-lər qaytarılır (boş sitemap riski yoxdur). Səhifələr arası sürüşmə üçün id-yə görə Set-dedupe əlavə olundu. Mövcud 8 san timeout və xəta loglaması saxlanıldı.",
+     "verified": "Eyni məntiq lokal API-yə qarşı ayrıca skriptlə icra olundu: s1 batch=50 hasMore=true, s2 batch=50 hasMore=true, s3 batch=13 hasMore=false → YEKUN 113 elan, 120 ms. Bu, `psql -At -c \"select count(*) from listings where status='active'\"` → 113 ilə tam üst-üstə düşür (əvvəl 50 idi). tsc təmiz."
+    },
+    {
+     "id": "seo-sitemap-lastmod-saxta",
+     "what": "frontend/app/sitemap.ts — `const now = new Date()` tamamilə çıxarıldı. Statik yollarda (:43), kateqoriya (:56) və region (:63) URL-lərində `lastModified` artıq ÜMUMİYYƏTLƏ verilmir (sahə sitemap sxemində opsionaldır). Elanlarda real `updatedAt ?? createdAt` saxlanılır; tarix yoxdursa sahə buraxılır. Qərarın səbəbi (hər ISR regenerasiyasında 196 URL-in saxta yenilənməsi) faylda AZ şərhlə yazıldı. Backend aqreqat endpoint-i variantı seçilmədi — sxem/API dəyişikliyi tələb edir.",
+     "verified": "Simulyasiyada 113 elanın 113-ünün real damğası var (`items.filter(l=>l.updatedAt||l.createdAt).length` = 113), yəni elan URL-ləri lastmod-suz qalmır. Statik/kateqoriya/region URL-lərində sahə yoxdur — kod oxundu (app/sitemap.ts:87-109). tsc təmiz."
+    }
+   ],
+   "skipped": [
+    {
+     "id": "next-image-open-proxy (picsum/unsplash hostlarının production-da bağlanması hissəsi)",
+     "reason": "TƏTBİQ EDİLMƏDİ — işləyən funksiyanı sındırardı. Ölçdüm: canlı API-də elan şəkillərinin 50/50-si `https://picsum.photos/seed/...`, lokal bazada isə `listing_images`-də 261 picsum/unsplash sətri var. Təklif olunan `NODE_ENV !== 'production'` şərti production build-də bu hostları bloklayardı → canlıda bütün elan şəkilləri HTTP 400 verərdi (defektin öz `risk` sahəsi də bunu xəbərdar edir və deploy-dan əvvəl bazanı yoxlamağı tələb edir; yoxladım — şərt ödənmir). Açıq-proxy riskinin bağlanabilən hissəsi (joker host, yol məhdudiyyəti, minimumCacheTTL) tətbiq olundu. Qalan hissə üçün ön şərt: şəkilləri öz storage-a/CDN-ə köçürmək — bu, ayrıca data miqrasiyası işidir və mənim qrupumdan kənardır. Vercel Firewall rate-limit qaydası da kod dəyişikliyi deyil, platforma konfiqurasiyasıdır."
+    },
+    {
+     "id": "seo-og-image-ve-logo-404 (2-ci və 3-cü addımlar: public/ qrafik aktivləri)",
+     "reason": "logo.png, icons/icon-192.png, icons/icon-512.png, app/icon.png / favicon.ico REAL QRAFİK AKTİV tələb edir (dizayn işi) — mövcud olmayan şəkli özüm uydurmaq «yeni funksiya yazma» qadağasına dəyir və brend identikliyi qərarıdır. Həmçinin `frontend/app/manifest.ts` (ikon siyahısı) mənim sahib olduğum fayllar siyahısında DEYİL — paralel agent riskinə görə toxunulmadı. Kod tərəfli hissə (1-ci addım) tam tətbiq olundu və özü-özlüyündə og:image problemini həll edir."
+    },
+    {
+     "id": "og-seher-empty-response",
+     "reason": "DUBLİKAT — `seher-og-image-empty` ilə eyni defekt və eyni tək sətirlik düzəliş (opengraph-image.tsx:19 → display:'flex'). Düzəliş bir dəfə tətbiq olundu, `fixed` siyahısında `seher-og-image-empty` altında göstərilib."
+    },
+    {
+     "id": "geo-seher-og-image-crash",
+     "reason": "DUBLİKAT — eyni defekt. Bu tapıntının öz kök-səbəb iddiası («marşrut həlli / [category] qardaş seqmenti ilə konflikt») SƏHVDİR və onun təklif etdiyi struktur dəyişikliyi (faylı silmək / app/seher/opengraph-image.tsx-ə köçürmək) QƏSDƏN tətbiq edilmədi — həm problemi həll etməzdi, həm də lazımsız marşrut riski yaradardı. Doğru düzəliş `seher-og-image-empty` altındadır."
+    },
+    {
+     "id": "seo-seher-og-image-crash",
+     "reason": "DUBLİKAT — eyni defekt. Bu tapıntının kök-səbəb iddiası («textTransform: capitalize satoridə dəstəklənmir») TƏKZİB OLUNDU: mənim öz izolyasiya testimdə də textTransform saxlanılmaqla display:'flex' ilə render OK 164814 bayt verdi. textTransform SİLİNMƏDİ — o işləyir və Azərbaycan hərfləri üçün əl ilə JS capitalize yazmaq yeni səhv mənbəyi olardı."
+    },
+    {
+     "id": "robots-admin-root-not-disallowed (opsional hissə: /admin üçün force-dynamic / noindex)",
+     "reason": "TƏTBİQ EDİLMƏDİ. `app/admin/**` mənim qrupumun fayllarına daxil deyil (paralel agent riski) və `dynamic = 'force-dynamic'` səhifənin illik keşini ləğv edir — bu, SEO düzəlişi deyil, ayrıca performans/render qərarıdır. Defektin öz mətni də bunu «ayrıca qərar» kimi qeyd edir. Data sızması yoxdur (səhifə yalnız «Giriş yoxlanır» skeletini verir), ona görə robots prefiksi düzəlişi kifayətdir."
+    }
+   ],
+   "typecheck": "təmiz — `cd frontend && npx tsc --noEmit` → heç bir çıxış, exit=0 (bütün redaktələrdən sonra iki dəfə işlədildi)",
+   "notes": "MÜHİM 1 — picsum/unsplash barədə ölçmə: canlı backend-dən `curl https://tap360-api.onrender.com/api/v1/listings?limit=50` → media hostları 50/50 `picsum.photos`. Lokal bazada da `listing_images`-də 261 picsum/unsplash sətri var. Yəni triage-in «production-da bu hostları bağla» təklifi tətbiq edilsəydi CANLIDA BÜTÜN ELAN ŞƏKİLLƏRİ sınardı. Açıq-proxy problemi yalnız şəkillər öz storage-ımıza (api.360tap.az / CDN) köçürüldükdən SONRA tam bağlana bilər — bu, ayrıca miqrasiya işidir.\n\nMÜHİM 2 — frontend dev serveri (localhost:5401) bu sessiya ərzində İŞLƏMİRDİ (`curl /` → 000, port dinlənilmir; nəzarət marşrutu /opengraph-image də 000 verdi). Qayda 4-ə görə server qaldırılmadı/restart edilmədi. Ona görə HTTP səviyyəsində repro əvəzinə: (a) OG defekti next/og ilə təcrid olunmuş renderdə əvvəl/sonra ölçüldü, (b) sitemap dövrü lokal API-yə (5500 işləyir) qarşı icra olundu, (c) allowlist safeImageUrl üzərində birbaşa test olundu, (d) 404/hreflang faktları CANLI saytdan curl ilə təsdiqləndi. Yekun HTTP yoxlaması (robots.txt, /seher/*/opengraph-image, og:image teqləri) növbəti dəfə frontend qalxanda edilməlidir.\n\nMÜHİM 3 — `frontend/lib/image-hosts.ts` və `next.config.ts` siyahıları qəsdən dublikatdır (faylın öz şərhi bunu izah edir); hər ikisi eyni dəyişiklikləri aldı, sinxronluq pozulmadı. `matchesHostname()`-dəki `*.` dəstəyi kodda qaldı (artıq istifadə olunmur, amma zərərsizdir və gələcək alt-domen ehtiyacı üçün lazım ola bilər) — silinsə funksiya davranışı dəyişməzdi, ona görə toxunulmadı.\n\nQayda pozuntusu yoxdur: heç bir git əmri işlədilmədi, server restart edilmədi, `npm run build` işlədilmədi, miqrasiya yaradılmadı, DB-yə UPDATE edilmədi (yalnız SELECT), monetizasiya/ödəniş/admin/demo data toxunulmadı. next.config.ts-dəki `redirects()` bloku və onun uzun şərhi TAM OLDUĞU KİMİ QALDI — yalnız yuxarıdakı `images` bloku dəyişdi.\n\nDəyişən fayllar (hamısı fe_seo qrupuna aiddir): frontend/next.config.ts, frontend/lib/image-hosts.ts, frontend/lib/seo.ts, frontend/app/layout.tsx, frontend/app/robots.ts, frontend/app/sitemap.ts, frontend/app/seher/[city]/opengraph-image.tsx. Müvəqqəti yoxlama skriptləri (.og-verify-fe-seo.mjs, .ih-verify-fe-seo.ts) işlədikdən dərhal sonra silindi — layihədə qalmayıb."
+  },
+  {
+   "key": "fe_other",
+   "fixed": [
+    {
+     "id": "geo-city-soft-404 (qismən — yalnız mənim sahibliyimdəki qat)",
+     "what": "frontend/lib/server-fetch.ts:76-100 — `serverGet` artıq `status: number | null` qaytarır (mövcud `data`/`meta`/`unavailable` sahələri toxunulmayıb, geriyə tam uyğun). Səbəb və rədd edilən alternativ (4xx-i `unavailable`-a qatmaq) fayl şərhində Azərbaycan dilində sənədləşdirildi. Bu, `notFound()` qatının (app/elanlar/page.tsx — BAŞQA qrupun faylı) tikilməsi üçün lazım olan yeganə lib dəyişikliyidir.",
+     "verified": "cd frontend && npx tsc --noEmit → çıxışsız (təmiz); serverGet-in bütün mövcud çağıranları kompilyasiyadan keçdi, yəni əlavə sahə heç bir destructuring-i sındırmadı. Backend davranışı təsdiqləndi: curl 'http://localhost:5500/api/v1/listings?region=YOXDUR' → 404."
+    },
+    {
+     "id": "seo-soft404-mevcud-olmayan-kateqoriya (BusinessPanel qatı)",
+     "what": "frontend/components/BusinessPanel.tsx:4-19 — 4 sınıq slug real kateqoriyalara bağlandı: avadanliq→biznes-avadanliq, saha→dasinmaz-emlak (etiket «Sahə»→«Əmlak»), mehsullar→tikinti-temir (etiket «Məhsullar»→«Tikinti», ikon Box→Hammer), is→is-elanlari. Səbəb şərhdə yazıldı.",
+     "verified": "psql -d marketplace_dev: hər 6 slug `categories`-də mövcud və aktivdir; backend `GET /api/v1/listings?category=<slug>` hamısı üçün 200 + total: biznes-avadanliq=4, dasinmaz-emlak=10, tikinti-temir=5, neqliyyat=15, xidmetler=7, is-elanlari=11 (yəni heç biri boş nəticə/soft-404 deyil). tsc təmiz; `Hammer` ikonu node_modules/lucide-react-də mövcuddur (icons/hammer.js)."
+    },
+    {
+     "id": "redirect-307-26kb-body (BusinessPanel qatı)",
+     "what": "frontend/components/BusinessPanel.tsx:11-18 — 6 linkin hədəfi `/k/<slug>`-dan birbaşa `/elanlar?category=<slug>`-a keçirildi, beləliklə daxili naviqasiyada 307 + ~33 KB gövdəli hop ümumiyyətlə yaranmır. `/k/*` route-una TOXUNULMADI (xarici/SEO linklər üçün olduğu kimi qalır).",
+     "verified": "grep ilə fayldakı bütün href-lər yoxlandı — `/k/` qalmadı; tsc təmiz. Hədəf URL-lərin məzmun verdiyi yuxarıdakı backend total-ları ilə təsdiqləndi."
+    },
+    {
+     "id": "anon-favorites-lost-on-login",
+     "what": "frontend/lib/favorites.ts:31-72 — yeni `migrateLocalFavorites()`: `Promise.allSettled` ilə hər lokal id üçün `POST /listings/<id>/favorite`, localStorage YALNIZ ən azı bir uğurlu sorğudan sonra təmizlənir, funksiya heç vaxt exception atmır. frontend/lib/auth.tsx:4 (import), :86 (login) və :104 (register) — `setUser(...)`-dan dərhal sonra `void migrateLocalFavorites()` (qəsdən await EDİLMİR ki, giriş yavaşlamasın).",
+     "verified": "cd frontend && npx tsc --noEmit → təmiz. Backend kontraktı oxundu: api/src/modules/favorites/favorites.controller.ts:14 `@Post('listings/:id/favorite')` — mövcud `toggleFavorite()`-in işlətdiyi eyni route, yeni endpoint yaradılmadı. Kontroller UUID v4 olmayan id-yə 400 verir → allSettled sayəsində bu qalan köçürməni dayandırmır. Dövri import yoxdur: lib/api.ts yalnız ./format-ı import edir."
+    },
+    {
+     "id": "password-policy-mismatch-front-back + contract-register-password-rule (eyni kök səbəb, birlikdə düzəldildi)",
+     "what": "YENİ frontend/lib/validation.ts — PASSWORD_RE (backend DTO-sunun surəti), PASSWORD_PATTERN, PASSWORD_MIN_LENGTH=8, PASSWORD_HINT, PASSWORD_PLACEHOLDER, validatePassword(); iki mənbə olduğu şərhdə xəbərdarlıq kimi yazıldı. frontend/app/qeydiyyat/page.tsx:7-13,40-44,74-76 və frontend/components/AuthModal.tsx:7-13,73-77,229-236 — minLength 6→8, pattern+title əlavə edildi, placeholder «Parol (min 8 simvol, hərf və rəqəm) *», submit-dən əvvəl validatePassword() yoxlaması. GİRİŞ formalarına TOXUNULMADI (AuthModal.tsx login sahəsi) — köhnə 6 simvollu parollar işləməyə davam edir.",
+     "verified": "Backend qaydası canlı curl ilə təkrarlandı: POST :5500/api/v1/auth/register {password:\"abc123\"} → 422 [\"Parol həm hərf, həm rəqəm ehtiva etməlidir\",\"Parol ən azı 8 simvol olmalıdır\"] — yəni defekt hələ mövcud idi. Düzəlişdən sonra cd frontend && npx tsc --noEmit → təmiz; grep ilə hər iki formada minLength={PASSWORD_MIN_LENGTH} + pattern + title təsdiqləndi, login sahəsində minLength hələ də yoxdur."
+    }
+   ],
+   "skipped": [
+    {
+     "id": "seo-k-seher-sorgu-itkisi",
+     "reason": "Düzəliş tələb olunan hər üç fayl (frontend/app/k/[category]/page.tsx, frontend/app/seher/[city]/page.tsx, frontend/app/seher/[city]/[category]/page.tsx) BAŞQA qrupun (fe_listings/fe_seo) sahibliyindədir — qayda 1-ə görə toxunmadım. Defekt təkrarlandı və hələ mövcuddur (route-lar `searchParams` propunu qəbul etmir)."
+    },
+    {
+     "id": "geo-city-soft-404 (qalan iki qat)",
+     "reason": "app/elanlar/page.tsx-də `status === 404` → `notFound()` və app/seher/[city]/page.tsx-də `toLowerCase()` normalizasiyası mənim fayl qrupumda deyil. Mənim tərəfimdəki hazırlıq (serverGet `status`) tamamlandı — qalan qat digər agentin tətbiqini gözləyir."
+    },
+    {
+     "id": "seo-soft404-mevcud-olmayan-kateqoriya (metadata qatı (a))",
+     "reason": "frontend/app/elanlar/page.tsx generateMetadata (noindex) fe_seo qrupunun faylıdır. Mənə aid olan hissə — BusinessPanel-in 4 sınıq daxili linki — düzəldildi (bax `fixed`)."
+    },
+    {
+     "id": "redirect-307-26kb-body (breadcrumb qatı)",
+     "reason": "frontend/app/elanlar/[id]/page.tsx:448 breadcrumb linki və onun BreadcrumbList JSON-LD-si mənim qrupumda deyil. next.config.ts-ə köçürmə variantı onsuz da defektin öz `risk` sahəsində TÖVSİYƏ EDİLMİR (encodeURIComponent qərarını pozur) — ona görə heç kim tərəfindən edilməməlidir."
+    },
+    {
+     "id": "avatar-uploader-dead-endpoints",
+     "reason": "Repro təsdiqləndi (curl -X PATCH :5500/api/v1/auth/me → 404). Variant (a) endpoint yaratmaq api/ qrupuna aiddir və yeni funksiya sayılır (məqsəd: yeni funksiya yazma) — etmədim. Variant (b) komponenti silmək: fayl heç yerdə mount olunmadığı üçün istifadəçi təsiri sıfırdır, silmək isə paralel işləyən agentlərin dəyişiklikləri ilə yarışa bilər, ona görə silmədim. Əvəzinə AvatarUploader.tsx:47-52-yə xəbərdarlıq şərhi əlavə etdim: endpoint yoxdur, mount etməzdən əvvəl backend-də `@Patch('me')` (avatarUrl host allowlist-i ilə) lazımdır. Kod davranışı DƏYİŞMƏDİ."
+    }
+   ],
+   "typecheck": "təmiz — `cd /Users/mr.maqa/Projects/360tap.az/frontend && npx tsc --noEmit` heç bir çıxış vermədi (0 xəta). api/ altında heç bir fayl dəyişdirilmədi, ona görə backend tsc işlədilmədi.",
+   "notes": "MÜHİM: yoxlama zamanı frontend dev serveri (localhost:5401) AYAQDA DEYİLDİ — `lsof -iTCP:5401 -sTCP:LISTEN` boş, curl «Failed to connect». Qayda 4-ə görə onu restart etmədim, ona görə HTTP səviyyəli smoke test (səhifə render + link/placeholder yoxlaması) edilə bilmədi; təsdiq `npx tsc --noEmit`, backend curl-ları və psql sorğuları ilə aparıldı. Serveri qaldıran agent /qeydiyyat, / (BusinessPanel) və AuthModal qeydiyyat formasını gözlə yoxlamalıdır.\n\n`serverGet`-ə `status` əlavə etdim, çünki lib/** mənim qrupumdadır — lakin bu dəyişiklik TAM fayda verməsi üçün fe_listings/fe_seo qrupunun app/elanlar/page.tsx-də `status === 404` → `notFound()` qatını əlavə etməsindən asılıdır. Sahə əlavəsi additivdir, heç bir mövcud çağıranı sındırmır (tsc təsdiqlədi).\n\nBusinessPanel-də etiket dəyişikliyi (Sahə→Əmlak, Məhsullar→Tikinti) qəsdlidir: bazada `saha`/`mehsullar` adlı heç bir kateqoriya yoxdur, ona görə köhnə etiketi saxlayıb ixtiyari slug-a bağlamaq istifadəçini aldadardı. İkon sayı və layout dəyişməyib (3 sütun × 2 sıra).\n\nAvatarUploader üçün endpoint yaratmadım (api/ başqa qrupdadır + yeni funksiya qadağandır); əvəzinə komponentin özündə mount etməzdən əvvəl nə lazım olduğunu izah edən xəbərdarlıq şərhi qoydum."
+  }
+ ],
+ "failed": []
+}
