@@ -34,6 +34,9 @@ const config: NextConfig = {
       // (api/src/main.ts:48 `prefix: '/uploads/'`), ona görə yol məhdudiyyəti
       // bu host-u da tam proxy olmaqdan çıxarır — localhost qeydləri ilə eyni üslub.
       { protocol: 'https', hostname: 'tap360-api.onrender.com', pathname: '/uploads/**' },
+      // magazam.az kataloqunun şəkilləri (bax `lib/image-hosts.ts`). Yol yalnız
+      // həmin hesabın buludu ilə məhdudlaşır — açıq Cloudinary proxy-si olmasın.
+      { protocol: 'https', hostname: 'res.cloudinary.com', pathname: '/di8zz8sc1/**' },
     ],
     // Optimallaşdırılmış variantın keşi defolt 60 saniyə idi — eyni şəkil üçün
     // gün ərzində dəfələrlə yenidən transformasiya deməkdir (hər biri billable).

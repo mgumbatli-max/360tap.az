@@ -21,7 +21,14 @@ export const metadata = buildMetadata({
   path: '/',
 });
 
-type Cat = { id: string; slug: string; nameAz: string; icon?: string | null };
+type Cat = {
+  id: string;
+  slug: string;
+  nameAz: string;
+  icon?: string | null;
+  /** Alt ağac cəmi — `api/scripts/sync-category-visibility.ts` hesablayır. */
+  listingsCount?: number;
+};
 
 type NestListing = {
   id: string;
@@ -259,7 +266,25 @@ async function HomeFeed() {
   const listings = (listRes.data ?? []).map(mapListing);
   // Backend əlçatmazdır (timeout/şəbəkə/5xx) — "elan yoxdur"dan fərqli haldır.
   const backendDown = listRes.unavailable && catRes.unavailable;
-  const tiles: CategoryTile[] = categories.length > 0 ? categories : FALLBACK_CATEGORIES;
+  /**
+   * BOŞ KÖK KATEQORİYA ANA SƏHİFƏDƏ GÖSTƏRİLMİR.
+   *
+   * Plitəyə basan istifadəçi hər dəfə boş siyahı görürdü — ölçüldü: saxta elanlar
+   * silindikdən sonra 13 kök kateqoriyadan 7-si tam boşdur. `listingsCount` alt ağac
+   * cəmidir, yəni 0 «bu budaqda bir dənə də aktiv elan yoxdur» deməkdir.
+   *
+   * İKİ QORUYUCU:
+   *  · sayğac ümumiyyətlə gəlməyibsə (köhnə keş, backend cavabı dəyişibsə) plitə
+   *    GÖSTƏRİLİR — məlumatsızlığa görə naviqasiyanı boşaltmaq daha pisdir;
+   *  · süzgəcdən heç nə qalmasa, tam siyahıya qayıdırıq ki, ana səhifə boş qalmasın.
+   *
+   * QEYD: bu YALNIZ baxış səthidir. Elan yerləşdirmə səhifəsi tam kateqoriya ağacını
+   * görür (`app/elan-yerlesdir/page.tsx`), yəni boş kateqoriyaya elan qoymaq mümkündür
+   * və ora ilk elan düşən kimi plitə öz-özünə geri qayıdır.
+   */
+  const visible = categories.filter((c) => c.listingsCount === undefined || c.listingsCount > 0);
+  const shown = visible.length > 0 ? visible : categories;
+  const tiles: CategoryTile[] = shown.length > 0 ? shown : FALLBACK_CATEGORIES;
 
   return (
     <>

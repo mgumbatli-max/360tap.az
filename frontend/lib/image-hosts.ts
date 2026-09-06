@@ -32,6 +32,10 @@ export const ALLOWED_IMAGE_SOURCES: ImageSource[] = [
   { protocol: 'https:', hostname: 'images.unsplash.com' },
   { protocol: 'https:', hostname: 'picsum.photos' },
   { protocol: 'https:', hostname: 'tap360-api.onrender.com', pathPrefix: '/uploads/' },
+  // magazam.az kataloqunun şəkilləri Cloudinary-dədir və yol həmişə
+  // `/<cloud_name>/image/upload/...` formasındadır. Yol prefiksi hesabla
+  // məhdudlaşdırılır ki, bu qeyd bütün Cloudinary üçün açıq proxy olmasın.
+  { protocol: 'https:', hostname: 'res.cloudinary.com', pathPrefix: '/di8zz8sc1/' },
 ];
 
 /**

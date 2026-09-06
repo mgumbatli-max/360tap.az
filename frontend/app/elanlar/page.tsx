@@ -514,7 +514,24 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
   // yəni bir səviyyə aşağı düşəndə naviqasiya itmir (Avito vertikal modeli).
   const segParent = (found?.node.children?.length ? found.node : found?.parent) ?? null;
   const segments = segParent?.children ?? [];
-  const tiles = found?.node.children ?? [];
+  /**
+   * BAXIŞ QATINDA BOŞ KATEQORİYA GÖSTƏRİLMİR.
+   *
+   * `listingsCount` alt ağac cəmidir (`api/scripts/sync-category-visibility.ts`),
+   * yəni 0 həqiqətən «bu budaqda bir dənə də aktiv elan yoxdur» deməkdir. Belə
+   * plitəyə basan istifadəçi hər dəfə boş səhifə görürdü.
+   *
+   * NİYƏ BURADA, `is_active` İLƏ DEYİL: `/categories` ağacını elan YERLƏŞDİRMƏ
+   * səhifəsi də işlədir (`app/elan-yerlesdir/page.tsx:162`). Kateqoriyanı bazada
+   * gizlətsək, ora elan qoymaq da mümkün olmazdı — kateqoriya heç vaxt dolmaz,
+   * yəni kilid yaranardı. Gizlətmə YALNIZ baxış səthinə aiddir.
+   *
+   * Sayğac ümumiyyətlə yoxdursa (köhnə cavab, keş) plitə GÖSTƏRİLİR — məlumatsızlıq
+   * səbəbindən kataloqu boşaltmaq gizlətməkdən pisdir.
+   */
+  const allTiles = found?.node.children ?? [];
+  const nonEmptyTiles = allTiles.filter((c) => c.listingsCount === undefined || c.listingsCount > 0);
+  const tiles = nonEmptyTiles;
   const tileIcon =
     CAT_ICON[sp.category ?? ''] ?? CAT_ICON[found?.parent?.slug ?? ''] ?? Layers;
   const slogan =
