@@ -342,7 +342,7 @@ səhifələrində işlədilir (əvvəlki sessiyanın qeydi bu hissədə yanlış
 | `next build` | ✅ keçir |
 | Atılma tezliyi (qoruyucudan sonra) | ✅ 160 icra · istifadəçi üçün 0 sınıq |
 | Deploy | ✅ push `8d582a7` → Vercel/Render avtomatik, canlıda təsdiqləndi |
-| **Canlı E2E** (desktop · 01-public + 02-search + 06-filters) | ✅ **52/52** (əvvəlki baseline: 33 keçdi / 22 sındı) |
+| **Canlı E2E** (desktop · 01-public + 02-search + 06-filters) | ✅ **52/52, flaky SIFIR** (əvvəlki baseline: 33 keçdi / 22 sındı) |
 
 ### CANLIDA ÜZƏ ÇIXAN İKİ ŞEY
 1. **Öz düzəlişimin qüsuru — ikiqat bərpa (DÜZƏLDİLDİ, `8d582a7`).** Çipə klik həm öz
@@ -353,6 +353,9 @@ səhifələrində işlədilir (əvvəlki sessiyanın qeydi bu hissədə yanlış
 2. **React #418 (hidratasiya) — BİR DƏFƏ göründü, təkrarlanmır.** Deploy oturandan sonra
    həmin test **3/3** keçir. Ehtimal: rollout anında CDN köhnə HTML-i, brauzer isə yeni
    JS-i almışdı. **Sübut edilməyib** — növbəti deploy-dan sonra yenidən yoxlanmalıdır.
+
+Hər iki düzəlişdən sonra canlı icra TƏMİZDİR: **52/52, retry-siz, flaky-siz** — yəni
+`ERR_ABORTED` siqnalı da, hidratasiya xətası da təkrarlanmadı.
 
 ### ⚠️ MAŞIN QEYDİ
 Bu sessiyada E2E iki dəfə **yaddaş çatışmazlığına** görə öldürüldü — başqa layihənin
