@@ -266,6 +266,94 @@ HTML-ində çip mətnlərinin heç biri yoxdur. Backend filtrləri işləyir və
 
 ---
 
+## 0-E. DAVAM NÖQTƏSİ — 2026-09-06, səhər (naviqasiya atılması + çiplər)
+
+> **AÇAN KİMİ BURADAN BAŞLA.** Kod commit + push olunub (`6fb43bf`), işçi ağac təmizdir.
+
+### TAM E2E NƏHAYƏT YAŞILDIR: **270/270** (əvvəl 251/258, 7 sınıq)
+`--workers=4`, boş maşın, production build. Flaky yoxdur, ötürülən yoxdur.
+
+### TAPILAN ƏSAS DEFEKT: naviqasiya SƏSSİZCƏ ATILIR (~5%)
+Əvvəlki sessiyada bu 7 sınıq «yükdən asılı flaky» sayılmışdı — **hökm SƏHV idi.**
+Boş maşında `--workers=1` ilə 4/4 təkrarlandı, sonra brauzer daxilindən
+instrumentasiya ilə mexanizm tutuldu:
+
+```
+fetch başladı  /elanlar?category=avtomobiller&a_brand=BMW&_rsc=...  signal=VAR
+fetch OK 200
+...və bitdi — pushState YOX · abort() YOX · konsol xətası YOX · təkrar sorğu YOX
+```
+App Router RSC cavabını **alır**, sonra tranzisiyanı **commit etmir**: URL dəyişmir,
+idarə olunan `<select>` köhnə dəyərinə qayıdır, istifadəçi «heç nə olmadı» görür.
+Şəbəkədə görünən `net::ERR_ABORTED` səbəb yox, NƏTİCƏDİR (gövdəni oxuyan tərəf axını atır).
+
+**Tezlik** (hər biri ayrıca ölçmə): 1/20 · 1/20 · 3/40 · 1/40 · 2/80 ≈ **5%**.
+Playwright `page.route` müdaxiləsi ilə də, ONSUZ da eyni → **test artefaktı deyil**.
+Eyni defekt adi `<Link>` keçidlərini də vurur (`01-public.spec.ts:74` buna görə qırmızı idi).
+
+### TƏKZİB EDİLƏN İKİ FƏRZİYYƏ (ikisi də ölçüldü — təxminlə bağlanmadı)
+| Fərziyyə | Nəticə |
+|---|---|
+| React RC (`19.0.0-rc-...20241106`) Next 15.5.19-un peer aralığını pozur | Stabil **19.1.1**-ə keçirildi → defekt **QALDI** (3/40). Yenilənmə peer-uyğunluq üçün saxlanıldı, amma səbəb bu deyil. Brauzerdə işləyən React onsuz da Next-in öz bundle-ıdır. |
+| `useTransition`/`isPending` ilə gözləmə aşkarlamaq | Atılma halında `isPending` **ƏBƏDİ true** qalır (reducer promise-i settle olmur) → bərpa 8079 ms-ə uzanırdı. Siqnal kimi **yararsız**, kodda saxlanılmadı. |
+
+30 agentlik düşmən-yoxlamalı workflow icra olundu: 45 tapıntıdan **yalnız 1-i** yoxlamadan
+sağ çıxdı və o da məhz seçilmiş həlli təsdiqlədi (watchdog + sərt keçid).
+
+### TƏTBİQ OLUNAN HƏLL
+Səbəb router-in daxilindədir və yamalana bilmir, ona görə **nəticə yoxlanılır**:
+* `frontend/lib/resilient-navigation.ts` — `useResilientPush()`: push-dan **2.5 s** sonra
+  ünvan dəyişməyibsə (və istifadəçi hələ də həmin səhifədədirsə) `location.assign` ilə tamamlanır.
+  2.5 s əsası: lokalda normal yumşaq naviqasiya **median 24 ms · maksimum 172 ms** (40 icra).
+* `frontend/components/NavigationGuard.tsx` — eyni qoruma **bütün daxili `<a>` keçidləri** üçün,
+  kök layout-da. Şərtlər: sol klik · dəyişdirici düymə yox · eyni origin · ünvan fərqli.
+  Kənarda qalır: `target`, `download`, `#` çövrələri, `data-nav-guard="off"`.
+* `CategoryFilters`, `FilterChips`, `QuickFilterChips` → qoruyucu naviqasiyaya keçdi.
+* `ListingCard`-da məcburi `prefetch={true}` götürüldü (siyahıda ~50 tam RSC prefetch-i
+  istifadəçinin öz naviqasiyası ilə yarışırdı).
+
+**Ölçülmüş nəticə:** qoruyucu ilə **160 icrada istifadəçi üçün sınıq SIFIR**
+(2 halda atılma baş verdi və bərpa olundu).
+
+⚠️ **QALAN UPSTREAM İZ:** agent axtarışı Next.js-də simptomu hərfən təkrarlayan açıq issue
+(#96413 «same-route query navigation silently fails to commit») və qohum ailənin YEGANƏ
+düzəldilmiş üzvünü (#84299 → PR #95391, **Next.js 16.3.0**, 15.5.x-ə backport YOX) tapdı.
+Yəni Next 16-ya keçid bu qoruyucunu artıq lazımsız edə bilər — **yoxlanılmayıb**, təxmindir.
+
+### SÜRƏTLİ FİLTR ÇİPLƏRİ CANLANDIRILDI (istifadəçi qərarı ilə)
+`app/elanlar/ListingsClient.tsx` heç yerdən import olunmurdu (ölü kod) — nəticədə çiplər
+istifadəçiyə **ümumiyyətlə görünmürdü**. Fayl silindi, `QuickFilterChips` özü-özünə
+yetərli edildi (`useSearchParams` + real `<a href>`, toggle + `aria-pressed`,
+snake_case linkləri də aktiv sayır) və `/elanlar`-a qoşuldu.
+«Bu gün» → **«Ən yeni»**: çip `sort=new` göndərir, bu sıralamadır, tarix filtri deyil
+(backend-də `createdAt >= bu gün` filtri **yoxdur**) — köhnə ad vermədiyimiz vədi verirdi.
+12 yeni E2E testi çiplərin GÖRÜNDÜYÜNÜ də qoruyur.
+
+`UniversalTopBar`/`UniversalFullFilter` **ölü kod DEYİL** — `/k/<kateqoriya>` və `/seher/*`
+səhifələrində işlədilir (əvvəlki sessiyanın qeydi bu hissədə yanlış idi).
+
+### BU SESSİYADA YOXLAMA CƏDVƏLİ
+| Yoxlama | Nəticə |
+|---|---|
+| Tam E2E (270 test, 3 viewport) | ✅ **270/270** |
+| api unit | ✅ **86/86** |
+| tsc (api + frontend) | ✅ təmiz |
+| ESLint (frontend) | ✅ 0 error · 305 warning (köhnə borc) |
+| `next build` | ✅ keçir |
+| Atılma tezliyi (qoruyucudan sonra) | ✅ 160 icra · istifadəçi üçün 0 sınıq |
+| Deploy | ✅ push `6fb43bf` → Vercel/Render avtomatik |
+
+### NÖVBƏTİ ADDIMLAR
+1. **Canlıda yoxlama** — deploy oturandan sonra:
+   `E2E_BASE_URL=https://360tap.az npx playwright test --project=desktop 01-public 02-search 06-filters`
+2. **Redis** — istifadəçi Render dashboard-da `tap360-redis` statusuna baxacaq (§0-D-yə bax).
+3. **Production DB seed** — hələ edilməyib, Render DB parolu lazımdır (§4.2-b).
+4. **Admin hesabı e-poçtu** — istifadəçidən gözlənilir.
+5. Yoxlanılmamış namizəd: ardıcıl iki `apply()` — ikincisi köhnə `params`-dan qurulduğu üçün
+   birinci filtri səssizcə silə bilər (agent iddiası, **ölçülməyib**).
+
+---
+
 ## 1. İŞ MÜHİTİNİ QALDIRMAQ (açan kimi ilk bunlar)
 
 ```bash
