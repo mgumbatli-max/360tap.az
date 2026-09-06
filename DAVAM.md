@@ -341,11 +341,26 @@ səhifələrində işlədilir (əvvəlki sessiyanın qeydi bu hissədə yanlış
 | ESLint (frontend) | ✅ 0 error · 305 warning (köhnə borc) |
 | `next build` | ✅ keçir |
 | Atılma tezliyi (qoruyucudan sonra) | ✅ 160 icra · istifadəçi üçün 0 sınıq |
-| Deploy | ✅ push `6fb43bf` → Vercel/Render avtomatik |
+| Deploy | ✅ push `8d582a7` → Vercel/Render avtomatik, canlıda təsdiqləndi |
+| **Canlı E2E** (desktop · 01-public + 02-search + 06-filters) | ✅ **52/52** (əvvəlki baseline: 33 keçdi / 22 sındı) |
+
+### CANLIDA ÜZƏ ÇIXAN İKİ ŞEY
+1. **Öz düzəlişimin qüsuru — ikiqat bərpa (DÜZƏLDİLDİ, `8d582a7`).** Çipə klik həm öz
+   `onClick`-indəki qoruyucuya, həm də `NavigationGuard`-a düşürdü; atılma anında hər
+   ikisi `location.assign` çağırırdı və birinci sənəd sorğusu ikincisi tərəfindən ləğv
+   olunurdu (`GET /elanlar — net::ERR_ABORTED`). Həll: `recoverNavigation()` səhifə ömrü
+   boyu bir dəfə işləyir + çipin `<a>`-sında `data-nav-guard="off"`.
+2. **React #418 (hidratasiya) — BİR DƏFƏ göründü, təkrarlanmır.** Deploy oturandan sonra
+   həmin test **3/3** keçir. Ehtimal: rollout anında CDN köhnə HTML-i, brauzer isə yeni
+   JS-i almışdı. **Sübut edilməyib** — növbəti deploy-dan sonra yenidən yoxlanmalıdır.
+
+### ⚠️ MAŞIN QEYDİ
+Bu sessiyada E2E iki dəfə **yaddaş çatışmazlığına** görə öldürüldü — başqa layihənin
+`next-server (v16.2.9)` prosesi 1.86 GB tuturdu. Belə vəziyyətdə `--workers=2` işlədin
+(270 test 3.7 dəqiqə çəkir) və nəticəni yükə görə şərh etməyin.
 
 ### NÖVBƏTİ ADDIMLAR
-1. **Canlıda yoxlama** — deploy oturandan sonra:
-   `E2E_BASE_URL=https://360tap.az npx playwright test --project=desktop 01-public 02-search 06-filters`
+1. ~~Canlıda yoxlama~~ ✅ edildi (52/52).
 2. **Redis** — istifadəçi Render dashboard-da `tap360-redis` statusuna baxacaq (§0-D-yə bax).
 3. **Production DB seed** — hələ edilməyib, Render DB parolu lazımdır (§4.2-b).
 4. **Admin hesabı e-poçtu** — istifadəçidən gözlənilir.
