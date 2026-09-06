@@ -372,6 +372,104 @@ Bu sessiyada E2E iki dəfə **yaddaş çatışmazlığına** görə öldürüld�
 
 ---
 
+## 0-F. DAVAM NÖQTƏSİ — 2026-09-06, günorta (magazam.az kataloq miqrasiyası)
+
+> **AÇAN KİMİ BURADAN BAŞLA.** Kod push olunub. **Canlı DATA hələ köçürülməyib** —
+> Render DB bağlantı sətri gözlənilir (§0-F sonuna bax).
+
+### İSTİFADƏÇİNİN QƏRARLARI (bu sessiyada soruşuldu və təsdiqləndi)
+1. **magazam.az istifadəçinin ÖZ saytıdır** — miqrasiya qanunidir.
+2. Saxta elanlar **silinsin** (canlıda Render DB parolu ilə).
+3. Məhsullar **«magazam.az» mağazası** kimi görünsün.
+4. Boş kateqoriyalar **gizlədilsin** (aşağıdakı vacib qeydə bax).
+
+### ÖLÇÜLMÜŞ BAŞLANĞIC VƏZİYYƏTİ
+| | |
+|---|---|
+| Canlı kataloq | **115 elanın 115-i SAXTA** — tək sahib, «Demo Satıcı», `+994501112233`, hər başlıq «— nümunə elan» |
+| `is_demo` canlıda | HEÇ BİR sətirdə qoyulmayıb (miqrasiya icra olunmayıb) — ona görə silmə meyarı çoxqatlıdır |
+| magazam.az | **2171 məhsul**, açıq JSON API `/api/v1/products`, 19 kök / **46 yarpaq** kateqoriya, 100 brend, **641-i endirimli**, hamısında şəkil |
+| Mağazanın real məlumatı | `magazam.az/api/v1/settings` → ünvan «Bakı, Nəsimi r., 28 May küç. 14», tel `+994705004400`, 14 gün zəmanət, 3 iş günü çatdırılma |
+
+### YAZILAN ÜÇ SKRİPT (hamısı idempotent, `--confirm` olmadan yalnız hesabat verir)
+| Skript | İş |
+|---|---|
+| `api/scripts/import-magazam.ts` | 2171 məhsulu idxal edir |
+| `api/scripts/delete-fake-listings.ts` | saxta elanları silir (mağaza elanlarına TOXUNMUR) |
+| `api/scripts/sync-category-visibility.ts` | `listings_count`-u alt ağac üzrə yenidən hesablayır |
+
+### İDXALIN ARXİTEKTURA QƏRARI
+HTTP ERP gateway-i (`POST /erp/v1/products/publish`) İŞLƏDİLMİR, çünki onun
+mühafizəçisi replay müdafiəsi üçün **Redis tələb edir**, canlıda isə Redis qopuqdur.
+Əvəzinə onun çağırdığı `ErpService.publish()` BİRBAŞA çağırılır — eyni yoxlanılmış
+məntiq (idempotent upsert, kateqoriya həlli, media, status), Redis/şəbəkə/limit
+asılılığı olmadan. `AppModule` boot EDİLMİR ki, cron bildirişləri işə düşməsin.
+
+### AGENTLƏRİN TUTDUĞU İKİ SƏHVİM (düzəldilib)
+1. **Kök kateqoriya işlətmişdim** — məhsulların 91%-də alt kateqoriya var. Yalnız köklə
+   xəritələmək 179 telefonu «Aksesuar»a, 72 şarj kabelini «Periferiya»ya salırdı.
+   İndi açar `kök/yarpaq`-dır (46 sətir) və **yeni kateqoriya YARADILMADI** —
+   `smart-saatlar`, `planshetler`, `foto-video` onsuz da mövcud idi.
+2. **`res.cloudinary.com` şəkil allowlist-ində yox idi** — 2171 elan şəkilsiz görünəcəkdi.
+   `next.config.ts` + `lib/image-hosts.ts`-ə `/di8zz8sc1/**` yol məhdudiyyəti ilə əlavə olundu.
+
+### ⚠️ BOŞ KATEQORİYALAR — `is_active` İLƏ GİZLƏTMƏK OLMAZ
+İlk yanaşma 117 kateqoriyadan 90-ını `is_active=false` etmək idi. **Ölçüldü və rədd edildi:**
+`/categories` ağacını HƏM kataloq, HƏM DƏ elan yerləşdirmə səhifəsi işlədir
+(`app/elan-yerlesdir/page.tsx:162` → `categories.service.ts:45` `where: { isActive: true }`).
+Gizlətsək istifadəçi həmin kateqoriyaya elan QOYA BİLMƏZDİ → kateqoriya heç vaxt dolmaz →
+**kilid**. Ona görə gizlətmə BAXIŞ qatındadır: ana səhifə və `/elanlar` plitələri
+`listingsCount === 0` olanı göstərmir, elan yerləşdirmə isə tam ağacı görür.
+
+### ŞƏKİL VƏ MƏLUMAT KEYFİYYƏTİ
+· Cloudinary transformasiyası `f_auto,q_auto:best,w_1600,c_limit` — ölçüldü:
+  **143 KB JPEG → 81 KB WebP**. `c_limit` qəsdəndir (mənbədə en 225–2048 px,
+  süni böyütmə detal əlavə etmir).
+· Atributlar YALNIZ mənbədən: `condition=Yeni` 2171 · `brand` 2149 · `color` 1371
+  (məhsul adından) · `type` 969 (mənbə alt-kateqoriyasından) · `memory` 25.
+· **2171-dən 1586-sının mənbə «təsviri» elə başlığın özüdür** — təkrar buraxılır,
+  yerinə marka/model + addan çıxarılmış xüsusiyyətlər (306 elanda: mAh, Vt,
+  Bluetooth, Type-C, 4K) + mağazanın faktiki şərtləri qoyulur.
+· **Heç bir texniki xarakteristika uydurulmadı.** Batareya/ölçü/versiya kimi mənbədə
+  olmayan məlumat YAZILMADI — yalan spesifikasiya mağazanı məsuliyyət altına salır.
+· Tələ və düzəlişi: «10.000mAh» sadə `\d{3,6}` naxışı ilə «000 mAh» kimi çıxarılırdı.
+
+### PERFORMANS REGRESSİYASI (idxalın nəticəsi) — DÜZƏLDİLDİ
+`?q=` axtarışı 1.3–2.2 s çəkirdi (q-siz siyahı 0.05 s). Səbəb: `azKeywordOr` hər
+diakritik variant üçün AYRICA `{ category: { nameAz } }` budağı qururdu — «telefon»
+8 variant → 8 korrelyasiyalı EXISTS. Variantlar alt-sorğunun içinə yığıldı:
+**629 ms → 22 ms**, tam sorğu **623 ms → 28 ms**, endpoint **1.9 s → 0.9 s**.
+E2E müddəti **10.9 dəq → 4.9 dəq**. `pg_trgm` indeksi sınandı və rədd edildi
+(planlayıcı seçmir, `count` 841 → 1018 ms). Qalan darboğaz `count`-dur (~840 ms);
+kökündən həlli normallaşdırılmış axtarış sütunudur — **ayrı iş**.
+
+### LOKAL YEKUN
+| Yoxlama | Nəticə |
+|---|---|
+| İdxal | **2171/2171** (buraxılan 0, uğursuz 0) |
+| Silinən saxta elan | **105** |
+| Tam E2E | ✅ **270/270** |
+| api unit | ✅ 86/86 · tsc (api+frontend) təmiz |
+
+### ➡️ CANLIYA TƏTBİQ — QALAN YEGANƏ ADDIM
+Render DB bağlantı sətri lazımdır (host: `dpg-dac0dv8n74is738npfh0-a.oregon-postgres.render.com`,
+baza `tap360_ul0z`). Ardıcıllıq:
+```bash
+cd api
+export DATABASE_URL='<render bağlantı sətri>'
+npx tsx scripts/delete-fake-listings.ts              # əvvəlcə HESABAT
+npx tsx scripts/delete-fake-listings.ts --confirm    # 115 saxta elan silinir
+curl -s https://magazam.az/api/v1/products -o /tmp/mg/products.json
+npx tsx scripts/import-magazam.ts --dry-run
+npx tsx scripts/import-magazam.ts                    # 2171 məhsul
+npx tsx scripts/sync-category-visibility.ts --confirm # sayğaclar
+E2E_BASE_URL=https://360tap.az npx playwright test --project=desktop 01-public 06-filters
+```
+QEYD: idxal `magazam@360tap.az` adına sahib hesab yaradır (parolsuz — yalnız kataloq
+sahibliyi üçün). Başqa hesab istənilirsə `MAGAZAM_OWNER_EMAIL` ilə verilir.
+
+---
+
 ## 1. İŞ MÜHİTİNİ QALDIRMAQ (açan kimi ilk bunlar)
 
 ```bash
