@@ -8,6 +8,7 @@ import {
 import ListingCard, { type Listing } from '@/components/ListingCard';
 import CategoryFilters, { type CatAttr } from '@/components/CategoryFilters';
 import FilterChips from '@/components/FilterChips';
+import QuickFilterChips from '@/components/QuickFilterChips';
 import InfiniteListings from '@/components/InfiniteListings';
 import MapView from '@/components/MapView';
 import SaveSearchButton from '@/components/SaveSearchButton';
@@ -632,6 +633,10 @@ async function ListingsResults({ searchParams }: { searchParams: Promise<SP> }) 
             Mətn axtarışında da göstərilir, ƏGƏR filtr aktivdirsə: əks halda
             istifadəçi tətbiq olunmuş region/qiymət filtrini nə görür, nə silə bilirdi
             («boş səhifə, səbəbi bilinmir»). */}
+        {/* Sürətli filtrlər axtarış nəticəsində də qalır — «telefon» axtaran istifadəçi
+            «Şəkilli»ni bir kliklə əlavə edə bilsin deyə. */}
+        <QuickFilterChips />
+
         {(!sp.q || hasFilters) && (
           <>
             <CategoryFilters
