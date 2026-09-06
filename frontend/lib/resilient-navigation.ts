@@ -64,6 +64,24 @@ export function normalizeUrl(href: string): string {
 }
 
 /**
+ * Sərt keçidi BİR DƏFƏ icra edir.
+ *
+ * NİYƏ LAZIMDIR (canlıda ölçüldü): eyni klik iki qoruyucuya düşə bilir — çipin öz
+ * `onClick`-i (`useResilientPush`) və `NavigationGuard`-ın sənəd səviyyəsindəki
+ * dinləyicisi. Hər ikisi eyni anda `location.assign` çağırsaydı, birinci sənəd
+ * sorğusu ikincisi tərəfindən ləğv olunurdu və şəbəkədə `GET /elanlar —
+ * net::ERR_ABORTED` görünürdü (istifadəçi üçün zərərsiz, amma yalançı nasazlıq
+ * siqnalı və lüzumsuz sorğu). Bayraq sıfırlanmır: səhifə onsuz da tərk edilir.
+ */
+let recovering = false;
+
+export function recoverNavigation(url: string): void {
+  if (recovering) return;
+  recovering = true;
+  window.location.assign(url);
+}
+
+/**
  * `router.push` əvəzedicisi: naviqasiya atılarsa sərt keçidlə tamamlayır.
  * İstifadə: `const push = useResilientPush(); push('/elanlar?region=baki');`
  */
@@ -99,7 +117,7 @@ export function useResilientPush(): (url: string) => void {
         // İstifadəçi aralıqda BAŞQA səhifəyə keçibsə müdaxilə etmirik: onu
         // getdiyi yerdən geri sürükləmək daha pis nasazlıq olardı.
         if (now !== from) return;
-        window.location.assign(url);
+        recoverNavigation(url);
       }, RECOVERY_MS);
     },
     [router],

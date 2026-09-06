@@ -104,6 +104,9 @@ export default function QuickFilterChips() {
             href={href}
             scroll={false}
             aria-pressed={on}
+            // Çip öz `onClick`-ində artıq qoruyucu naviqasiya edir — sənəd
+            // səviyyəsindəki `NavigationGuard` onu İKİNCİ dəfə qorumasın.
+            data-nav-guard="off"
             onClick={(e) => {
               // Dəyişdirici düymələr və orta klik brauzerin öz davranışında qalsın
               // (yeni tab / yeni pəncərə istifadəçinin qəsdidir).

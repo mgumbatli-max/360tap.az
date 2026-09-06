@@ -1,6 +1,6 @@
 'use client';
 import { useEffect } from 'react';
-import { normalizeUrl } from '@/lib/resilient-navigation';
+import { normalizeUrl, recoverNavigation } from '@/lib/resilient-navigation';
 
 /**
  * DAXİLİ KEÇİDLƏR ÜÇÜN ATILMA QORUYUCUSU.
@@ -67,7 +67,7 @@ export default function NavigationGuard() {
         timer = null;
         const now = normalizeUrl(window.location.href);
         if (now !== from) return; // ya keçid oldu, ya istifadəçi başqa yerə getdi
-        window.location.assign(url.href);
+        recoverNavigation(url.href);
       }, RECOVERY_MS);
     };
 
