@@ -129,14 +129,32 @@ function caseVariants(word: string): string[] {
  */
 export function azKeywordOr(word: string): Prisma.ListingWhereInput[] {
   const branches: Prisma.ListingWhereInput[] = [];
-  for (const variant of azTextVariants(word)) {
+  const variants = azTextVariants(word);
+  for (const variant of variants) {
     const needle = escapeLike(variant);
     branches.push(
       { title: { contains: needle, mode: 'insensitive' } },
       { description: { contains: needle, mode: 'insensitive' } },
-      { category: { nameAz: { contains: needle, mode: 'insensitive' } } },
     );
   }
+  /**
+   * KATEQORİYA ADI — TƏK ƏLAQƏ BUDAĞI, hər variant üçün ayrıca DEYİL.
+   *
+   * Əvvəl hər diakritik variant öz `{ category: { nameAz: ... } }` budağını
+   * yaradırdı. «telefon» sözü 8 variant verir, yəni Prisma 8 ayrı korrelyasiyalı
+   * `EXISTS (SELECT ... FROM categories ...)` alt-sorğusu qururdu. Ölçüldü
+   * (2306 elanlı baza): yalnız bu 8 budaq `findMany` üçün **629 ms** tuturdu,
+   * bütün sorğu isə ~1.9 saniyə çəkirdi (`q`-siz siyahı 0.05 s).
+   *
+   * Variantları alt-sorğunun İÇİNƏ salmaq eyni nəticəni verir (məntiq eynidir:
+   * «kateqoriya adı variantlardan hər hansı birini ehtiva edir»), amma cəmi bir
+   * alt-sorğu qurur.
+   */
+  branches.push({
+    category: {
+      OR: variants.map((v) => ({ nameAz: { contains: escapeLike(v), mode: 'insensitive' as const } })),
+    },
+  });
   if (!/[\\%_]/.test(word)) {
     for (const variant of caseVariants(word)) {
       branches.push(
