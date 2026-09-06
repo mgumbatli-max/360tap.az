@@ -4,6 +4,7 @@ import { AuthProvider } from '@/lib/auth';
 import { ToastProvider } from '@/lib/toast';
 import { ModeProvider } from '@/lib/mode';
 import Header from '@/components/Header';
+import NavigationGuard from '@/components/NavigationGuard';
 import Footer from '@/components/Footer';
 import BrandPicker from '@/components/BrandPicker';
 import CompareBar from '@/components/CompareBar';
@@ -149,6 +150,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToastProvider>
           <ModeProvider>
             <AuthProvider>
+              {/* Atılan daxili keçidləri bərpa edir — səbəb və sübut komponentin şərhindədir. */}
+              <NavigationGuard />
               <Header />
               <main className="bg-ink-50 min-h-screen">{children}</main>
               <Footer />

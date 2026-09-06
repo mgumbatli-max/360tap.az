@@ -189,7 +189,11 @@ export default function ListingCard({ item }: { item: Listing }) {
               DOM-da tək link var və düymələr linkin içində yuvalanmır. */}
           <Link
             href={`/elanlar/${item.id}`}
-            prefetch={true}
+            // MƏCBURİ prefetch DEYİL: siyahı səhifəsində 50-yə qədər kart var idi və hər biri
+            // TAM RSC yükünü çəkirdi — həm lüzumsuz trafik, həm də istifadəçinin öz
+            // naviqasiyası ilə yarışan yük. Next görünən linkləri defolt olaraq onsuz da,
+            // amma ölçülü şəkildə prefetch edir.
+            prefetch={undefined}
             className="min-w-0 flex-1 rounded after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tap focus-visible:ring-offset-2"
           >
             <h3 className="line-clamp-2 min-h-[2.6em] text-[15px] font-semibold leading-snug text-ink-900 transition-colors group-hover:text-tap dark:text-ink-50">

@@ -1,6 +1,7 @@
 'use client';
 import { X } from 'lucide-react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useResilientPush } from '@/lib/resilient-navigation';
 import { dependentAttributeKeys } from '@/lib/attribute-taxonomy';
 
 const LABELS: Record<string, string> = {
@@ -47,7 +48,8 @@ export default function FilterChips({
   /** Slug → ad tərcüməsi: `{ region: { baki: 'Bakı' } }`. */
   valueLabels?: Record<string, Record<string, string>>;
 }) {
-  const router = useRouter();
+  // Atılan naviqasiyaya qarşı qoruma — bax `lib/resilient-navigation.ts`.
+  const push = useResilientPush();
   const pathname = usePathname();
   const params = useSearchParams();
 
@@ -69,7 +71,7 @@ export default function FilterChips({
     }
     p.delete('page');
     const s = p.toString();
-    router.push(s ? `${pathname}?${s}` : pathname);
+    push(s ? `${pathname}?${s}` : pathname);
   };
 
   const clearAll = () => {
@@ -81,7 +83,7 @@ export default function FilterChips({
       if (v) p.set(k, v);
     }
     const s = p.toString();
-    router.push(s ? `${pathname}?${s}` : pathname);
+    push(s ? `${pathname}?${s}` : pathname);
   };
 
   const chipLabel = (k: string, v: string): string => {

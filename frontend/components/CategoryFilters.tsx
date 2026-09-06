@@ -1,6 +1,6 @@
 'use client';
 import { useState, type ReactNode } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   ArrowUpDown,
   Banknote,
@@ -11,6 +11,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { azNumber } from '@/lib/format';
+import { useResilientPush } from '@/lib/resilient-navigation';
 import { dependentAttributeKeys, resolveAttributeOptions } from '@/lib/attribute-taxonomy';
 
 export type CatAttr = {
@@ -52,7 +53,10 @@ export default function CategoryFilters({
   /** CTA-nın sıçradığı nəticə bloku (səhifə həmin `id`-ni verir). */
   resultsAnchor?: string;
 }) {
-  const router = useRouter();
+  // Adi naviqasiya ƏVƏZİNƏ qoruyucu variant: App Router naviqasiyaların ~5%-ni
+  // səssizcə atır (ölçüldü) və filtr tətbiq olunmamış qalır — sübut və mexanizm
+  // `lib/resilient-navigation.ts` şərhindədir.
+  const push = useResilientPush();
   const pathname = usePathname();
   const params = useSearchParams();
   const [allOpen, setAllOpen] = useState(false);
@@ -68,7 +72,7 @@ export default function CategoryFilters({
     // Filtr dəyişdi → 3-cü səhifədə qalıb boş nəticə görünməsin.
     p.delete('page');
     const s = p.toString();
-    router.push(s ? `${pathname}?${s}` : pathname);
+    push(s ? `${pathname}?${s}` : pathname);
   };
 
   /**
@@ -90,7 +94,7 @@ export default function CategoryFilters({
       if (v) p.set(k, v);
     }
     const s = p.toString();
-    router.push(s ? `${pathname}?${s}` : pathname);
+    push(s ? `${pathname}?${s}` : pathname);
   };
 
   const categorySlug = get('category');

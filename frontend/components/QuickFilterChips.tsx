@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Truck, Image, Crown, Award, Clock } from 'lucide-react';
+import { useResilientPush } from '@/lib/resilient-navigation';
 
 /**
  * SÜRƏTLİ FİLTRLƏR — hamısı REAL backend filtrinə bağlıdır.
@@ -62,6 +63,10 @@ const SNAKE: Record<string, string> = {
 export default function QuickFilterChips() {
   const pathname = usePathname();
   const params = useSearchParams();
+  // Çip real `<a href>`-dir, amma adi sol klik App Router-in yumşaq naviqasiyasına düşür
+  // və o naviqasiyaların ~5%-i səssizcə atılır (ölçüldü — bax `lib/resilient-navigation.ts`).
+  // Ona görə sol kliki özümüz aparırıq; Ctrl/Cmd/orta klik brauzerə olduğu kimi qalır.
+  const push = useResilientPush();
 
   const isOn = (c: Chip): boolean => {
     const direct = params.get(c.key);
@@ -92,12 +97,22 @@ export default function QuickFilterChips() {
       {CHIPS.map((c) => {
         const I = c.icon;
         const on = isOn(c);
+        const href = hrefFor(c);
         return (
           <Link
             key={c.id}
-            href={hrefFor(c)}
+            href={href}
             scroll={false}
             aria-pressed={on}
+            onClick={(e) => {
+              // Dəyişdirici düymələr və orta klik brauzerin öz davranışında qalsın
+              // (yeni tab / yeni pəncərə istifadəçinin qəsdidir).
+              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+                return;
+              }
+              e.preventDefault();
+              push(href);
+            }}
             className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
               on
                 ? 'border-tap bg-tap text-white'
